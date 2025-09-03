@@ -7,10 +7,10 @@
         <material name = 'ball' texture = 'highlight' texrepeat ='1 1' texuniform = 'true'/>
         <material name="grid" texture="grid" texrepeat="1 1" texuniform="true" reflectance=".0"/>
 
-		<texture name="bb8_tex" type="2d" file="bb8one.png"/>
+		<texture name="bb8_tex" type="2d" file="bb8_textures/bb8one.png"/>
 		<material name="bb8_mat" texture="bb8_tex" texrepeat="1 1" texuniform="false"/>
 
-		<texture name="bb8_head_tex" type="2d" file="bb8head.png"/>
+		<texture name="bb8_head_tex" type="2d" file="bb8_textures/bb8head.png"/>
 		<material name="bb8_head_mat" texture="bb8_head_tex" texrepeat=".8 1.2" texuniform="false"/>
 	</asset>
 	<worldbody>

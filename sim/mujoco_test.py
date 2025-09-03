@@ -44,7 +44,7 @@ Usage examples:
 print_camera_config = 1 #set to 1 to print camera config
                         #this is useful for initializing view of the model
 
-modelPath = 'test_world.xml'
+modelPath = "sim/test_world.xml"
 displayRefreshRate = 60
 
 
