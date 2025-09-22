@@ -35,7 +35,7 @@ elapsed_time = 0.0
 time_prev = time.perf_counter()
 
 # set render timers
-target_fps = 60
+target_fps = 60 # You can change this if you want
 frame_dt = 1.0/ target_fps
 prev_render_t = time_prev
 
@@ -50,11 +50,12 @@ while not glfw.window_should_close(window):
 
     # simulation loop
     while (elapsed_time >= sim_dt):
-        mj.mj_step(model, data)
 
         # do stuff here
 
 
+        # update physics sim
+        mj.mj_step(model, data)
         elapsed_time -= sim_dt
 
 
