@@ -6,6 +6,12 @@ build/
 install/
 log/
 
+#IntelliJ configs
+.idea/
+
+# Fleet configs
+.fleet/
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[codz]
