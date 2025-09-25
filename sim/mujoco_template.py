@@ -24,7 +24,6 @@ qpos_addr = model.jnt_qposadr[joint_id]
 glfw.init()
 window = glfw.create_window(720,540,"B_Cubed", None, None)
 glfw.make_context_current(window)
-mj.mjv_defaultCamera(cam)
 mj.mjv_defaultOption(opt)
 scene = mj.MjvScene(model, maxgeom=10000)
 context = mj.MjrContext(model, mj.mjtFontScale.mjFONTSCALE_150.value)
@@ -49,7 +48,7 @@ while not glfw.window_should_close(window):
     elapsed_time += frame_time
 
     # simulation loop
-    while (elapsed_time >= sim_dt):
+    while elapsed_time >= sim_dt:
 
         # do stuff here
 
