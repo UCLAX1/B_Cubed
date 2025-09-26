@@ -448,6 +448,7 @@ while not glfw.window_should_close(window):
         glfw.poll_events()
 
 
+
     # Handle rendering
     viewport_width, viewport_height = glfw.get_framebuffer_size(window)
     viewport = mj.MjrRect(0, 0, viewport_width, viewport_height)
