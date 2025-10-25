@@ -6,6 +6,9 @@ build/
 install/
 log/
 
+#Training Runs
+/runs
+
 #IntelliJ configs
 .idea/
 
