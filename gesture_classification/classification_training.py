@@ -3,7 +3,7 @@ import cv2
 import numpy as np
 import csv
 
-model = YOLO("runs/pose/train/weights/best.pt")  # your trained model
+model = YOLO("../models/hand_keypoints_trained.pt")  # your trained model
 cap = cv2.VideoCapture(0)
 
 GESTURES = ["open_hand", "fist", "point", "thumbs_up"]
