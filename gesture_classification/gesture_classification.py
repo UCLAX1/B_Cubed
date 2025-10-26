@@ -30,6 +30,10 @@ while True:
     results = pose_model(frame, verbose=False)
     kps = results[0].keypoints.xy
     if kps is not None and len(kps) > 0:
+        # Draw keypoints on the frame
+        for (x_coord, y_coord) in kps[0].cpu().numpy():
+            cv2.circle(frame, (int(x_coord), int(y_coord)), 3, (0, 255, 255), -1)
+
         pts = kps[0].cpu().numpy().flatten()
         x = torch.tensor(pts, dtype=torch.float32).unsqueeze(0)
         with torch.no_grad():
