@@ -7,6 +7,7 @@ from sklearn.preprocessing import LabelEncoder
 
 # Load data
 df = pd.read_csv("gesture_data.csv")
+df = df[df["gesture"] != "gesture"]
 X = df.drop(columns=["gesture"]).values.astype("float32")
 y = LabelEncoder().fit_transform(df["gesture"])
 

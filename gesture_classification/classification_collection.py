@@ -1,20 +1,26 @@
 from ultralytics import YOLO
 import cv2
-import numpy as np
 import csv
+import os
 
 model = YOLO("../models/hand_keypoints_trained.pt")  # your trained model
 cap = cv2.VideoCapture(0)
 
 GESTURES = ["open_hand", "fist", "point", "thumbs_up"]
 SAVE_PATH = "gesture_data.csv"
+file_exists = os.path.isfile(SAVE_PATH)
+
 
 current_label = 0  # index into GESTURES
 print(f"Recording gesture: {GESTURES[current_label]}")
 
-with open(SAVE_PATH, "w", newline="") as f:
+with open(SAVE_PATH, "a", newline="") as f:
     writer = csv.writer(f)
-    writer.writerow(["gesture"] + [f"x{i}" for i in range(21)] + [f"y{i}" for i in range(21)])
+    if not file_exists:
+        writer.writerow(["gesture"] + [f"x{i}" for i in range(21)] + [f"y{i}" for i in range(21)])
+    # writer.writerow(["gesture"] + [f"x{i}" for i in range(21)] + [f"y{i}" for i in range(21)])
+
+
 
     while True:
         ret, frame = cap.read()

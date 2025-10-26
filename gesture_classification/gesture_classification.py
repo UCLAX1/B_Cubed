@@ -18,7 +18,7 @@ class GestureNet(torch.nn.Module):
         return self.fc(x)
 
 # Load models
-pose_model = YOLO("models/hand_keypoints_trained.pt")
+pose_model = YOLO("../models/hand_keypoints_trained.pt")
 gesture_model = GestureNet(num_classes=4)
 gesture_model.load_state_dict(torch.load("gesture_classifier.pth"))
 gesture_model.eval()
