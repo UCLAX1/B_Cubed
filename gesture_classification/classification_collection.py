@@ -34,7 +34,7 @@ with open(SAVE_PATH, "a", newline="") as f:
             pts = keypoints[0].cpu().numpy().flatten()  # (42,)
             writer.writerow([GESTURES[current_label]] + pts.tolist())
 
-        cv2.putText(frame, f"Gesture: {GESTURES[current_label]} (press n to next)", (10, 40),
+        cv2.putText(frame, f"Gesture: {GESTURES[current_label]} (press n to next)(press q to stop)", (10, 40),
                     cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2)
         cv2.imshow("Collecting", frame)
 

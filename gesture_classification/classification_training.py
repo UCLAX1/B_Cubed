@@ -2,14 +2,20 @@ import torch
 import torch.nn as nn
 import torch.optim as optim
 import pandas as pd
+import numpy as np
 from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import LabelEncoder
+import joblib
 
 # Load data
 df = pd.read_csv("gesture_data.csv")
 df = df[df["gesture"] != "gesture"]
 X = df.drop(columns=["gesture"]).values.astype("float32")
-y = LabelEncoder().fit_transform(df["gesture"])
+le = LabelEncoder()
+# This fixes the flipped gestures issue
+le.classes_ = np.array(["open_hand", "fist", "point", "thumbs_up"])
+y = le.transform(df["gesture"])
+joblib.dump(le, "gesture_labels.pkl")
 
 X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2)
 
@@ -38,7 +44,7 @@ criterion = nn.CrossEntropyLoss()
 optimizer = optim.Adam(model.parameters(), lr=1e-3)
 
 # Train loop
-for epoch in range(100):
+for epoch in range(1000):
     optimizer.zero_grad()
     outputs = model(X_train)
     loss = criterion(outputs, y_train)

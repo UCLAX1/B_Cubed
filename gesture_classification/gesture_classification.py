@@ -1,6 +1,5 @@
 from ultralytics import YOLO
 import torch
-import numpy as np
 import cv2
 
 class GestureNet(torch.nn.Module):
@@ -24,12 +23,11 @@ gesture_model.load_state_dict(torch.load("gesture_classifier.pth"))
 gesture_model.eval()
 
 GESTURES = ["open_hand", "fist", "point", "thumbs_up"]
-
 cap = cv2.VideoCapture(0)
 
 while True:
     ret, frame = cap.read()
-    results = pose_model(frame)
+    results = pose_model(frame, verbose=False)
     kps = results[0].keypoints.xy
     if kps is not None and len(kps) > 0:
         pts = kps[0].cpu().numpy().flatten()
@@ -38,7 +36,6 @@ while True:
             pred = gesture_model(x).argmax(1).item()
         gesture = GESTURES[pred]
         cv2.putText(frame, gesture, (10, 40), cv2.FONT_HERSHEY_SIMPLEX, 1, (0,255,0), 2)
-
     cv2.imshow("Gesture Recognition", frame)
     if cv2.waitKey(1) == ord('q'):
         break
