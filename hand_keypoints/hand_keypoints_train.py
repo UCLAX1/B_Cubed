@@ -1,7 +1,7 @@
 from ultralytics import YOLO
 
 def main():
-    model = YOLO("yolo11n-pose.pt")
+    model = YOLO("../models/yolo11n-pose.pt")
 
     results = model.train(
         data="hand-keypoints.yaml",
