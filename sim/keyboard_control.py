@@ -1,29 +1,50 @@
 import glfw
 from control_state import state
-from enums import BotControl
-from enums import CameraControl
+from sim.enums import BotControl
+from sim.enums import CameraControl
 
 
 
 def keyboard_callback(window, key, scancode, action, mods):
+    pressed_keys = set()
     if action == glfw.PRESS or action == glfw.REPEAT:  # Handle key press or hold
+        if action == glfw.PRESS:
+            pressed_keys.add(key)
+        elif action == glfw.RELEASE:
+            pressed_keys.discard(key)
 
-        print("Keyboard pressed")
 
-        # Robot Control
-
-        # Forwards and Backwards Control
-        if key == glfw.KEY_W: state.fb_control = BotControl.FWD
-        elif key == glfw.KEY_S: state.fb_control = BotControl.BACK
-
-        #Left and Right Control
-        if key == glfw.KEY_A: state.rl_control = BotControl.LEFT
-        elif key == glfw.KEY_D: state.rl_control = BotControl.RIGHT
 
         # Neutral Key
         if key == glfw.KEY_X:
             state.fb_control = BotControl.NEUTRAL
             state.rl_control = BotControl.NEUTRAL
+
+        # Diagonals
+        if glfw.KEY_W in pressed_keys:
+            state.fb_control = BotControl.FWD
+            print("Keyboard pressed")
+
+            if glfw.KEY_A in pressed_keys:
+                state.rl_control = BotControl.LEFT
+            elif glfw.KEY_D in pressed_keys:
+                state.rl_control = BotControl.RIGHT
+
+        if glfw.KEY_S in pressed_keys:
+            state.fb_control = BotControl.BACK
+            if glfw.KEY_A in pressed_keys:
+                state.rl_control = BotControl.LEFT
+            elif glfw.KEY_D in pressed_keys:
+                state.rl_control = BotControl.RIGHT
+
+        if glfw.KEY_A in pressed_keys:
+            state.rl_control = BotControl.LEFT
+        if glfw.KEY_D in pressed_keys:
+            state.rl_control = BotControl.RIGHT
+
+
+
+
 
 
         # Camera control

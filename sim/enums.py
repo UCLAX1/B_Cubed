@@ -7,6 +7,7 @@ class BotControl(Enum):
     BACK = 3
     NEUTRAL = 4
 
+
 class CameraControl(Enum):
     UP = 0
     DOWN = 1
