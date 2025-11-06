@@ -28,10 +28,12 @@
         xyaxes="0.768 0.641 0.000 -0.101 0.122 0.987" mode="trackcom" />
       <!-- <inertial pos="-4.4409E-16 0.027063 -3.3307E-16" quat="0 0 0 1" mass="2.4283"
         diaginertia="0.0059267 0.0098916 0.0059267" /> -->
-      <inertial pos="-4.4409E-16 0.027063 -3.3307E-16" quat="0 0 0 1" mass="15"
+      <inertial pos="-4.4409E-16 0.027063 -3.3307E-16" quat="0 0 0 1" mass="20"
         diaginertia="0.0059267 0.0098916 0.0059267" />
 
       <geom type="mesh" rgba="0.79216 0.81961 0.93333 1" mesh="base_link" />
+      <geom name="sphere" type="sphere" pos="0 -0.075 0" size="0.2625" rgba="0.988 0.612 0.263 0.25"
+        contype="0" conaffinity="0" />
       <!-- <body name="sphere" pos="0 0 0.1">
         <inertial pos="0 0 0" mass="0" diaginertia="0.002 0.002 0.002" />
         <geom type="sphere" size="0.1" rgba="0.1 0.1 0.8 1" />
@@ -56,26 +58,26 @@
       <body name="w1" pos="-0.095 0.117 0" quat="0.499998 0.5 -0.5 0.500002" >
         <inertial pos="0 -0.01 0" quat="0.707107 0 0 0.707107" mass="0.15708"
           diaginertia="0.00019635 0.00010341 0.00010341" />
-        <joint name="w1" pos="0 0 0" axis="0 1 0" />
+        <joint name="w1" pos="0 0 0" axis="0 1 0" damping="0.1" />
         <!-- w1: Red -->
         <geom type="mesh" rgba="1 0 0 1" mesh="w1" friction="0.8 0.005 0.01" condim="3"/>
       </body>
       <body name="w2" pos="0 0.117 -0.095" quat="0.499998 0.5 -0.5 0.500002">
         <inertial pos="0.01 0 0" mass="0.15708" diaginertia="0.00019635 0.00010341 0.00010341" />
-        <joint name="w2" pos="0 0 0" axis="-1 0 0" />
+        <joint name="w2" pos="0 0 0" axis="-1 0 0" damping="0.1" />
         <!-- w2: Green -->
         <geom type="mesh" rgba="0 1 0 1" mesh="w2" friction="0.8 0.005 0.01" condim="3"/>
       </body>
       <body name="w3" pos="0.095 0.117 0" quat="0.499998 0.5 -0.5 0.500002">
         <inertial pos="0 0.01 0" quat="0.707107 0 0 0.707107" mass="0.15708"
           diaginertia="0.00019635 0.00010341 0.00010341" />
-        <joint name="w3" pos="0 0 0" axis="0 -1 0" />
+        <joint name="w3" pos="0 0 0" axis="0 -1 0" damping="0.1" />
         <!-- w3: Blue -->
         <geom type="mesh" rgba="0 0 1 1" mesh="w3" friction="0.8 0.005 0.01" condim="3"/>
       </body>
       <body name="w4" pos="0 0.117 0.095" quat="0.499998 0.5 -0.5 0.500002">
         <inertial pos="-0.01 0 0" mass="0.15708" diaginertia="0.00019635 0.00010341 0.00010341" />
-        <joint name="w4" pos="0 0 0" axis="1 0 0" />
+        <joint name="w4" pos="0 0 0" axis="1 0 0" damping="0.1" />
         <!-- w4: Yellow -->
         <geom type="mesh" rgba="1 1 0 1" mesh="w4" friction="0.8 0.005 0.01" condim="3"/>
       </body>
