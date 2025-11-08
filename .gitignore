@@ -1,3 +1,20 @@
+#ZED SDK Ros Wrapper (install this yourself)
+zed-ros2-wrapper/
+
+#ROS2 Stuff in general
+build/
+install/
+log/
+
+#Training Runs
+/runs
+
+#IntelliJ configs
+.idea/
+
+# Fleet configs
+.fleet/
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[codz]
