@@ -76,7 +76,7 @@ def main(opt):
     if use_gpu:
         print("🚀 Using GPU data transfer with CuPy")
 
-    init = sl.InitParameters(depth_mode=sl.DEPTH_MODE.NEURAL,
+    init = sl.InitParameters(depth_mode=sl.DEPTH_MODE.NEURAL_LIGHT,
                                  coordinate_units=sl.UNIT.METER,
                                  coordinate_system=sl.COORDINATE_SYSTEM.RIGHT_HANDED_Y_UP)
     parse_args(init, opt)
