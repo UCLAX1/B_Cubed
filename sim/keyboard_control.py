@@ -4,6 +4,7 @@ from enums import BotControl
 from enums import CameraControl
 from enums import AngularVelocityControl
 from enums import JointControl
+from enums import HeadActions
 
 
 
@@ -51,10 +52,10 @@ def keyboard_callback(window, key, scancode, action, mods):
         #     state.rl_control = BotControl.NEUTRAL
 
         # Angular Velocity Control (Left/Right arrows for base rotation)
-        if key == glfw.KEY_LEFT: 
-            state.angular_vel_control = AngularVelocityControl.LEFT
-        elif key == glfw.KEY_RIGHT:
-            state.angular_vel_control = AngularVelocityControl.RIGHT
+        # if key == glfw.KEY_LEFT: 
+        #     state.angular_vel_control = AngularVelocityControl.LEFT
+        # elif key == glfw.KEY_RIGHT:
+        #     state.angular_vel_control = AngularVelocityControl.RIGHT
 
         # Joint Position Control (one-time increment per key press)
         # i, j keys: a1 joint increase and decrease (0.2 increment)
@@ -85,8 +86,20 @@ def keyboard_callback(window, key, scancode, action, mods):
         elif key == glfw.KEY_DOWN: state.cam_control = CameraControl.DOWN
         elif key == glfw.KEY_PAGE_UP: state.cam_control = CameraControl.ZOOM_IN
         elif key == glfw.KEY_PAGE_DOWN: state.cam_control = CameraControl.ZOOM_OUT
+        elif key == glfw.KEY_LEFT: state.cam_control = CameraControl.LEFT
+        elif key == glfw.KEY_RIGHT: state.cam_control = CameraControl.RIGHT
         elif key == glfw.KEY_HOME: state.cam_control = CameraControl.RESET_CAMERA
         elif key == glfw.KEY_DELETE: state.cam_control = CameraControl.HOME
+
+        # Head action controls: map number keys to HeadActions
+        # 1: idle, 2: fast, 3: fast turn, 4: inquisitive, 5: head shake, 6: head spin, 7: hurt
+        if key == glfw.KEY_1: state.head_actions = HeadActions.EXPRESSION_IDLE
+        elif key == glfw.KEY_2: state.head_actions = HeadActions.EXPRESSION_FAST
+        elif key == glfw.KEY_3: state.head_actions = HeadActions.EXPRESSION_FAST_TURN
+        elif key == glfw.KEY_4: state.head_actions = HeadActions.EXPRESSION_INQUISITIVE
+        elif key == glfw.KEY_5: state.head_actions = HeadActions.EXPRESSION_HEAD_SHAKE
+        elif key == glfw.KEY_6: state.head_actions = HeadActions.EXPRESSION_HEAD_SPIN
+        elif key == glfw.KEY_7: state.head_actions = HeadActions.EXPRESSION_HURT
 
 
     elif action == glfw.RELEASE:
@@ -105,7 +118,18 @@ def keyboard_callback(window, key, scancode, action, mods):
         elif key == glfw.KEY_DOWN: state.cam_control = CameraControl.NONE
         elif key == glfw.KEY_PAGE_UP: state.cam_control = CameraControl.NONE
         elif key == glfw.KEY_PAGE_DOWN: state.cam_control = CameraControl.NONE
+        elif key == glfw.KEY_LEFT: state.cam_control = CameraControl.NONE
+        elif key == glfw.KEY_RIGHT: state.cam_control = CameraControl.NONE
         elif key == glfw.KEY_HOME: state.cam_control = CameraControl.NONE
         elif key == glfw.KEY_DELETE: state.cam_control = CameraControl.NONE
+
+        # Reset head action to NONE on release of number keys
+        if key == glfw.KEY_0: state.head_actions = HeadActions.NONE
+        elif key == glfw.KEY_1: state.head_actions = HeadActions.NONE
+        elif key == glfw.KEY_2: state.head_actions = HeadActions.NONE
+        elif key == glfw.KEY_3: state.head_actions = HeadActions.NONE
+        elif key == glfw.KEY_4: state.head_actions = HeadActions.NONE
+        elif key == glfw.KEY_5: state.head_actions = HeadActions.NONE
+        elif key == glfw.KEY_6: state.head_actions = HeadActions.NONE
 
     return None

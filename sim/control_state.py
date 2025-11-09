@@ -1,4 +1,4 @@
-from enums import BotControl, CameraControl, AngularVelocityControl, JointControl
+from enums import BotControl, CameraControl, AngularVelocityControl, JointControl, HeadActions
 
 class ControlState:
     def __init__(self):
@@ -7,6 +7,7 @@ class ControlState:
         self.cam_control = CameraControl.NONE
         self.angular_vel_control = AngularVelocityControl.NONE
         self.joint_control = JointControl.NONE
+        self.head_actions = HeadActions.EXPRESSION_IDLE
         # Joint positions (in radians)
         self.target_a1_pos = 0.0
         self.target_a2_pos = 1.0  # Initial a2 position (range: 0.7 to 1.5)

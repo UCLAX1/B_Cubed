@@ -32,5 +32,15 @@ class JointControl(Enum):
     H_DECREASE = 5
     NONE = 6
 
+class HeadActions(Enum):
+    EXPRESSION_IDLE = 0
+    EXPRESSION_FAST = 1
+    EXPRESSION_FAST_TURN = 2
+    EXPRESSION_INQUISITIVE = 3
+    EXPRESSION_HEAD_SHAKE = 4
+    EXPRESSION_HEAD_SPIN = 5
+    EXPRESSION_HURT = 6
+    NONE = 7
+
 
 
