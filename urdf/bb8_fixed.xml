@@ -16,6 +16,12 @@
     <texture name="grid" type="2d" builtin="checker" rgb1=".1 .2 .3" rgb2=".2 .3 .4" width="300"
       height="300" />
     <material name="grid" texture="grid" texrepeat="8 8" reflectance=".2" />
+
+    <texture name="bb8_tex" type="2d" file="../sim/bb8_textures/bb8one.png"/>
+    <material name="bb8_mat" texture="bb8_tex" texrepeat="1 1" texuniform="false"/>
+
+    <texture name="bb8_head_tex" type="2d" file="../sim/bb8_textures/bb8head.png"/>
+    <material name="bb8_head_mat" texture="bb8_head_tex" texrepeat=".8 1.2" texuniform="false"/>
   </asset>
 
   <worldbody>
@@ -51,7 +57,7 @@
           <body name="h" pos="0 0 0.34" quat="0.51312 0.486525 0.513122 -0.486527">
             <inertial pos="0.0625 0 0" mass="0.5" diaginertia="0.0083776 0.0054323 0.0054323" />
             <joint name="h" pos="0 0 0" axis="-1 0 0" />
-            <geom type="mesh" rgba="0.79216 0.81961 0.93333 1" mesh="h" />
+            <geom type="mesh" rgba="0.79216 0.81961 0.93333 1" mesh="h" material="bb8_head_mat"/>
           </body>
         </body>
       </body>
