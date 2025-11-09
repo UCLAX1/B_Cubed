@@ -10,8 +10,6 @@ from enums import JointControl
 def keyboard_callback(window, key, scancode, action, mods):
     if action == glfw.PRESS or action == glfw.REPEAT:  # Handle key press or hold
 
-        print("Keyboard pressed")
-
         # Robot Control
 
         # Forwards and Backwards Control - increment wheel speeds by 0.1
@@ -22,7 +20,6 @@ def keyboard_callback(window, key, scancode, action, mods):
             # Clamp to [-1, 1] range
             state.w1_speed = max(-1.0, min(1.0, state.w1_speed))
             state.w3_speed = max(-1.0, min(1.0, state.w3_speed))
-            print(f"Forward: w1={state.w1_speed:.2f}, w3={state.w3_speed:.2f}")
         # Backward: w1 negative, w3 positive
         elif key == glfw.KEY_S: 
             state.w1_speed -= 0.1
@@ -30,7 +27,6 @@ def keyboard_callback(window, key, scancode, action, mods):
             # Clamp to [-1, 1] range
             state.w1_speed = max(-1.0, min(1.0, state.w1_speed))
             state.w3_speed = max(-1.0, min(1.0, state.w3_speed))
-            print(f"Backward: w1={state.w1_speed:.2f}, w3={state.w3_speed:.2f}")
 
         #Left and Right Control - increment wheel speeds by 0.1
         # Left: w2 positive, w3 negative
@@ -40,7 +36,6 @@ def keyboard_callback(window, key, scancode, action, mods):
             # Clamp to [-1, 1] range
             state.w2_speed = max(-1.0, min(1.0, state.w2_speed))
             state.w3_speed = max(-1.0, min(1.0, state.w3_speed))
-            print(f"Left: w2={state.w2_speed:.2f}, w3={state.w3_speed:.2f}")
         # Right: w2 negative, w3 positive
         elif key == glfw.KEY_D: 
             state.w2_speed -= 0.1
@@ -48,7 +43,6 @@ def keyboard_callback(window, key, scancode, action, mods):
             # Clamp to [-1, 1] range
             state.w2_speed = max(-1.0, min(1.0, state.w2_speed))
             state.w3_speed = max(-1.0, min(1.0, state.w3_speed))
-            print(f"Right: w2={state.w2_speed:.2f}, w3={state.w3_speed:.2f}")
 
         # Neutral Key (Note: X is now used for a2 joint decrease, consider using a different key for neutral)
         # TODO: Reassign neutral key if needed, or remove this if X should only control a2
@@ -63,33 +57,27 @@ def keyboard_callback(window, key, scancode, action, mods):
             state.angular_vel_control = AngularVelocityControl.RIGHT
 
         # Joint Position Control (one-time increment per key press)
-        # Z, X keys: a1 joint increase and decrease (0.2 increment)
-        if key == glfw.KEY_Z:
+        # i, j keys: a1 joint increase and decrease (0.2 increment)
+        if key == glfw.KEY_I:
             state.target_a1_pos += 0.2
             state.target_a1_pos = max(-3.14, min(3.14, state.target_a1_pos))
-            print(f"a1 position: {state.target_a1_pos:.2f}")
-        elif key == glfw.KEY_X:
+        elif key == glfw.KEY_J:
             state.target_a1_pos -= 0.2
             state.target_a1_pos = max(-3.14, min(3.14, state.target_a1_pos))
-            print(f"a1 position: {state.target_a1_pos:.2f}")
-        # C, V keys: a2 joint increase and decrease (0.2 increment)
-        elif key == glfw.KEY_C:
+        # k, l keys: a2 joint increase and decrease (0.2 increment)
+        elif key == glfw.KEY_O:
             state.target_a2_pos += 0.2
             state.target_a2_pos = max(0.7, min(1.5, state.target_a2_pos))
-            print(f"a2 position: {state.target_a2_pos:.2f}")
-        elif key == glfw.KEY_V:
+        elif key == glfw.KEY_K:
             state.target_a2_pos -= 0.2
             state.target_a2_pos = max(0.7, min(1.5, state.target_a2_pos))
-            print(f"a2 position: {state.target_a2_pos:.2f}")
-        # B, N keys: h (head) joint increase and decrease (0.2 increment)
-        elif key == glfw.KEY_B:
+        # o, p keys: h (head) joint increase and decrease (0.2 increment)
+        elif key == glfw.KEY_P:
             state.target_h_pos += 0.2
             state.target_h_pos = max(-3.14, min(3.14, state.target_h_pos))
-            print(f"h position: {state.target_h_pos:.2f}")
-        elif key == glfw.KEY_N:
+        elif key == glfw.KEY_L:
             state.target_h_pos -= 0.2
             state.target_h_pos = max(-3.14, min(3.14, state.target_h_pos))
-            print(f"h position: {state.target_h_pos:.2f}")
 
         # Camera control (Note: Left/Right arrows are now used for angular velocity)
         # Only Up/Down arrows and other keys control camera now
