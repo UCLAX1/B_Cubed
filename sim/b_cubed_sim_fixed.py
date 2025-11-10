@@ -1,9 +1,18 @@
 from mujoco.glfw import glfw
 import mujoco as mj
 import time
+import os
+import sys
+
+# Add project root to path for imports
+ROOT_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+if ROOT_DIR not in sys.path:
+    sys.path.insert(0, ROOT_DIR)
+
 import keyboard_control
-from enums import CameraControl  # For use in control logic
+from enums import CameraControl
 from control_state import state
+from preset_actions import update_preset_actions
 
 # load model & set up data and camera
 modelPath = "../urdf/bb8_fixed.xml"  # Updated to use bb8_car_converted.xml
@@ -70,6 +79,12 @@ while not glfw.window_should_close(window):
 
     # simulation loop
     while elapsed_time >= sim_dt:
+
+        # ============================================
+        # PRESET ACTIONS UPDATE
+        # ============================================
+        # Update joint targets from preset actions (if active)
+        update_preset_actions(dt=sim_dt)
 
         # ============================================
         # JOINT POSITION CONTROL SECTION

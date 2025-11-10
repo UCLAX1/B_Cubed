@@ -1,4 +1,4 @@
-"""movement_controller.py
+"""head_movement_controller.py
 
 High-level behavior controller utilities.
 
@@ -20,10 +20,10 @@ Notes:
 from __future__ import annotations
 
 import math
+import time
 from typing import Callable, Dict, Iterable, Optional, Sequence
 
 import numpy as np
-import time
 
 from head_behave.head_predefined_motions import (
     idle_sway,
@@ -37,10 +37,7 @@ from head_behave.head_predefined_motions import (
     stop_all_motion,
 )
 
-# Default persistent state memory used when callers do not provide one.
-# This lets `behaveControl` remember per-primitive timers and phases across
-# successive calls even in live-only use where the caller doesn't keep a state
-# dict.
+# Default persistent state memory
 _default_state_mem: dict = {}
 
 
@@ -55,7 +52,13 @@ def _compute_direction_and_speed(x_vel: float, y_vel: float) -> tuple[float, flo
     return direction_deg, speed
 
 
-def compute_behavior_flags(x_vel: float, y_vel: float, state: int, prev_dir: float, observing: bool) -> dict:
+def compute_behavior_flags(
+    x_vel: float,
+    y_vel: float,
+    state: int,
+    prev_dir: float,
+    observing: bool
+) -> dict:
     """Compute boolean action flags from current motion sample.
 
     This separates decision logic (which actions should run) from the
@@ -64,11 +67,13 @@ def compute_behavior_flags(x_vel: float, y_vel: float, state: int, prev_dir: flo
     """
     direction_deg, movement_speed = _compute_direction_and_speed(x_vel, y_vel)
 
-    technically_still_max_speed = 5.0
-    now_a_run = 15.0
-    significant_turn_amount = 0.5
+    # Thresholds
+    
+    _SPEED = 5.0
+    RUN_SPEED = 15.0
+    TURN_THRESHOLD = 0.5
 
-    # compute direction change magnitude
+    # Compute direction change magnitude
     dir_change = abs((direction_deg - prev_dir + 180.0) % 360.0 - 180.0)
 
     flags = {
@@ -89,10 +94,10 @@ def compute_behavior_flags(x_vel: float, y_vel: float, state: int, prev_dir: flo
 
     if state == 0:
         if not observing:
-            if movement_speed < technically_still_max_speed:
+            if movement_speed < STILL_SPEED:
                 flags["idle_sway"] = True
-            elif movement_speed > now_a_run:
-                if dir_change > significant_turn_amount:
+            elif movement_speed > RUN_SPEED:
+                if dir_change > TURN_THRESHOLD:
                     flags["set_base_and_bend"] = True
                 else:
                     flags["snappy_shake"] = True
@@ -133,21 +138,12 @@ def behaveControl(
         output_arr: numpy array shape (3,) mutated in-place -> [head_rotate, head_bend, base_rotate]
         state_mem: optional dict persisted between calls (used for previous direction, timers, etc.)
         dt: timestep (seconds) for time-based effects
+        movement_ctrl: optional MovementController for scheduling moves
         
     Notes:
         - The function is non-blocking: call it repeatedly (e.g., in your main loop) with new inputs.
         - Most specialized actions are delegated to functions in `predefined_motions.py`.
-    Input / output contract:
-        - input_sample: [x_vel, y_vel, state]
-        - output_arr: numpy array shape (3,) mutated in-place -> [head_rotate, head_bend, base_rotate]
-        - If `movement_ctrl` (a `MovementController` instance) is provided then many primitives
-          will schedule moves on it instead of only mutating `output_arr`.
     """
-    # If the caller didn't provide a state memory dict, use a module-level
-    # persistent dict so the controller 'remembers' timers, phases and other
-    # internal state across repeated live calls. This preserves the ease-in/
-    # ease-out behavior of primitives without forcing the caller to manage
-    # the memory object.
     if state_mem is None:
         state_mem = _default_state_mem
 
@@ -158,20 +154,12 @@ def behaveControl(
     observing = state_mem.get("observing", False)
     state_mem.setdefault("spin_angle", 0.0)
 
-    # constants (from your spec)
-    technically_still_max_speed = 5.0
-    now_a_run = 15.0
-    significant_turn_amount = 0.5  # degrees threshold for "significant" turning
-
-    # ensure output array shape
+    # Ensure output array shape
     if output_arr.shape != (3,):
-        raise ValueError("output_arr must be a numpy array with shape (3,) (head_rotate, head_bend, base_rotate)")
-
-    # default outputs are preserved unless overwritten
-    head_rotate, head_bend, base_rotate = float(output_arr[0]), float(output_arr[1]), float(output_arr[2])
+        raise ValueError("output_arr must be a numpy array with shape (3,)")
 
     if not on_off:
-        state_mem["prev_dir"] = state_mem.get("prev_dir", 0.0)
+        state_mem["prev_dir"] = prev_dir
         return
 
     # Compute flags
@@ -198,56 +186,60 @@ def behaveControl(
 
     if flags.get("head_spin"):
         t_local = timers.get("head_spin", 0.0)
-        if movement_ctrl is not None:
-            # schedule once per cycle when timer is zero
-            val, next_t = head_spin(output_arr, dt=dt, controller=movement_ctrl, start_time=None, t=t_local)
-            timers["head_spin"] = next_t
-            head_rotate = val
-        else:
-            val, next_t = head_spin(output_arr, dt=dt, controller=None, start_time=None, t=t_local)
-            timers["head_spin"] = next_t
-            head_rotate = val
+        val, next_t = head_spin(
+            output_arr, dt=dt, controller=movement_ctrl,
+            start_time=None, t=t_local
+        )
+        timers["head_spin"] = next_t
+        output_arr[0] = val
 
     if flags.get("hurt"):
         hurt_sequence(output_arr, dt=dt, state_mem=state_mem, controller=movement_ctrl)
 
     # Motion-driven behaviors (state 0): base orientation, bend, and head rotate
+    RUN_SPEED = 15.0  # Constant for calculations
+    
     if flags.get("set_base_and_bend"):
         t_local = timers.get("set_base_and_bend", 0.0)
-        base_val, next_t = set_base_to_velocity_and_bend(flags["direction_deg"], flags["movement_speed"], flags["dir_change"], controller=movement_ctrl, start_time=None, duration=0.2, t=t_local)
+        base_val, next_t = set_base_to_velocity_and_bend(
+            flags["direction_deg"], flags["movement_speed"], flags["dir_change"],
+            controller=movement_ctrl, start_time=None, duration=0.2, t=t_local
+        )
         timers["set_base_and_bend"] = next_t
-        base_rotate = base_val
-        head_bend = float(np.clip(10.0 + (flags["movement_speed"] / (now_a_run * 2.0)) * 20.0 + (flags["dir_change"] / 180.0) * 10.0, 10.0, 30.0))
+        output_arr[2] = base_val
+        output_arr[1] = float(np.clip(
+            10.0 + (flags["movement_speed"] / (RUN_SPEED * 2.0)) * 20.0 +
+            (flags["dir_change"] / 180.0) * 10.0, 10.0, 30.0
+        ))
 
     if flags.get("snappy_shake"):
         t_local = timers.get("snappy_shake", 0.0)
-        val, next_t = snappy_shake_with_bend(flags["direction_deg"], head_rotate, flags["movement_speed"], t=t_local, dt=dt, controller=movement_ctrl)
+        val, next_t = snappy_shake_with_bend(
+            flags["direction_deg"], output_arr[0], flags["movement_speed"],
+            t=t_local, dt=dt, controller=movement_ctrl
+        )
         timers["snappy_shake"] = next_t
-        head_rotate = val
-        head_bend = float(np.clip(10.0 + (flags["movement_speed"] / now_a_run) * 20.0, 10.0, 30.0))
+        output_arr[0] = val
+        output_arr[1] = float(np.clip(
+            10.0 + (flags["movement_speed"] / RUN_SPEED) * 20.0, 10.0, 30.0
+        ))
 
     if flags.get("face_direction") and not flags.get("snappy_shake"):
         t_local = timers.get("face_direction", 0.0)
-        if movement_ctrl is not None:
-            val, next_t = simple_face_direction(flags["direction_deg"], controller=movement_ctrl, start_time=None, duration=0.2, t=t_local)
-            timers["face_direction"] = next_t
-            head_rotate = val
-        else:
-            val, next_t = simple_face_direction(flags["direction_deg"], controller=None, start_time=None, duration=0.2, t=t_local)
-            timers["face_direction"] = next_t
-            head_rotate = val
+        val, next_t = simple_face_direction(
+            flags["direction_deg"], controller=movement_ctrl,
+            start_time=None, duration=0.2, t=t_local
+        )
+        timers["face_direction"] = next_t
+        output_arr[0] = val
 
     if flags.get("idle_sway"):
         t_local = timers.get("idle_sway", 0.0)
-        val, next_t = idle_sway(head_rotate, t=t_local, dt=dt, controller=movement_ctrl)
+        val, next_t = idle_sway(output_arr[0], t=t_local, dt=dt, controller=movement_ctrl)
         timers["idle_sway"] = next_t
-        head_rotate = val
+        output_arr[0] = val
 
-    # Write back
-    output_arr[0] = float(head_rotate)
-    output_arr[1] = float(head_bend)
-    output_arr[2] = float(base_rotate)
-
+    # Update state
     state_mem["prev_dir"] = flags.get("direction_deg", prev_dir)
     state_mem["t"] = state_mem.get("t", 0.0) + dt
 

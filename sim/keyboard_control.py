@@ -1,11 +1,10 @@
-import glfw
+from mujoco.glfw import glfw
 from control_state import state
 from enums import BotControl
 from enums import CameraControl
 from enums import AngularVelocityControl
 from enums import JointControl
 from enums import HeadActions
-
 
 
 def keyboard_callback(window, key, scancode, action, mods):
@@ -93,13 +92,28 @@ def keyboard_callback(window, key, scancode, action, mods):
 
         # Head action controls: map number keys to HeadActions
         # 1: idle, 2: fast, 3: fast turn, 4: inquisitive, 5: head shake, 6: head spin, 7: hurt
-        if key == glfw.KEY_1: state.head_actions = HeadActions.EXPRESSION_IDLE
-        elif key == glfw.KEY_2: state.head_actions = HeadActions.EXPRESSION_FAST
-        elif key == glfw.KEY_3: state.head_actions = HeadActions.EXPRESSION_FAST_TURN
-        elif key == glfw.KEY_4: state.head_actions = HeadActions.EXPRESSION_INQUISITIVE
-        elif key == glfw.KEY_5: state.head_actions = HeadActions.EXPRESSION_HEAD_SHAKE
-        elif key == glfw.KEY_6: state.head_actions = HeadActions.EXPRESSION_HEAD_SPIN
-        elif key == glfw.KEY_7: state.head_actions = HeadActions.EXPRESSION_HURT
+        # Only accept new actions if not currently locked (animation in progress)
+        if key == glfw.KEY_1 and not state.head_action_locked:
+            state.head_actions = HeadActions.EXPRESSION_IDLE
+            state.head_action_locked = True
+        elif key == glfw.KEY_2 and not state.head_action_locked:
+            state.head_actions = HeadActions.EXPRESSION_FAST
+            state.head_action_locked = True
+        elif key == glfw.KEY_3 and not state.head_action_locked:
+            state.head_actions = HeadActions.EXPRESSION_FAST_TURN
+            state.head_action_locked = True
+        elif key == glfw.KEY_4 and not state.head_action_locked:
+            state.head_actions = HeadActions.EXPRESSION_INQUISITIVE
+            state.head_action_locked = True
+        elif key == glfw.KEY_5 and not state.head_action_locked:
+            state.head_actions = HeadActions.EXPRESSION_HEAD_SHAKE
+            state.head_action_locked = True
+        elif key == glfw.KEY_6 and not state.head_action_locked:
+            state.head_actions = HeadActions.EXPRESSION_HEAD_SPIN
+            state.head_action_locked = True
+        elif key == glfw.KEY_7 and not state.head_action_locked:
+            state.head_actions = HeadActions.EXPRESSION_HURT
+            state.head_action_locked = True
 
 
     elif action == glfw.RELEASE:
@@ -123,13 +137,7 @@ def keyboard_callback(window, key, scancode, action, mods):
         elif key == glfw.KEY_HOME: state.cam_control = CameraControl.NONE
         elif key == glfw.KEY_DELETE: state.cam_control = CameraControl.NONE
 
-        # Reset head action to NONE on release of number keys
-        if key == glfw.KEY_0: state.head_actions = HeadActions.NONE
-        elif key == glfw.KEY_1: state.head_actions = HeadActions.NONE
-        elif key == glfw.KEY_2: state.head_actions = HeadActions.NONE
-        elif key == glfw.KEY_3: state.head_actions = HeadActions.NONE
-        elif key == glfw.KEY_4: state.head_actions = HeadActions.NONE
-        elif key == glfw.KEY_5: state.head_actions = HeadActions.NONE
-        elif key == glfw.KEY_6: state.head_actions = HeadActions.NONE
+        # NOTE: We do NOT reset head_actions on key release - the preset_actions
+        # module manages animation duration and will auto-reset when done
 
     return None

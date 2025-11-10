@@ -1,32 +1,36 @@
-"""head_behave.py
+"""head_behave_math.py
 
 Generate time-stepped 3-angle trajectories for a robot head and convert them
-to a matrix of angles for every timestep
+to a matrix of angles for every timestep.
 
 Outputs:
 - A numpy array of shape (N, 4) where columns are [t, angle_0_deg, angle_1_deg, angle_2_deg]
 - A simple motor command conversion: angles -> radians and constrained by max
   angular velocity derived from motor max RPM.
-
 """
 
 from __future__ import annotations
 
-import math
 from dataclasses import dataclass
-from typing import Sequence, Tuple
+from typing import Sequence
 
 import numpy as np
 
 
 @dataclass
 class MotorModel:
-    """ holds a motor variables, change here """
-
+    """Holds motor variables."""
     default_timestep: float = 0.002
     default_min_duration: float = 0.02
 
-def generate_trajectory_per_axis(start: Sequence[float], end: Sequence[float], durations: Sequence[float], timestep: float | None = None, motor: MotorModel | None = None) -> np.ndarray:
+
+def generate_trajectory_per_axis(
+    start: Sequence[float],
+    end: Sequence[float],
+    durations: Sequence[float],
+    timestep: float | None = None,
+    motor: MotorModel | None = None
+) -> np.ndarray:
     """Generate per-axis trajectories with parabolic (ease-in/ease-out) profiles.
 
     Each axis moves according to a quadratic ease-in/ease-out profile (smooth
@@ -50,7 +54,8 @@ def generate_trajectory_per_axis(start: Sequence[float], end: Sequence[float], d
         else:
             timestep = 0.002  # fallback default
     
-    assert len(start) == 3 and len(end) == 3 and len(durations) == 3, "start/end/durations must be 3-element sequences"
+    assert len(start) == 3 and len(end) == 3 and len(durations) == 3, \
+        "start/end/durations must be 3-element sequences"
     if any(T <= 0 for T in durations):
         raise ValueError("all durations must be positive")
 
