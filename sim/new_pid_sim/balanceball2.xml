@@ -1,0 +1,80 @@
+<mujoco>
+    <option gravity="0 0 -9.80" timestep="0.002"/>
+    <size nstack="5000"/>
+    
+    <asset>
+        <texture type="skybox" builtin="gradient" rgb1=".3 .5 .7" rgb2="0 0 0" width="32" height="512"/>
+        <texture name="grid" type="2d" builtin="checker" width="512" height="512" rgb1=".1 .2 .3" rgb2=".2 .3 .4"/>
+        <texture name='highlight' type='2d' builtin='gradient' rgb1='255 255 255' rgb2='255 255 255' width='512' height='512'/>
+        <material name='ball' texture='highlight' texrepeat='1 1' texuniform='true'/>
+        <material name="grid" texture="grid" texrepeat="1 1" texuniform="true" reflectance=".0"/>
+    </asset>
+
+    <worldbody>
+        <geom name="floor" size="10 10 .05" type="plane" material="grid" friction="3.0 1.5 0.5"/>
+        <light name="spotlight" mode="targetbodycom" target="bb8" diffuse=".8 .8 .8" specular="0.3 0.3 0.3" pos="0 -6 4" cutoff="30"/>
+        <light name="top" pos="0 0 2" mode="trackcom"/>
+
+        <body name="bb8" pos="0 0 0.11">
+            <joint name="bb8_free" type="free"/>
+            <!-- Visible outer sphere -->
+            <geom name="bb8_outer" type="sphere" size="0.12" rgba="1 0.6 0 0.2" mass="2.0" material="ball"/>
+
+                        <!-- Internal chassis that carries 4 wheel joints -->
+                        <!-- Internal chassis: a small fixed mass inside the sphere -->
+            <body name="chassis" pos="0 0 0">
+                <!-- Give it visible mass so it’s dynamic -->
+<!--                <geom type="sphere" size="0.1" mass="0.05" rgba="1 0 0 0"/>-->
+
+                <!-- Attach each wheel as a child body so MuJoCo assigns inertia -->
+                <body name="wheel_fl" pos="0.0  0.1 0.0">
+                    <joint name="wheel_fl" type="hinge" axis="0 1 0" limited="false"/>
+                    <geom type="capsule" fromto="0 0 0 0.02 0 0" size="0.005" mass="0.005" rgba="0 0 1 1"/>
+                </body>
+
+                <body name="wheel_fr" pos="-0.1 0.0 0.0">
+                    <joint name="wheel_fr" type="hinge" axis="-1 0 0" limited="false"/>
+                    <geom type="capsule" fromto="0 0 0 0 0.02 0" size="0.005" mass="0.005" rgba="0 1 0 1"/>
+                </body>
+
+                <body name="wheel_bl" pos="0.0 -0.1 0.0">
+                    <joint name="wheel_bl" type="hinge" axis="0 -1 0" limited="false"/>
+                    <geom type="capsule" fromto="0 0 0 0.02 0 0" size="0.005" mass="0.005" rgba="1 0 0 1"/>
+                </body>
+
+                <body name="wheel_br" pos="0.1 0.0 0.0">
+                    <joint name="wheel_br" type="hinge" axis="1 0 0" limited="false"/>
+                    <geom type="capsule" fromto="0 0 0 0 0.02 0" size="0.005" mass="0.005" rgba="1 1 0 1"/>
+                </body>
+            </body>
+
+
+            <!-- Head -->
+            <body name="head" pos="0 0 0.16">
+                <joint name="head_joint"/>
+                <geom type="box" size=".06 .06 .06" rgba="1 1 1 1" mass="0.3"/>
+            </body>
+        </body>
+    </worldbody>
+
+    <actuator>
+      <!-- Front @ 0° : contributes +τx -->
+      <motor name="motor_front" joint="bb8_free"
+             gear="0 0 0  1 0 0" ctrlrange="-3 3"/>
+
+      <!-- Right @ 90° : contributes +τy -->
+      <motor name="motor_right" joint="bb8_free"
+             gear="0 0 0  0 1 0" ctrlrange="-3 3"/>
+
+      <!-- Back @ 180° : contributes -τx -->
+      <motor name="motor_back" joint="bb8_free"
+             gear="0 0 0 -1 0 0" ctrlrange="-3 3"/>
+
+      <!-- Left @ 270° : contributes -τy -->
+      <motor name="motor_left" joint="bb8_free"
+             gear="0 0 0  0 -1 0" ctrlrange="-3 3"/>
+    </actuator>
+
+
+
+</mujoco>
