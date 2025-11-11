@@ -51,10 +51,10 @@ key_states = {
     'A': False,  # Left
     'S': False,  # Back
     'D': False,   # Right
-    'KEY_UP': False, # Forward velocity
-    'KEY_DOWN': False, # Backward velocity
-    'KEY_LEFT': False, # Leftward velocity
-    'KEY_RIGHT': False # Rightward velocity
+    '1': False, # Forward velocity
+    '2': False, # Backward velocity
+    '3': False, # Leftward velocity
+    '4': False # Rightward velocity
 }
 
 def keyboard_callback(window, key, scancode, action, mods):
@@ -70,14 +70,14 @@ def keyboard_callback(window, key, scancode, action, mods):
             key_states['S'] = True
         elif key == glfw.KEY_D:
             key_states['D'] = True
-        elif key == glfw.KEY_W:
-            key_states['KEY_UP'] = True
-        elif key == glfw.KEY_A:
-            key_states['KEY_DOWN'] = True
-        elif key == glfw.KEY_S:
-            key_states['KEY_LEFT'] = True
-        elif key == glfw.KEY_D:
-            key_states['KEY_RIGHT'] = True
+        elif key == glfw.KEY_1:
+            key_states['1'] = True
+        elif key == glfw.KEY_2:
+            key_states['2'] = True
+        elif key == glfw.KEY_3:
+            key_states['3'] = True
+        elif key == glfw.KEY_4:
+            key_states['4'] = True
     elif action == glfw.RELEASE:
         if key == glfw.KEY_W:
             key_states['W'] = False
@@ -87,18 +87,28 @@ def keyboard_callback(window, key, scancode, action, mods):
             key_states['S'] = False
         elif key == glfw.KEY_D:
             key_states['D'] = False
-        elif key == glfw.KEY_W:
-            key_states['KEY_UP'] = False
-        elif key == glfw.KEY_A:
-            key_states['KEY_DOWN'] = False
-        elif key == glfw.KEY_S:
-            key_states['KEY_LEFT'] = False
-        elif key == glfw.KEY_D:
-            key_states['KEY_RIGHT'] = False
-
-#def LQR
+        elif key == glfw.KEY_1:
+            key_states['1'] = False
+        elif key == glfw.KEY_2:
+            key_states['2'] = False
+        elif key == glfw.KEY_3:
+            key_states['3'] = False
+        elif key == glfw.KEY_4:
+            key_states['4'] = False
 
 
+Kp = 10
+Kd = 0.6
+KI = 10
+
+# PID controller 
+def PID(error, prev_error, total_sum):
+    new_error_sum = total_sum + error * sim_dt
+    delta_error = error - prev_error
+    control = Kp * error + Kd * delta_error/sim_dt + KI * new_error_sum
+    return control, new_error_sum
+
+time_sum = 0
 # Open window
 while not glfw.window_should_close(window):
     glfw.set_key_callback(window, keyboard_callback)
@@ -108,14 +118,15 @@ while not glfw.window_should_close(window):
     frame_time = c_time - time_prev
     time_prev = c_time
     elapsed_time += frame_time
-
-
+    perror = 0
+    sum_error = 0
+    time_sum = 0
     # simulation loop
     while elapsed_time >= sim_dt:
         
         # default force vector (nothing happens)
         force = np.zeros(6)
-        velocity = np.zeros(6)
+        
 
         # perturbed force vector (based on key strokes)
         if key_states['W']:
@@ -127,41 +138,56 @@ while not glfw.window_should_close(window):
         if key_states['D']:
             force[1] = -5
         # control velocity vector (based on key strokes)
-        if key_states['KEY_UP']:
-            velocity[0] = 5
-        if key_states['KEY_DOWN']:
-            velocity[0] = -5
-        if key_states['KEY_LEFT']:
-            velocity[1] = 5
-        if key_states['KEY_RIGHT']:
-            velocity[1] = -5
+        if key_states['1']:
+            data.qvel[0] = control_vx
+        if key_states['2']:
+            data.qvel[0] = -control_vx
+        if key_states['3']:
+            data.qvel[1] = control_vy
+        if key_states['4']:
+            data.qvel[1] = -control_vy
 
         # applies force vector 
-        data.xfrc_applied[body_id] = force
         data.xpos[body_id]
 
-        state_ball = np.array
-        ([
-            data.xpos[body_id][0],  
-            data.xpos[body_id][1],   
-            data.cvel[body_id][0], 
-            data.cvel[body_id][1]   
-        ])
+        # Body state: position of the center of the body 
+        state_ball = np.array([round(data.xpos[body_id][0], 2), round(data.xpos[body_id][1], 2), round(data.xpos[body_id][2], 2)])
 
-        # Head state: [x, y, vx, vy]
-        state_head = np.array([
-            data.xpos[head_id][0],
-            data.xpos[head_id][1],
-            data.cvel[head_id][0],
-            data.cvel[head_id][1]
-        ])
+        # Head state: height above ground
+        state_head = np.array([round(data.xpos[head_id][0], 2), round(data.xpos[head_id][1], 2), round(data.xpos[head_id][2], 2)])
 
-        print("Force:", force, "State_Head:", state_head, "State_Body", state_ball)
+        # radius vector between center of the ball and head
+        r = round(np.linalg.norm(state_head - state_ball), 2)
+
+        # At neutral the head is 0.16 above the body in xpos 
+
+        # vector of deviations
+        vec = state_head - state_ball
+
+        # specific error in the theta direction 
+        error = round(np.acos((state_head[2] - state_ball[2])/r), 3)
+
+        # phi error 
+        phi = np.atan2(vec[1], vec[0])
+        
+        # calculates control and updates the integral term 
+        control, sum_error = PID(error, perror, sum_error)
+
+        # reset the error
+        perror = error
+
+        # gives control inputs  
+        control_vx = round(-control * sim_dt * np.sin(phi), 4)
+        control_vy = round(-control * sim_dt * np.cos(phi), 4)
+        
+
+        print("Error", error, "Control_x", control_vx, "Control_vy", control_vy, "Error_vector", vec)
 
         # update physics sim
+
+        data.xfrc_applied[body_id] = force
         mj.mj_step(model, data)
         elapsed_time -= sim_dt
-
 
 
     # Rendering Steps
