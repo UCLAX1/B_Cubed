@@ -119,16 +119,16 @@ def inquisitive_pose(
 ) -> None:
     """Turn into an inquisitive pose (mutates output_arr in-place).
     
-    Sets: base_rotate=100°, head_bend=15°, head_rotate=-100°
+    Sets: base_rotate=30°, head_bend=15°, head_rotate=-30°
     """
     if controller is not None:
         st = start_time if start_time is not None else getattr(controller, "current_time", 0.0)
-        controller.move([-100.0, 15.0, 100.0], durations=[0.6, 0.6, 0.6], start_time=st)
+        controller.move([-30.0, 15.0, 30.0], durations=[0.6, 0.6, 0.6], start_time=st)
         return
 
-    output_arr[2] = 100.0   # base_rotate
+    output_arr[2] = 30.0    # base_rotate
     output_arr[1] = 15.0    # head_bend
-    output_arr[0] = -100.0  # head_rotate
+    output_arr[0] = -30.0   # head_rotate
 
 
 def head_shake(

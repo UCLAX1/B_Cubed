@@ -15,7 +15,8 @@ from control_state import state
 from preset_actions import update_preset_actions
 
 # load model & set up data and camera
-modelPath = "../urdf/bb8_fixed.xml"  # Updated to use bb8_car_converted.xml
+# Use absolute path so script can be run from anywhere
+modelPath = os.path.join(ROOT_DIR, "urdf", "bb8_fixed.xml")
 model = mj.MjModel.from_xml_path(modelPath)
 data = mj.MjData(model)
 

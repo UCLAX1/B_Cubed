@@ -49,7 +49,7 @@
           diaginertia="5.8419e-06 5.8158e-06 1.7833e-06" />
         <joint name="a1" pos="0 0 0" axis="0 0 -1" />
         <geom type="mesh" rgba="0.79216 0.81961 0.93333 1" mesh="a1" contype="0" conaffinity="0" />
-        <body name="a2" pos="0 0 0.06" quat="-3.1459e-06 1.89624e-06 0.516236 -0.856446">
+        <body name="a2" pos="0 0 0.06" quat="1 0 0 0">
           <inertial pos="4.0307e-08 1.6883e-08 0.12424" quat="0.999977 0 0 0.0067613"
             mass="0.072732" diaginertia="0.00032679 0.00032678 3.6454e-06" />
           <joint name="a2" pos="0 0 0" axis="1 0 0" />
@@ -91,9 +91,9 @@
   </worldbody>
 
   <actuator>
-    <position name="a1_motor" joint="a1" kp="5" kv="1" ctrlrange="-3.14 3.14" />
-    <position name="a2_motor" joint="a2" kp="2" kv="1" ctrlrange="0.7 1.5" />
-    <position name="h_motor" joint="h" kp="5" kv="1" ctrlrange="-3.14 3.14" />
+    <position name="a1_motor" joint="a1" kp="100" kv="20" ctrlrange="-3.14 3.14" />
+    <position name="a2_motor" joint="a2" kp="50" kv="15" ctrlrange="-1.57 1.57" />
+    <position name="h_motor" joint="h" kp="100" kv="20" ctrlrange="-3.14 3.14" />
     <!-- <motor name="w1_motor" joint="w1" gear="5" ctrllimited="true" ctrlrange="-1 1" />
     <motor name="w2_motor" joint="w2" gear="5" ctrllimited="true" ctrlrange="-1 1" />
     <motor name="w3_motor" joint="w3" gear="5" ctrllimited="true" ctrlrange="-1 1" />
