@@ -97,9 +97,9 @@ def keyboard_callback(window, key, scancode, action, mods):
             key_states['4'] = False
 
 
-Kp = 10
-Kd = 0.6
-KI = 10
+Kp = 13
+Kd = 0.51
+KI = 11.2
 
 # PID controller 
 def PID(error, prev_error, total_sum):
@@ -120,7 +120,7 @@ while not glfw.window_should_close(window):
     elapsed_time += frame_time
     perror = 0
     sum_error = 0
-    time_sum = 0
+    time_sum += frame_time
     # simulation loop
     while elapsed_time >= sim_dt:
         
@@ -181,9 +181,14 @@ while not glfw.window_should_close(window):
         control_vy = round(-control * sim_dt * np.cos(phi), 4)
         
 
-        print("Error", error, "Control_x", control_vx, "Control_vy", control_vy, "Error_vector", vec)
-
+        # print("Error", error, "Control_x", control_vx, "Control_vy", control_vy, "Error_vector", vec)
+        # print("stopwatch ", time_sum)
         # update physics sim
+        if 0.5 <= time_sum <= 1:
+            force[0] = 5
+        elif time_sum >= 2:
+            data.qvel[0] = control_vx
+            data.qvel[1] = control_vy
 
         data.xfrc_applied[body_id] = force
         mj.mj_step(model, data)
