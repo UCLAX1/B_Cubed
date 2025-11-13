@@ -8,7 +8,7 @@
     <mesh name="base_link" content_type="model/stl" file="base_link.STL" />
     <mesh name="a1" content_type="model/stl" file="a1.STL" />
     <mesh name="a2" content_type="model/stl" file="a2.STL" />
-    <mesh name="h" content_type="model/stl" file="h.STL" />
+  <mesh name="h" content_type="model/stl" file="h.STL" scale="1.35 1.35 1.35" />
     <mesh name="w1" content_type="model/stl" file="w1.STL" />
     <mesh name="w2" content_type="model/stl" file="w2.STL" />
     <mesh name="w3" content_type="model/stl" file="w3.STL" />
@@ -21,7 +21,7 @@
     <material name="bb8_mat" texture="bb8_tex" texrepeat="1 1" texuniform="false"/>
 
     <texture name="bb8_head_tex" type="2d" file="../sim/bb8_textures/bb8head.png"/>
-    <material name="bb8_head_mat" texture="bb8_head_tex" texrepeat=".8 1.2" texuniform="false"/>
+    <!-- head texture removed -->
   </asset>
 
   <worldbody>
@@ -54,10 +54,15 @@
             mass="0.072732" diaginertia="0.00032679 0.00032678 3.6454e-06" />
           <joint name="a2" pos="0 0 0" axis="1 0 0" />
           <geom type="mesh" rgba="0.79216 0.81961 0.93333 1" mesh="a2" />
-          <body name="h" pos="0 0 0.34" quat="0.51312 0.486525 0.513122 -0.486527">
+          <body name="h" pos="0 0 0.40" quat="0.51312 0.486525 0.513122 -0.486527">
             <inertial pos="0.0625 0 0" mass="0.5" diaginertia="0.0083776 0.0054323 0.0054323" />
-            <joint name="h" pos="0 0 0" axis="-1 0 0" />
-            <geom type="mesh" rgba="0.79216 0.81961 0.93333 1" mesh="h" material="bb8_head_mat"/>
+              <joint name="h" pos="0 0 0" axis="-1 0 0" />
+              <!-- make head visually all white -->
+              <geom type="mesh" rgba="1 1 1 1" mesh="h" />
+      <!-- larger visual-only black dot on the front of the head (no collision)
+        moved forward and slightly raised so it sits clearly on the visible face -->
+  <!-- move dot closer to the head and shrink it as requested; lowered further to sit like an eye -->
+        <geom type="sphere" pos="0.07 0.0 -0.12" size="0.03" rgba="0 0 0 1" contype="0" conaffinity="0" />
           </body>
         </body>
       </body>
@@ -65,27 +70,27 @@
         <inertial pos="0 -0.01 0" quat="0.707107 0 0 0.707107" mass="0.15708"
           diaginertia="0.00019635 0.00010341 0.00010341" />
         <joint name="w1" pos="0 0 0" axis="0 1 0" damping="0.1" />
-        <!-- w1: Red -->
-        <geom type="mesh" rgba="1 0 0 1" mesh="w1" friction="0.8 0.005 0.01" condim="3"/>
+        <!-- w1 -->
+        <geom type="mesh" mesh="w1" friction="0.8 0.005 0.01" condim="3"/>
       </body>
       <body name="w2" pos="0 0.117 -0.095" quat="0.499998 0.5 -0.5 0.500002">
         <inertial pos="0.01 0 0" mass="0.15708" diaginertia="0.00019635 0.00010341 0.00010341" />
         <joint name="w2" pos="0 0 0" axis="-1 0 0" damping="0.1" />
-        <!-- w2: Green -->
-        <geom type="mesh" rgba="0 1 0 1" mesh="w2" friction="0.8 0.005 0.01" condim="3"/>
+        <!-- w2 -->
+        <geom type="mesh" mesh="w2" friction="0.8 0.005 0.01" condim="3"/>
       </body>
       <body name="w3" pos="0.095 0.117 0" quat="0.499998 0.5 -0.5 0.500002">
         <inertial pos="0 0.01 0" quat="0.707107 0 0 0.707107" mass="0.15708"
           diaginertia="0.00019635 0.00010341 0.00010341" />
         <joint name="w3" pos="0 0 0" axis="0 -1 0" damping="0.1" />
-        <!-- w3: Blue -->
-        <geom type="mesh" rgba="0 0 1 1" mesh="w3" friction="0.8 0.005 0.01" condim="3"/>
+        <!-- w3 -->
+        <geom type="mesh" mesh="w3" friction="0.8 0.005 0.01" condim="3"/>
       </body>
       <body name="w4" pos="0 0.117 0.095" quat="0.499998 0.5 -0.5 0.500002">
         <inertial pos="-0.01 0 0" mass="0.15708" diaginertia="0.00019635 0.00010341 0.00010341" />
         <joint name="w4" pos="0 0 0" axis="1 0 0" damping="0.1" />
-        <!-- w4: Yellow -->
-        <geom type="mesh" rgba="1 1 0 1" mesh="w4" friction="0.8 0.005 0.01" condim="3"/>
+        <!-- w4 -->
+        <geom type="mesh" mesh="w4" friction="0.8 0.005 0.01" condim="3"/>
       </body>
     </body>
   </worldbody>
@@ -93,7 +98,7 @@
   <actuator>
     <position name="a1_motor" joint="a1" kp="100" kv="20" ctrlrange="-3.14 3.14" />
     <position name="a2_motor" joint="a2" kp="50" kv="15" ctrlrange="-1.57 1.57" />
-    <position name="h_motor" joint="h" kp="100" kv="20" ctrlrange="-3.14 3.14" />
+  <position name="h_motor" joint="h" kp="300" kv="10" ctrlrange="-3.14 3.14" />
     <!-- <motor name="w1_motor" joint="w1" gear="5" ctrllimited="true" ctrlrange="-1 1" />
     <motor name="w2_motor" joint="w2" gear="5" ctrllimited="true" ctrlrange="-1 1" />
     <motor name="w3_motor" joint="w3" gear="5" ctrllimited="true" ctrlrange="-1 1" />

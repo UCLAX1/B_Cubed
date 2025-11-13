@@ -46,13 +46,22 @@ _upright_position = {
 # Animation durations for each action (in seconds)
 _animation_durations = {
     HeadActions.EXPRESSION_IDLE: 4.0,
-    HeadActions.EXPRESSION_FAST: 1.5,
+    HeadActions.EXPRESSION_FAST: 4.5,
     HeadActions.EXPRESSION_FAST_TURN: 1.0,
     HeadActions.EXPRESSION_INQUISITIVE: 3.0,
     HeadActions.EXPRESSION_HEAD_SHAKE: 2.0,
     HeadActions.EXPRESSION_HEAD_SPIN: 4.0,
     HeadActions.EXPRESSION_HURT: 3.0,
 }
+
+# Temporary fast bend state (used for quick, ad-hoc head-down gestures)
+_temp_bend_active = False
+_temp_bend_phase = None  # 'down', 'hold', 'up'
+_temp_bend_time = 0.0
+_temp_bend_duration = 0.06  # default ~1/17s for quick down
+_temp_bend_hold = 0.1
+_temp_bend_angle_deg = -45.0  # negative = bend down
+_temp_bend_orig_a2_deg = 0.0
 
 
 def update_preset_actions(dt: float = 0.001) -> None:
@@ -71,6 +80,7 @@ def update_preset_actions(dt: float = 0.001) -> None:
         output[2] -> a2 (arm segment 2)
     """
     global _timers, _current_action, _animation_start_time, _total_animation_time, _return_to_upright_phase
+    global _temp_bend_active, _temp_bend_phase, _temp_bend_time, _temp_bend_duration, _temp_bend_hold, _temp_bend_angle_deg, _temp_bend_orig_a2_deg
     
     # Check if action has changed or needs to start
     if state.head_actions != _current_action:
@@ -84,6 +94,11 @@ def update_preset_actions(dt: float = 0.001) -> None:
             # Reset timer for this action
             timer_key = state.head_actions.name
             _timers[timer_key] = 0.0
+            # store original a2 (degrees) for actions that need to restore it
+            _timers[f"{timer_key}_orig_a2_deg"] = np.degrees(state.target_a2_pos)
+            # If this is the hurt action, reset its internal state so it can play once per press
+            if state.head_actions == HeadActions.EXPRESSION_HURT:
+                _timers['hurt_state'] = {}
         else:
             # Action was manually reset to NONE
             _current_action = HeadActions.NONE
@@ -91,8 +106,58 @@ def update_preset_actions(dt: float = 0.001) -> None:
             return
     
     # If no action is active, do nothing
-    if state.head_actions == HeadActions.NONE:
+    if state.head_actions == HeadActions.NONE and not _temp_bend_active:
         return
+
+    # Handle temporary bend gesture with higher priority than presets
+    if _temp_bend_active:
+        _temp_bend_time += dt
+        if _temp_bend_phase == 'down':
+            progress = min(_temp_bend_time / _temp_bend_duration, 1.0)
+            smooth = 1 - (1 - progress) ** 2
+            target_a2 = _temp_bend_orig_a2_deg + (_temp_bend_angle_deg - _temp_bend_orig_a2_deg) * smooth
+            state.target_a2_pos = np.clip(np.radians(target_a2), -1.57, 1.57)
+            if progress >= 1.0:
+                _temp_bend_phase = 'hold'
+                _temp_bend_time = 0.0
+        elif _temp_bend_phase == 'hold':
+            if _temp_bend_time >= _temp_bend_hold:
+                _temp_bend_phase = 'up'
+                _temp_bend_time = 0.0
+        elif _temp_bend_phase == 'up':
+            progress = min(_temp_bend_time / _temp_bend_duration, 1.0)
+            smooth = 1 - (1 - progress) ** 2
+            target_a2 = _temp_bend_angle_deg + (_temp_bend_orig_a2_deg - _temp_bend_angle_deg) * smooth
+            state.target_a2_pos = np.clip(np.radians(target_a2), -1.57, 1.57)
+            if progress >= 1.0:
+                # done
+                _temp_bend_active = False
+                _temp_bend_phase = None
+                _temp_bend_time = 0.0
+        # While temp bend is active we don't process other presets
+        return
+
+
+    def trigger_temporary_bend(angle_deg: float = -45.0, duration: float = 1.0/17.0, hold: float = 0.1) -> None:
+        """Trigger a fast temporary head-down bend.
+
+        Args:
+            angle_deg: target a2 angle in degrees (negative bends down)
+            duration: time in seconds to bend down (and to return)
+            hold: time in seconds to hold the bent pose before returning
+        """
+        global _temp_bend_active, _temp_bend_phase, _temp_bend_time, _temp_bend_duration, _temp_bend_hold, _temp_bend_angle_deg, _temp_bend_orig_a2_deg
+        if _temp_bend_active:
+            # already running; ignore
+            return
+        _temp_bend_active = True
+        _temp_bend_phase = 'down'
+        _temp_bend_time = 0.0
+        _temp_bend_duration = max(0.001, float(duration))
+        _temp_bend_hold = max(0.0, float(hold))
+        _temp_bend_angle_deg = float(angle_deg)
+        # Record original a2 in degrees
+        _temp_bend_orig_a2_deg = np.degrees(state.target_a2_pos)
     
     # Track total animation time
     _total_animation_time += dt
@@ -160,11 +225,48 @@ def update_preset_actions(dt: float = 0.001) -> None:
     elif state.head_actions == HeadActions.EXPRESSION_FAST:
         # Fast motion - quick movements using position control
         # Simple oscillation for demonstration
-        freq = 3.0  # Hz
-        target_h = 30.0 * np.sin(2.0 * np.pi * freq * t)
-        target_a1 = 15.0 * np.sin(2.0 * np.pi * freq * t * 0.5)
-        output[0] = target_h
-        output[1] = target_a1
+        # New behavior: perform a quick neck (a2) bend first, then execute the fast head motion.
+        # timings (seconds)
+        bend_down_dur = 0.06
+        bend_hold = 0.04
+        bend_up_dur = 0.06
+        total_action = _animation_durations.get(state.head_actions, 1.5)
+        # target bend angle (degrees, negative = down)
+        bend_angle = -45.0
+
+        orig_a2_deg = _timers.get(f"{timer_key}_orig_a2_deg", np.degrees(state.target_a2_pos))
+
+        # Phase: down -> hold -> main motion -> up
+        if t < bend_down_dur:
+            progress = min(t / bend_down_dur, 1.0)
+            smooth = 1 - (1 - progress) ** 2
+            a2_deg = orig_a2_deg + (bend_angle - orig_a2_deg) * smooth
+            # minimal head rotation while bending down
+            h_deg = 5.0 * np.sin(2.0 * np.pi * 6.0 * t)
+        elif t < (bend_down_dur + bend_hold):
+            a2_deg = bend_angle
+            h_deg = 0.0
+        elif t < (total_action - bend_up_dur):
+            # main fast motion: head oscillation while KEEPING a2 down for the whole run
+            phase_t = t - (bend_down_dur + bend_hold)
+            freq = 4.0
+            h_deg = 30.0 * np.sin(2.0 * np.pi * freq * phase_t)
+            # keep neck at bend_angle during the main motion
+            a2_deg = bend_angle
+        else:
+            # bending back up
+            phase_t = t - (total_action - bend_up_dur)
+            progress = min(phase_t / bend_up_dur, 1.0)
+            smooth = 1 - (1 - progress) ** 2
+            a2_deg = bend_angle + (orig_a2_deg - bend_angle) * smooth
+            h_deg = 5.0 * np.sin(2.0 * np.pi * 6.0 * t)
+
+        # small base movement for dynamics
+        a1_deg = 10.0 * np.sin(2.0 * np.pi * 2.0 * t)
+
+        output[0] = h_deg
+        output[1] = a2_deg
+        output[2] = a1_deg
         _timers[timer_key] = t + dt
         
     elif state.head_actions == HeadActions.EXPRESSION_FAST_TURN:
