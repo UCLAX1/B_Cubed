@@ -47,20 +47,16 @@ frame_dt = 1.0/ target_fps
 prev_render_t = time_prev
 
 key_states = {
-    'W': False,  # Forward
-    'A': False,  # Left
-    'S': False,  # Back
-    'D': False,   # Right
-    '1': False, # Forward velocity
-    '2': False, # Backward velocity
-    '3': False, # Leftward velocity
-    '4': False # Rightward velocity
+    'W': False,  # Forward perturbation (force +5 in x)
+    'A': False,  # Left perturbation (force +5 in y)
+    'S': False,  # Backward perturbation (force -5 in x)
+    'D': False   # Right perturbation (force -5 in y)
 }
 
 def keyboard_callback(window, key, scancode, action, mods):
-    global keyBoardControl, cameraControl, key_states
+    global key_states
     
-    # Handle key press and release for WASD keys
+    # Handle key press and release for WASD keys (perturbations only)
     if action == glfw.PRESS:
         if key == glfw.KEY_W:
             key_states['W'] = True
@@ -70,14 +66,6 @@ def keyboard_callback(window, key, scancode, action, mods):
             key_states['S'] = True
         elif key == glfw.KEY_D:
             key_states['D'] = True
-        elif key == glfw.KEY_1:
-            key_states['1'] = True
-        elif key == glfw.KEY_2:
-            key_states['2'] = True
-        elif key == glfw.KEY_3:
-            key_states['3'] = True
-        elif key == glfw.KEY_4:
-            key_states['4'] = True
     elif action == glfw.RELEASE:
         if key == glfw.KEY_W:
             key_states['W'] = False
@@ -87,28 +75,38 @@ def keyboard_callback(window, key, scancode, action, mods):
             key_states['S'] = False
         elif key == glfw.KEY_D:
             key_states['D'] = False
-        elif key == glfw.KEY_1:
-            key_states['1'] = False
-        elif key == glfw.KEY_2:
-            key_states['2'] = False
-        elif key == glfw.KEY_3:
-            key_states['3'] = False
-        elif key == glfw.KEY_4:
-            key_states['4'] = False
 
 
-Kp = 13
-Kd = 0.51
-KI = 11.2
+# PID gains for horizontal displacement control
+Kp = 8.0   # Proportional gain
+Kd = 1.5   # Derivative gain (damping)
+KI = 2.0   # Integral gain
+IMax = 0.3  # Maximum integral term
 
-# PID controller 
-def PID(error, prev_error, total_sum):
-    new_error_sum = total_sum + error * sim_dt
-    delta_error = error - prev_error
-    control = Kp * error + Kd * delta_error/sim_dt + KI * new_error_sum
+# Velocity control parameters
+max_velocity = 1.5  # Maximum desired velocity (m/s)
+max_force = 25.0  # Maximum perturbation force (N)
+
+# PID controller for 2D horizontal error
+def PID_2D(error_xy, prev_error_xy, total_sum_xy):
+    # error_xy is [error_x, error_y]
+    # Apply PID to each component
+    new_error_sum_x = np.clip(total_sum_xy[0] + error_xy[0] * sim_dt, -IMax, IMax)
+    new_error_sum_y = np.clip(total_sum_xy[1] + error_xy[1] * sim_dt, -IMax, IMax)
+    new_error_sum = np.array([new_error_sum_x, new_error_sum_y])
+    
+    delta_error = error_xy - prev_error_xy
+    control_x = Kp * error_xy[0] + Kd * delta_error[0]/sim_dt + KI * new_error_sum[0]
+    control_y = Kp * error_xy[1] + Kd * delta_error[1]/sim_dt + KI * new_error_sum[1]
+    control = np.array([control_x, control_y])
+    
     return control, new_error_sum
 
 time_sum = 0
+# Initialize PID state variables (outside the loop so they persist)
+prev_error_xy = np.array([0.0, 0.0])  # Previous horizontal error [x, y]
+sum_error_xy = np.array([0.0, 0.0])   # Integral term [x, y]
+
 # Open window
 while not glfw.window_should_close(window):
     glfw.set_key_callback(window, keyboard_callback)
@@ -118,77 +116,70 @@ while not glfw.window_should_close(window):
     frame_time = c_time - time_prev
     time_prev = c_time
     elapsed_time += frame_time
-    perror = 0
-    sum_error = 0
     time_sum += frame_time
     # simulation loop
     while elapsed_time >= sim_dt:
         
-        # default force vector (nothing happens)
+        # Initialize force vector
         force = np.zeros(6)
-        
-
-        # perturbed force vector (based on key strokes)
-        if key_states['W']:
-            force[0] = 5
-        if key_states['S']:
-            force[0] = -5
-        if key_states['A']:
-            force[1] = 5
-        if key_states['D']:
-            force[1] = -5
-        # control velocity vector (based on key strokes)
-        if key_states['1']:
-            data.qvel[0] = control_vx
-        if key_states['2']:
-            data.qvel[0] = -control_vx
-        if key_states['3']:
-            data.qvel[1] = control_vy
-        if key_states['4']:
-            data.qvel[1] = -control_vy
-
-        # applies force vector 
-        data.xpos[body_id]
 
         # Body state: position of the center of the body 
-        state_ball = np.array([round(data.xpos[body_id][0], 2), round(data.xpos[body_id][1], 2), round(data.xpos[body_id][2], 2)])
+        ball_pos = data.xpos[body_id].copy()
 
-        # Head state: height above ground
-        state_head = np.array([round(data.xpos[head_id][0], 2), round(data.xpos[head_id][1], 2), round(data.xpos[head_id][2], 2)])
+        # Head state: position of the head
+        head_pos = data.xpos[head_id].copy()
 
-        # radius vector between center of the ball and head
-        r = round(np.linalg.norm(state_head - state_ball), 2)
-
-        # At neutral the head is 0.16 above the body in xpos 
-
-        # vector of deviations
-        vec = state_head - state_ball
-
-        # specific error in the theta direction 
-        error = round(np.acos((state_head[2] - state_ball[2])/r), 3)
-
-        # phi error 
-        phi = np.atan2(vec[1], vec[0])
+        # Compute horizontal error (head displacement from ball center in x-y plane)
+        # This is the key: we want to move the ball to reduce this horizontal displacement
+        error_xy = head_pos[:2] - ball_pos[:2]  # [error_x, error_y]
         
-        # calculates control and updates the integral term 
-        control, sum_error = PID(error, perror, sum_error)
-
-        # reset the error
-        perror = error
-
-        # gives control inputs  
-        control_vx = round(-control * sim_dt * np.sin(phi), 4)
-        control_vy = round(-control * sim_dt * np.cos(phi), 4)
+        # Get head velocity to predict future position (optional, helps with stability)
+        #head_vel = data.xvelp[head_id][:2] if hasattr(data, 'xvelp') else np.array([0.0, 0.0])
         
+        # Calculate desired velocities from PID control
+        # The PID controller outputs a desired velocity to reduce the horizontal error
+        # For balance ball: when head is ahead, move ball forward to get under it
+        control_xy, sum_error_xy = PID_2D(error_xy, prev_error_xy, sum_error_xy)
+        
+        # Update previous error for next iteration
+        prev_error_xy = error_xy.copy()
+        
+        # The control output is the desired velocity
+        # For balance ball: when head tilts forward (error_x > 0), we need to move ball backward
+        # to counteract the tilt and restore balance. The ball should move opposite to the error.
+        desired_vx = -control_xy[0]  # Negative: move opposite to error direction
+        desired_vy = -control_xy[1]
+        
+        # Limit desired velocity to prevent instability
+        desired_vx = np.clip(desired_vx, -max_velocity, max_velocity)
+        desired_vy = np.clip(desired_vy, -max_velocity, max_velocity)
+        
+        # Apply direct velocity control
+        # Start control immediately to maintain balance
+        if time_sum >= 0.0:  # Start control immediately
+            # Directly set the ball's velocity to the desired velocity
+            data.qvel[0] = desired_vx
+            data.qvel[1] = desired_vy
+        
+        # Apply perturbation forces (from WASD keys) - magnitude 5 in each direction
+        # These are applied as forces to test the balance controller's response
+        if key_states['W']:
+            force[0] += 10.0  # Forward perturbation (+x direction)
+        if key_states['S']:
+            force[0] += -10.0  # Backward perturbation (-x direction)
+        if key_states['A']:
+            force[1] += 10.0  # Left perturbation (+y direction)
+        if key_states['D']:
+            force[1] += -10.0  # Right perturbation (-y direction)
+        
+
+        
+        # Limit perturbation forces
+        force[0] = np.clip(force[0], -max_force, max_force)
+        force[1] = np.clip(force[1], -max_force, max_force)
 
         # print("Error", error, "Control_x", control_vx, "Control_vy", control_vy, "Error_vector", vec)
         # print("stopwatch ", time_sum)
-        # update physics sim
-        if 0.5 <= time_sum <= 1:
-            force[0] = 5
-        elif time_sum >= 2:
-            data.qvel[0] = control_vx
-            data.qvel[1] = control_vy
 
         data.xfrc_applied[body_id] = force
         mj.mj_step(model, data)
