@@ -250,7 +250,8 @@ def update_preset_actions(dt: float = 0.001) -> None:
             # main fast motion: head oscillation while KEEPING a2 down for the whole run
             phase_t = t - (bend_down_dur + bend_hold)
             freq = 4.0
-            h_deg = 30.0 * np.sin(2.0 * np.pi * freq * phase_t)
+            # reduce amplitude so the fast expression is less exaggerated
+            h_deg = 12.0 * np.sin(2.0 * np.pi * freq * phase_t)
             # keep neck at bend_angle during the main motion
             a2_deg = bend_angle
         else:
