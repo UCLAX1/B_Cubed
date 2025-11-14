@@ -8,6 +8,9 @@
         <texture name='highlight' type='2d' builtin='gradient' rgb1='255 255 255' rgb2='255 255 255' width='512' height='512'/>
         <material name='ball' texture='highlight' texrepeat='1 1' texuniform='true'/>
         <material name="grid" texture="grid" texrepeat="1 1" texuniform="true" reflectance=".0"/>
+
+        <texture name="bb8_tex" type="2d" file="../bb8_textures/bb8one.png" />
+		<material name="bb8_mat" texture="bb8_tex" texrepeat="1 1" texuniform="false"/>
     </asset>
 
     <worldbody>
@@ -18,7 +21,7 @@
         <body name="bb8" pos="0 0 0.11">
             <joint name="bb8_free" type="free"/>
             <!-- Visible outer sphere -->
-            <geom name="bb8_outer" type="sphere" size="0.12" rgba="1 0.6 0 0.2" mass="2.0" material="ball"/>
+            <geom name="bb8_outer" type="sphere" size="0.12" rgba="1 1 1 0.2" mass="2.0" material="bb8_mat" euler="90 0 0"/>
 
                         <!-- Internal chassis that carries 4 wheel joints -->
                         <!-- Internal chassis: a small fixed mass inside the sphere -->

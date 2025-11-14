@@ -172,12 +172,8 @@ while not glfw.window_should_close(window):
             force[1] = direction[1] * force_mag
             active_perturb_end = time_sum + perturb_duration
             next_perturb_time = time_sum + random.uniform(1.0, 5.0)
-            print(f"Random push at {time_sum:.2f}s: dir={direction}")
-
-        # if int(time_sum * 10) % 100 == 0:
-        #     c = data.ctrl
-        #     print(f"err_x={error_xy[0]:+.3f}, err_y={error_xy[1]:+.3f}, "
-        #           f"ctrl=({c[0]:+.3f},{c[1]:+.3f},{c[2]:+.3f},{c[3]:+.3f})")
+            force_mag = random.randint(25,100)
+            print(f"Random push {force_mag} at {time_sum:.2f}s: dir={direction}")
 
         if time_sum < active_perturb_end:
             data.xfrc_applied[body_id] = force
