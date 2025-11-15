@@ -9,6 +9,7 @@ from enums import (
     JointControl,
 )  # For use in control logic
 from control_state import state
+from input_management import update_input_matrix
 
 # load model & set up data and camera
 modelPath = "../urdf/bb8_hl.xml"  # Updated to use bb8_car_converted.xml
@@ -204,6 +205,11 @@ while not glfw.window_should_close(window):
             print("Camera reset to default position")
 
         # update physics sim
+        # update the shared input matrix (body speeds / head state)
+        try:
+            update_input_matrix()
+        except Exception:
+            pass
         mj.mj_step(model, data)
         elapsed_time -= sim_dt
 

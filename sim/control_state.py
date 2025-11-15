@@ -18,5 +18,10 @@ class ControlState:
         self.w2_speed = 0.0
         self.w3_speed = 0.0
         self.w4_speed = 0.0
+        # Optional body-level velocity controls (used by moving model)
+        # These are written to body actuators if present in the model.
+        self.body_x_speed = 0.0
+        self.body_y_speed = 0.0
+        self.body_r_speed = 0.0
 
 state = ControlState()

@@ -13,6 +13,7 @@ import keyboard_control
 from enums import CameraControl
 from control_state import state
 from preset_actions import update_preset_actions
+from input_management import update_input_matrix
 
 # load model & set up data and camera
 # Use absolute path so script can be run from anywhere
@@ -129,6 +130,11 @@ while not glfw.window_should_close(window):
             print("Camera reset to default position")
 
         # update physics sim
+        # update the shared input matrix (body speeds / head state)
+        try:
+            update_input_matrix()
+        except Exception:
+            pass
         mj.mj_step(model, data)
         elapsed_time -= sim_dt
 
