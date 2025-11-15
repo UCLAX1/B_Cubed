@@ -112,6 +112,10 @@ def keyboard_callback(window, key, scancode, action, mods):
             state.cam_control = CameraControl.UP
         elif key == glfw.KEY_DOWN:
             state.cam_control = CameraControl.DOWN
+        elif key == glfw.KEY_LEFT:
+            state.cam_control = CameraControl.LEFT
+        elif key == glfw.KEY_RIGHT:
+            state.cam_control = CameraControl.RIGHT
         elif key == glfw.KEY_PAGE_UP:
             state.cam_control = CameraControl.ZOOM_IN
         elif key == glfw.KEY_PAGE_DOWN:
