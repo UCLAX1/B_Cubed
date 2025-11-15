@@ -2,7 +2,12 @@ from mujoco.glfw import glfw
 import mujoco as mj
 import time
 import keyboard_control
-from enums import BotControl, CameraControl, AngularVelocityControl, JointControl  # For use in control logic
+from enums import (
+    BotControl,
+    CameraControl,
+    AngularVelocityControl,
+    JointControl,
+)  # For use in control logic
 from control_state import state
 
 # load model & set up data and camera
@@ -28,7 +33,7 @@ qpos_addr = model.jnt_qposadr[base_link_joint_id]
 # Get actuator IDs for motor control
 # Position actuators for joints:
 # - a1_motor: controls a1 joint (first arm segment)
-# - a2_motor: controls a2 joint (second arm segment)  
+# - a2_motor: controls a2 joint (second arm segment)
 # - h_motor: controls h joint (head)
 # Motor actuators for wheels:
 # - w1_motor, w2_motor, w3_motor, w4_motor: control wheel rotation
@@ -40,8 +45,15 @@ w2_motor_id = mj.mj_name2id(model, mj.mjtObj.mjOBJ_ACTUATOR, "w2_motor")
 w3_motor_id = mj.mj_name2id(model, mj.mjtObj.mjOBJ_ACTUATOR, "w3_motor")
 w4_motor_id = mj.mj_name2id(model, mj.mjtObj.mjOBJ_ACTUATOR, "w4_motor")
 
+body_x_id = mj.mj_name2id(model, mj.mjtObj.mjOBJ_ACTUATOR, "bd_motor")
+body_y_id = mj.mj_name2id(model, mj.mjtObj.mjOBJ_ACTUATOR, "bf_motor")
+body_r_id = mj.mj_name2id(model, mj.mjtObj.mjOBJ_ACTUATOR, "br_motor")
+
+
 # Debug: Print motor IDs to verify they're found
-print(f"Motor IDs: w1={w1_motor_id}, w2={w2_motor_id}, w3={w3_motor_id}, w4={w4_motor_id}")
+print(
+    f"Motor IDs: w1={w1_motor_id}, w2={w2_motor_id}, w3={w3_motor_id}, w4={w4_motor_id}"
+)
 if w1_motor_id == -1 or w2_motor_id == -1 or w3_motor_id == -1 or w4_motor_id == -1:
     print("WARNING: One or more wheel motor IDs not found!")
 
@@ -60,7 +72,7 @@ h_qpos_addr = model.jnt_qposadr[h_joint_id]
 
 # create sim window & set scene
 glfw.init()
-window = glfw.create_window(720,540,"B_Cubed", None, None)
+window = glfw.create_window(720, 540, "B_Cubed", None, None)
 glfw.make_context_current(window)
 mj.mjv_defaultOption(opt)
 scene = mj.MjvScene(model, maxgeom=10000)
@@ -72,8 +84,8 @@ elapsed_time = 0.0
 time_prev = time.perf_counter()
 
 # set render timers
-target_fps = 60 # You can change this if you want
-frame_dt = 1.0/ target_fps
+target_fps = 60  # You can change this if you want
+frame_dt = 1.0 / target_fps
 prev_render_t = time_prev
 
 glfw.set_key_callback(window, keyboard_control.keyboard_callback)
@@ -106,6 +118,14 @@ while not glfw.window_should_close(window):
             data.ctrl[w3_motor_id] = state.w3_speed
         if w4_motor_id != -1:
             data.ctrl[w4_motor_id] = state.w4_speed
+
+        if body_x_id != -1:
+            data.ctrl[body_x_id] = state.body_x_speed
+        if body_y_id != -1:
+            data.ctrl[body_y_id] = state.body_y_speed
+        if body_r_id != -1:
+            data.ctrl[body_r_id] = state.body_r_speed    
+            
         # ============================================
 
         # ============================================
@@ -129,6 +149,20 @@ while not glfw.window_should_close(window):
         #
         # Note: The base_link has a freejoint, so you'll be setting angular velocity
         # in the base_link's body frame or world frame depending on your implementation
+
+        # Reset angular velocity control after applying
+
+        # if state.angular_vel_control == AngularVelocityControl.LEFT:
+        #     # Apply left rotation angular velocity
+        #     # data.qvel[qpos_addr + 0 : qpos_addr + 2] = 0.0
+        #     # data.qvel[qpos_addr + 3] = 0.05  # Set some angular velocity around x-axis
+
+        # if state.angular_vel_control == AngularVelocityControl.RIGHT:
+        #     # Apply right rotation angular velocity
+        #     # data.qvel[qpos_addr + 0 : qpos_addr + 2] = 0.0
+        #     # data.qvel[qpos_addr + 3] = -0.05  # Set some angular velocity around x-axis
+            
+
         # ============================================
 
         # ============================================
@@ -173,19 +207,21 @@ while not glfw.window_should_close(window):
         mj.mj_step(model, data)
         elapsed_time -= sim_dt
 
-
-
     # Rendering Steps
     if c_time - prev_render_t >= frame_dt:
         prev_render_t = c_time
 
         # Camera tracking: follow base_link position
         # The new XML structure has base_link as the main body instead of bb8
-        cam.lookat[0:3] = data.qpos[qpos_addr : qpos_addr + 3]  # [x, y, z] position of base_link
-        
+        cam.lookat[0:3] = data.qpos[
+            qpos_addr : qpos_addr + 3
+        ]  # [x, y, z] position of base_link
+
         viewport_width, viewport_height = glfw.get_framebuffer_size(window)
         viewport = mj.MjrRect(0, 0, viewport_width, viewport_height)
-        mj.mjv_updateScene(model, data, opt, None, cam, mj.mjtCatBit.mjCAT_ALL.value, scene)
+        mj.mjv_updateScene(
+            model, data, opt, None, cam, mj.mjtCatBit.mjCAT_ALL.value, scene
+        )
         mj.mjr_render(viewport, scene, context)
         glfw.swap_buffers(window)
         glfw.poll_events()

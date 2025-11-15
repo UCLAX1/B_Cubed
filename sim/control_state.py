@@ -16,5 +16,9 @@ class ControlState:
         self.w2_speed = 0.0
         self.w3_speed = 0.0
         self.w4_speed = 0.0
+        
+        self.body_x_speed = 0.0
+        self.body_y_speed = 0.0
+        self.body_r_speed = 0.0 
 
 state = ControlState()
