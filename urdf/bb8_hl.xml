@@ -58,6 +58,8 @@
             <inertial pos="0.0625 0 0" mass="0.5" diaginertia="0.0083776 0.0054323 0.0054323" />
             <joint name="h" pos="0 0 0" axis="-1 0 0"/>
             <geom type="mesh" rgba="0.79216 0.81961 0.93333 1" mesh="h"/>
+            <!-- black sphere on the front of the head (visual only, no collision) -->
+            <geom type="sphere" pos="0.07 0.0 -0.12" size="0.03" rgba="0 0 0 1" contype="0" conaffinity="0" />
           </body>
         </body>
       </body>
