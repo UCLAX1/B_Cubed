@@ -222,3 +222,4 @@ cython_debug/
 marimo/_static/
 marimo/_lsp/
 __marimo__/
+sim/new_pid_sim/MUJOCO_LOG.TXT
