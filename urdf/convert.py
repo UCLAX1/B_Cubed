@@ -1,7 +1,7 @@
 import mujoco
 
 # Load URDF file (make sure path is correct and meshes are reachable)
-model = mujoco.MjModel.from_xml_path("D:/Ballu_export/bb8_car/urdf/bb8_car.urdf")
+model = mujoco.MjModel.from_xml_path("D:/B_Cubed-2/bb8_car_thisone/urdf/bb8_car_thisone.urdf")
 
 # Save converted MJCF
-mujoco.mj_saveLastXML("D:/Ballu_export/bb8_car/urdf/bb8_car_converted.xml", model)
+mujoco.mj_saveLastXML("D:/B_Cubed-2/bb8_car_thisone/urdf/bb8_car_thisone_converted.xml", model)
