@@ -16,6 +16,7 @@ robotpy_extras = [
     # "commands2",
     # "romi",
     # "sim",
+    "rev"
     # "xrp",
 ]
 
