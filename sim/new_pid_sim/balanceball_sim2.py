@@ -91,16 +91,25 @@ def PID(error, prev_error, int_error, Kp, Ki, Kd, dt, I_MAX):
     return control, new_int
 
 # ---------------------------
-#  Actuator mixing (4 motors @ 0°, 90°, 180°, 270° around +Z)
+#  Actuator mixing (3 motors @ 0°, 120°, 240°)
 #  Each motor command = [cosθ, sinθ] · [cmd_x, cmd_y]
 #  If a motor spins the opposite way physically, flip its sign in MOTOR_SIGN.
 # ---------------------------
-angles = np.array([0.0, np.pi/2, np.pi, 3*np.pi/2])   # front, right, back, left
-MIX = np.vstack((np.cos(angles), np.sin(angles))).T    # shape (4,2)
-MOTOR_SIGN = np.array([1.0, 1.0, 1.0, 1.0])           # tweak signs if any motor is reversed
-# Per-actuator ctrlrange from XML for safe clamping:
-CTRL_MIN = model.actuator_ctrlrange[:4, 0]
-CTRL_MAX = model.actuator_ctrlrange[:4, 1]
+# angles = np.array([0.0, np.pi/2, np.pi, 3*np.pi/2])   # front, right, back, left
+# MIX = np.vstack((np.cos(angles), np.sin(angles))).T    # shape (4,2)
+# MOTOR_SIGN = np.array([1.0, 1.0, 1.0, 1.0])           # tweak signs if any motor is reversed
+# # Per-actuator ctrlrange from XML for safe clamping:
+
+angles = np.array([0.0,
+                   2*np.pi/3,
+                   4*np.pi/3])   # 0°, 120°, 240°
+MIX = np.vstack((np.cos(angles), np.sin(angles))).T   # shape (3,2)
+MOTOR_SIGN = np.array([1.0, 1.0, 1.0])                # adjust if needed
+
+# Per-actuator ctrlrange from XML:
+CTRL_MIN = model.actuator_ctrlrange[:3, 0]
+CTRL_MAX = model.actuator_ctrlrange[:3, 1]
+
 
 # ---------------------------
 #  Main loop
@@ -155,11 +164,9 @@ while not glfw.window_should_close(window):
             if key_states['A']: cmd_xy[1] += 0.5
             if key_states['D']: cmd_xy[1] -= 0.5
 
-            # --- Mix to 4 motors ---
-            raw_ctrl = (MIX @ cmd_xy) * MOTOR_SIGN  # shape (4,)
-
-            # clamp per actuator using XML ctrlrange
-            data.ctrl[0:4] = np.minimum(np.maximum(raw_ctrl, CTRL_MIN), CTRL_MAX)
+            # --- Mix to 3 motors ---
+            raw_ctrl = (MIX @ cmd_xy) * MOTOR_SIGN  # shape (3,)
+            data.ctrl[0:3] = np.minimum(np.maximum(raw_ctrl, CTRL_MIN), CTRL_MAX)
 
         # --- Perturbation test forces ---
         force = np.zeros(6)
@@ -172,12 +179,8 @@ while not glfw.window_should_close(window):
             force[1] = direction[1] * force_mag
             active_perturb_end = time_sum + perturb_duration
             next_perturb_time = time_sum + random.uniform(1.0, 5.0)
-            print(f"Random push at {time_sum:.2f}s: dir={direction}")
-
-        # if int(time_sum * 10) % 100 == 0:
-        #     c = data.ctrl
-        #     print(f"err_x={error_xy[0]:+.3f}, err_y={error_xy[1]:+.3f}, "
-        #           f"ctrl=({c[0]:+.3f},{c[1]:+.3f},{c[2]:+.3f},{c[3]:+.3f})")
+            force_mag = random.randint(25,100)
+            print(f"Random push {force_mag} at {time_sum:.2f}s: dir={direction}")
 
         if time_sum < active_perturb_end:
             data.xfrc_applied[body_id] = force
