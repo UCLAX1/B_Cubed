@@ -22,10 +22,10 @@ def keyboard_callback(window, key, scancode, action, mods):
             # state.w3_speed = max(-1.0, min(1.0, state.w3_speed))
             # print(f"Forward: w1={state.w1_speed:.2f}, w3={state.w3_speed:.2f}")
 
-            state.body_x_speed += 10000
+            state.body_x_speed -= 10000
             state.body_x_speed = max(-150000.00, min(150000, state.body_x_speed))
 
-            print(f"Forward: body_x={state.body_x_speed:.2f}")
+            print(f"Backward: body_x={state.body_x_speed:.2f}")
 
         # Backward: w1 negative, w3 positive
         if key == glfw.KEY_S:
@@ -36,9 +36,9 @@ def keyboard_callback(window, key, scancode, action, mods):
             # state.w3_speed = max(-1.0, min(1.0, state.w3_speed))
             # print(f"Backward: w1={state.w1_speed:.2f}, w3={state.w3_speed:.2f}")
 
-            state.body_x_speed -= 10000
+            state.body_x_speed += 10000
             state.body_x_speed = max(-150000.00, min(150000, state.body_x_speed))
-            print(f"Backward: body_x={state.body_x_speed:.2f}")
+            print(f"Forward: body_x={state.body_x_speed:.2f}")
 
         # Left and Right Control - increment wheel speeds by 0.1
         # Left: w2 positive, w3 negative
@@ -50,9 +50,9 @@ def keyboard_callback(window, key, scancode, action, mods):
             # state.w3_speed = max(-1.0, min(1.0, state.w3_speed))
             # print(f"Left: w2={state.w2_speed:.2f}, w3={state.w3_speed:.2f}")
 
-            state.body_y_speed += 10000
+            state.body_y_speed -= 10000
             state.body_y_speed = max(-150000.00, min(150000, state.body_y_speed))
-            print(f"Left: body_y={state.body_y_speed:.2f}")
+            print(f"Right: body_y={state.body_y_speed:.2f}")
         # Right: w2 negative, w3 positive
         if key == glfw.KEY_D:
             # state.w2_speed -= 0.1
@@ -62,9 +62,9 @@ def keyboard_callback(window, key, scancode, action, mods):
             # state.w3_speed = max(-1.0, min(1.0, state.w3_speed))
             # print(f"Right: w2={state.w2_speed:.2f}, w3={state.w3_speed:.2f}")
 
-            state.body_y_speed -= 10000
+            state.body_y_speed += 10000
             state.body_y_speed = max(-150000.00, min(150000, state.body_y_speed))
-            print(f"Right: body_y={state.body_y_speed:.2f}")
+            print(f"Left: body_y={state.body_y_speed:.2f}")
 
         # Neutral Key (Note: X is now used for a2 joint decrease, consider using a different key for neutral)
         # TODO: Reassign neutral key if needed, or remove this if X should only control a2
@@ -88,10 +88,10 @@ def keyboard_callback(window, key, scancode, action, mods):
         # i, j keys: a1 joint increase and decrease (0.2 increment)
         if key == glfw.KEY_I:
             state.target_a1_pos += 0.2
-            state.target_a1_pos = max(-3.14, min(3.14, state.target_a1_pos))
+            state.target_a1_pos = max(-3.14159, min(3.14159, state.target_a1_pos))
         elif key == glfw.KEY_J:
             state.target_a1_pos -= 0.2
-            state.target_a1_pos = max(-3.14, min(3.14, state.target_a1_pos))
+            state.target_a1_pos = max(-3.14159, min(3.14159, state.target_a1_pos))
         # k, l keys: a2 joint increase and decrease (0.2 increment)
         elif key == glfw.KEY_O:
             state.target_a2_pos += 0.2
@@ -102,10 +102,10 @@ def keyboard_callback(window, key, scancode, action, mods):
         # o, p keys: h (head) joint increase and decrease (0.2 increment)
         elif key == glfw.KEY_P:
             state.target_h_pos += 0.2
-            state.target_h_pos = max(-3.14, min(3.14, state.target_h_pos))
+            state.target_h_pos = max(-3.14159, min(3.14159, state.target_h_pos))
         elif key == glfw.KEY_L:
             state.target_h_pos -= 0.2
-            state.target_h_pos = max(-3.14, min(3.14, state.target_h_pos))
+            state.target_h_pos = max(-3.14159, min(3.14159, state.target_h_pos))
 
         # Camera control (Note: Left/Right arrows are now used for angular velocity)
         # Only Up/Down arrows and other keys control camera now

@@ -47,16 +47,16 @@
       <body name="a1" pos="0 -0.02 0" quat="0.356335 0.356338 0.610757 -0.610757">
         <inertial pos="0 0 0.033964" quat="0.707107 0 0 0.707107" mass="0.027142"
           diaginertia="5.8419e-06 5.8158e-06 1.7833e-06" />
-        <joint name="a1" pos="0 0 0" axis="0 0 -1" />
+        <joint name="a1" pos="0 0 0" axis="0 0 -1" ref="0.0" />
         <geom type="mesh" rgba="0.79216 0.81961 0.93333 1" mesh="a1" />
         <body name="a2" pos="0 0 0.06" quat="-3.1459e-06 1.89624e-06 0.516236 -0.856446">
           <inertial pos="4.0307e-08 1.6883e-08 0.12424" quat="0.999977 0 0 0.0067613"
             mass="0.072732" diaginertia="0.00032679 0.00032678 3.6454e-06" />
-          <joint name="a2" pos="0 0 0" axis="1 0 0"/>
+          <joint name="a2" pos="0 0 0" axis="1 0 0" ref="0"/>
           <geom type="mesh" rgba="0.79216 0.81961 0.93333 1" mesh="a2" friction = "1 1 1" condim = "6"/>
           <body name="h" pos="0 0 0.34" quat="0.51312 0.486525 0.513122 -0.486527">
             <inertial pos="0.0625 0 0" mass="0.5" diaginertia="0.0083776 0.0054323 0.0054323" />
-            <joint name="h" pos="0 0 0" axis="-1 0 0"/>
+            <joint name="h" pos="0 0 0" axis="-1 0 0" ref="0.0"/>
             <geom type="mesh" rgba="0.79216 0.81961 0.93333 1" mesh="h"/>
             <!-- black sphere on the front of the head (visual only, no collision) -->
             <geom type="sphere" pos="0.07 0.0 -0.12" size="0.03" rgba="0 0 0 1" contype="0" conaffinity="0" />
@@ -97,9 +97,9 @@
   </worldbody>
 
   <actuator>
-    <position name="a1_motor" joint="a1" kp="5" kv="1" ctrlrange="-3.14 3.14" />
-    <position name="a2_motor" joint="a2" kp="10" kv="5" ctrlrange="0.7 1.5"/>
-    <position name="h_motor" joint="h" kp="5" kv="1" ctrlrange="-3.14 3.14" />
+    <position name="a1_motor" joint="a1" kp="5" kv="1" ctrlrange="-3.14159 3.14159" />
+    <position name="a2_motor" joint="a2" kp="10" kv="5" ctrlrange="-1.57 1.57"/>
+    <position name="h_motor" joint="h" kp="5" kv="1" ctrlrange="-3.14159 3.14159" />
 
     <velocity name="bd_motor" joint="base_link_freejoint" kv="5" ctrlrange="-10 10"
       gear="1.375 0 0 0 0 0"  />
