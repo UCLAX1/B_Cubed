@@ -2,15 +2,18 @@ from mujoco.glfw import glfw
 import numpy as np
 import mujoco as mj
 import time
+import os
 import keyboard_control
 # import sim.enums as states
 from control_state import state
 
 # load model & set up data and camera
-modelPath = "balanceball.xml"
+# Get the directory where this script is located
+script_dir = os.path.dirname(os.path.abspath(__file__))
+modelPath = os.path.join(script_dir, "balance_non_collidable_joint.xml")
 model = mj.MjModel.from_xml_path(modelPath)
-body_id = mj.mj_name2id(model, mj.mjtObj.mjOBJ_BODY, "bb8")
-head_id = mj.mj_name2id(model, mj.mjtObj.mjOBJ_BODY, "head")
+body_id = mj.mj_name2id(model, mj.mjtObj.mjOBJ_BODY, "sphere_body")
+head_id = mj.mj_name2id(model, mj.mjtObj.mjOBJ_BODY, "box_body")
 data = mj.MjData(model) 
 
 # visualization settings
@@ -24,9 +27,10 @@ opt = mj.MjvOption()
 
 data = mj.MjData(model)
 
-# define bb8 joint
-joint_id = mj.mj_name2id(model, mj.mjtObj.mjOBJ_JOINT, "bb8_free")
-qpos_addr = model.jnt_qposadr[joint_id]
+# define sphere joint
+joint_id = mj.mj_name2id(model, mj.mjtObj.mjOBJ_JOINT, "sphere_free")
+qpos_addr = model.jnt_qposadr[joint_id]  # Position address (for free joint: [x, y, z, qw, qx, qy, qz])
+qvel_addr = model.jnt_dofadr[joint_id]   # Velocity address (for free joint: [vx, vy, vz, wx, wy, wz])
 
 # create sim window & set scene
 glfw.init()
@@ -158,8 +162,9 @@ while not glfw.window_should_close(window):
         # Start control immediately to maintain balance
         if time_sum >= 0.0:  # Start control immediately
             # Directly set the ball's velocity to the desired velocity
-            data.qvel[0] = desired_vx
-            data.qvel[1] = desired_vy
+            # For a free joint, qvel has [vx, vy, vz, wx, wy, wz] starting at qvel_addr
+            data.qvel[qvel_addr + 0] = desired_vx  # vx
+            data.qvel[qvel_addr + 1] = desired_vy  # vy
         
         # Apply perturbation forces (from WASD keys) - magnitude 5 in each direction
         # These are applied as forces to test the balance controller's response
