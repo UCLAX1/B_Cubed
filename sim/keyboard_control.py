@@ -22,10 +22,10 @@ def keyboard_callback(window, key, scancode, action, mods):
             # state.w3_speed = max(-1.0, min(1.0, state.w3_speed))
             # print(f"Forward: w1={state.w1_speed:.2f}, w3={state.w3_speed:.2f}")
 
-            state.body_x_speed -= 10000
+            state.body_x_speed += 10000
             state.body_x_speed = max(-150000.00, min(150000, state.body_x_speed))
 
-            print(f"Backward: body_x={state.body_x_speed:.2f}")
+            print(f"Forward: body_x={state.body_x_speed:.2f}")
 
         # Backward: w1 negative, w3 positive
         if key == glfw.KEY_S:
@@ -36,9 +36,9 @@ def keyboard_callback(window, key, scancode, action, mods):
             # state.w3_speed = max(-1.0, min(1.0, state.w3_speed))
             # print(f"Backward: w1={state.w1_speed:.2f}, w3={state.w3_speed:.2f}")
 
-            state.body_x_speed += 10000
+            state.body_x_speed -= 10000
             state.body_x_speed = max(-150000.00, min(150000, state.body_x_speed))
-            print(f"Forward: body_x={state.body_x_speed:.2f}")
+            print(f"Backward: body_x={state.body_x_speed:.2f}")
 
         # Left and Right Control - increment wheel speeds by 0.1
         # Left: w2 positive, w3 negative
@@ -50,9 +50,9 @@ def keyboard_callback(window, key, scancode, action, mods):
             # state.w3_speed = max(-1.0, min(1.0, state.w3_speed))
             # print(f"Left: w2={state.w2_speed:.2f}, w3={state.w3_speed:.2f}")
 
-            state.body_y_speed -= 10000
+            state.body_y_speed += 10000
             state.body_y_speed = max(-150000.00, min(150000, state.body_y_speed))
-            print(f"Right: body_y={state.body_y_speed:.2f}")
+            print(f"Left: body_y={state.body_y_speed:.2f}")
         # Right: w2 negative, w3 positive
         if key == glfw.KEY_D:
             # state.w2_speed -= 0.1
@@ -62,9 +62,9 @@ def keyboard_callback(window, key, scancode, action, mods):
             # state.w3_speed = max(-1.0, min(1.0, state.w3_speed))
             # print(f"Right: w2={state.w2_speed:.2f}, w3={state.w3_speed:.2f}")
 
-            state.body_y_speed += 10000
+            state.body_y_speed -= 10000
             state.body_y_speed = max(-150000.00, min(150000, state.body_y_speed))
-            print(f"Left: body_y={state.body_y_speed:.2f}")
+            print(f"Right: body_y={state.body_y_speed:.2f}")
 
         # Neutral Key (Note: X is now used for a2 joint decrease, consider using a different key for neutral)
         # TODO: Reassign neutral key if needed, or remove this if X should only control a2
@@ -95,10 +95,10 @@ def keyboard_callback(window, key, scancode, action, mods):
         # k, l keys: a2 joint increase and decrease (0.2 increment)
         elif key == glfw.KEY_O:
             state.target_a2_pos += 0.2
-            state.target_a2_pos = max(0.7, min(1.5, state.target_a2_pos))
+            state.target_a2_pos = max(-0.5236, min(0.5236, state.target_a2_pos))
         elif key == glfw.KEY_K:
             state.target_a2_pos -= 0.2
-            state.target_a2_pos = max(0.7, min(1.5, state.target_a2_pos))
+            state.target_a2_pos = max(-0.5236, min(0.5236, state.target_a2_pos))
         # o, p keys: h (head) joint increase and decrease (0.2 increment)
         elif key == glfw.KEY_P:
             state.target_h_pos += 0.2
@@ -119,7 +119,7 @@ def keyboard_callback(window, key, scancode, action, mods):
         elif key == glfw.KEY_DELETE: state.cam_control = CameraControl.HOME
 
         # Head action controls: map number keys to HeadActions
-        # 1: idle, 2: fast, 3: fast turn, 4: inquisitive, 5: head shake, 6: head spin, 7: hurt
+        # 1: idle, 2: fast, 3: fast turn, 4: inquisitive, 5: head shake, 6: head spin, 7: hurt, 8: 360 spin
         # Only accept new actions if not currently locked (animation in progress)
         if key == glfw.KEY_1 and not state.head_action_locked:
             state.head_actions = HeadActions.EXPRESSION_IDLE
@@ -141,6 +141,9 @@ def keyboard_callback(window, key, scancode, action, mods):
             state.head_action_locked = True
         elif key == glfw.KEY_7 and not state.head_action_locked:
             state.head_actions = HeadActions.EXPRESSION_HURT
+            state.head_action_locked = True
+        elif key == glfw.KEY_8 and not state.head_action_locked:
+            state.head_actions = HeadActions.EXPRESSION_360_SPIN
             state.head_action_locked = True
 
 

@@ -94,7 +94,7 @@ def compute_behavior_flags(
 
     if state == 0:
         if not observing:
-            if movement_speed < STILL_SPEED:
+            if movement_speed < _SPEED:
                 flags["idle_sway"] = True
             elif movement_speed > RUN_SPEED:
                 if dir_change > TURN_THRESHOLD:

@@ -10,9 +10,9 @@ class ControlState:
         self.head_actions = HeadActions.NONE  # Start with NONE, not IDLE
         self.head_action_locked = False  # Lock to prevent interrupting animations
         # Joint positions (in radians)
-        self.target_a1_pos = 0.0  # 0 degrees for base rotation
-        self.target_a2_pos = 0.0  # Initial a2 position (0 = vertical)
-        self.target_h_pos = 0.0   # 0 degrees for head rotation
+        self.target_a1_pos = 0.4363  # 25 degrees for base rotation
+        self.target_a2_pos = 0.0  # Center of bounds (-1.57 to 1.57)
+        self.target_h_pos = 0.0   # Center of bounds (-π to π)
         # Wheel motor control values (incremented by 0.1 per key press)
         self.w1_speed = 0.0
         self.w2_speed = 0.0

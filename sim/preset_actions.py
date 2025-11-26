@@ -52,6 +52,7 @@ _animation_durations = {
     HeadActions.EXPRESSION_HEAD_SHAKE: 2.0,
     HeadActions.EXPRESSION_HEAD_SPIN: 4.0,
     HeadActions.EXPRESSION_HURT: 3.0,
+    HeadActions.EXPRESSION_360_SPIN: 8.0,  # 4 seconds for coordinated spin + 4 seconds for return
 }
 
 # Temporary fast bend state (used for quick, ad-hoc head-down gestures)
@@ -297,6 +298,25 @@ def update_preset_actions(dt: float = 0.001) -> None:
         if 'hurt_state' not in _timers:
             _timers['hurt_state'] = {}
         hurt_sequence(output, dt=dt, state_mem=_timers['hurt_state'], controller=None)
+        _timers[timer_key] = t + dt
+        
+    elif state.head_actions == HeadActions.EXPRESSION_360_SPIN:
+        # Continuous coordinated 360° spin: both head and base spin together
+        if t < 4.0:
+            # First 4 seconds: both head and base spin 360° together
+            progress = t / 4.0
+            angle = progress * 2 * np.pi
+            output[2] = np.degrees(angle)  # a1 (base)
+            output[0] = np.degrees(angle)  # h (head) - same speed as base
+        elif t < 8.0:
+            # Last 4 seconds: both return to center together
+            progress = (t - 4.0) / 4.0
+            output[2] = 360.0 * (1 - progress)  # a1 returns from 360° to 0°
+            output[0] = 360.0 * (1 - progress)  # h returns from 360° to 0°
+        else:
+            # Animation complete
+            output[0] = 0.0
+            output[2] = 0.0
         _timers[timer_key] = t + dt
     
     # Convert output from degrees to radians and apply to targets
