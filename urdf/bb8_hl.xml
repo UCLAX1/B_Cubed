@@ -40,6 +40,10 @@
       <geom type="mesh" rgba="0.79216 0.81961 0.93333 1" mesh="base_link" />
       <geom name="sphere" type="sphere" pos="0 -0.05625 0" size="0.26" rgba="0.988 0.612 0.263 0.25"
         contype="0" conaffinity="0" />
+      <!-- <body name="sphere" pos="0 0 0.1">
+        <inertial pos="0 0 0" mass="0" diaginertia="0.002 0.002 0.002" />
+        <geom type="sphere" size="0.1" rgba="0.1 0.1 0.8 1" />
+      </body> -->
       <body name="a1" pos="0 -0.02 0" quat="0.356335 0.356338 0.610757 -0.610757">
         <inertial pos="0 0 0.033964" quat="0.707107 0 0 0.707107" mass="0.027142"
           diaginertia="5.8419e-06 5.8158e-06 1.7833e-06" />

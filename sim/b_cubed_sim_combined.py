@@ -7,8 +7,8 @@ Features:
  - Uses moving model (bb8_hl.xml) with free joint for full body translation/rotation
  - Supports wheel/body actuators (w1..w4, bd/bf/br if present) via incremental key inputs (WASD + Q/E)
  - Supports manual joint position control (I/J for a1, O/K for a2, P/L for head)
+ - Head always points in direction of movement (unless manually controlled within last 1 second)
  - Supports animated head action presets (number keys 1-8) via `preset_actions.update_preset_actions`
- - **NEW**: Automatic head direction tracking - head points in direction of movement unless animations active
  - Camera controls retained (arrow keys, PageUp/Down, Home)
 
 Run:
@@ -24,7 +24,6 @@ Key Reference (from existing keyboard_control mapping):
 Notes:
  - Preset actions override joint targets while active; manual adjustments resume after completion.
  - Body actuator values (body_x/y/r_speed) are large forces; adjust keyboard_control.py for different scaling.
- - Head automatically points in direction of movement when no animations are active.
 """
 
 from mujoco.glfw import glfw
@@ -40,7 +39,7 @@ if ROOT_DIR not in sys.path:
     sys.path.insert(0, ROOT_DIR)
 
 import keyboard_control  # key callback + state mutations
-from enums import CameraControl, AngularVelocityControl, HeadActions
+from enums import CameraControl, AngularVelocityControl
 from control_state import state
 from preset_actions import update_preset_actions
 from input_management import update_input_matrix
@@ -138,8 +137,11 @@ while not glfw.window_should_close(window):
         if a2_motor_id != -1:
             data.ctrl[a2_motor_id] = state.target_a2_pos
         if h_motor_id != -1:
-            # Head tracking: point in direction of movement unless an animation is active
-            if state.head_actions == HeadActions.NONE and not state.head_action_locked:
+            # Head always points in direction of movement, unless recently manually controlled
+            current_time = time.time()
+            manual_control_recent = (current_time - state.last_head_manual_control) < 1.0  # 1 second grace period
+            
+            if not manual_control_recent:
                 # Calculate movement direction from body speeds
                 movement_x = state.body_x_speed
                 movement_y = -state.body_y_speed  # Flip Y direction

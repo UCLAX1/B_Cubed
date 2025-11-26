@@ -5,6 +5,7 @@ from enums import CameraControl
 from enums import AngularVelocityControl
 from enums import JointControl
 from enums import HeadActions
+import time
 
 
 def keyboard_callback(window, key, scancode, action, mods):
@@ -103,9 +104,11 @@ def keyboard_callback(window, key, scancode, action, mods):
         elif key == glfw.KEY_P:
             state.target_h_pos += 0.2
             state.target_h_pos = max(-3.14159, min(3.14159, state.target_h_pos))
+            state.last_head_manual_control = time.time()
         elif key == glfw.KEY_L:
             state.target_h_pos -= 0.2
             state.target_h_pos = max(-3.14159, min(3.14159, state.target_h_pos))
+            state.last_head_manual_control = time.time()
 
         # Camera control (Note: Left/Right arrows are now used for angular velocity)
         # Only Up/Down arrows and other keys control camera now
@@ -119,7 +122,7 @@ def keyboard_callback(window, key, scancode, action, mods):
         elif key == glfw.KEY_DELETE: state.cam_control = CameraControl.HOME
 
         # Head action controls: map number keys to HeadActions
-        # 1: idle, 2: fast, 3: fast turn, 4: inquisitive, 5: head shake, 6: head spin, 7: hurt, 8: 360 spin
+        # 1: idle, 2: fast, 3: fast turn, 4: inquisitive, 5: head shake, 6: head spin, 7: hurt
         # Only accept new actions if not currently locked (animation in progress)
         if key == glfw.KEY_1 and not state.head_action_locked:
             state.head_actions = HeadActions.EXPRESSION_IDLE
@@ -141,9 +144,6 @@ def keyboard_callback(window, key, scancode, action, mods):
             state.head_action_locked = True
         elif key == glfw.KEY_7 and not state.head_action_locked:
             state.head_actions = HeadActions.EXPRESSION_HURT
-            state.head_action_locked = True
-        elif key == glfw.KEY_8 and not state.head_action_locked:
-            state.head_actions = HeadActions.EXPRESSION_360_SPIN
             state.head_action_locked = True
 
 

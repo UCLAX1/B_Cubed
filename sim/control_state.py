@@ -13,6 +13,8 @@ class ControlState:
         self.target_a1_pos = 0.4363  # 25 degrees for base rotation
         self.target_a2_pos = 0.0  # Center of bounds (-1.57 to 1.57)
         self.target_h_pos = 0.0   # Center of bounds (-π to π)
+        # Track manual head control timing
+        self.last_head_manual_control = 0.0  # Timestamp of last manual head control
         # Wheel motor control values (incremented by 0.1 per key press)
         self.w1_speed = 0.0
         self.w2_speed = 0.0

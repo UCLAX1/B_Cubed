@@ -40,8 +40,7 @@ class HeadActions(Enum):
     EXPRESSION_HEAD_SHAKE = 4
     EXPRESSION_HEAD_SPIN = 5
     EXPRESSION_HURT = 6
-    EXPRESSION_360_SPIN = 7
-    NONE = 8
+    NONE = 7
 
 
 
