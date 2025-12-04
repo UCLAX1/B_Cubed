@@ -1,6 +1,7 @@
 import mujoco as mj
 from mujoco.glfw import glfw
 import numpy as np
+import os
 
 """
 Motor Control System for BB8 Robot
@@ -44,7 +45,10 @@ Usage examples:
 print_camera_config = 1 #set to 1 to print camera config
                         #this is useful for initializing view of the model
 
-modelPath = "sim/test_world.xml"
+# Get the directory where this script is located, then go up one level to sim/
+script_dir = os.path.dirname(os.path.abspath(__file__))
+sim_dir = os.path.dirname(script_dir)  # Go up from sim_templates to sim/
+modelPath = os.path.join(sim_dir, "balance_non_collidable_joint.xml")
 displayRefreshRate = 60
 
 
@@ -154,13 +158,13 @@ opt = mj.MjvOption()                        # visualization options
 
 
 
-sphere = mj.mj_name2id(model, mj.mjtObj.mjOBJ_BODY, "bb8")
+sphere_body_id = mj.mj_name2id(model, mj.mjtObj.mjOBJ_BODY, "sphere_body")
 debug = False
 
 
 # Init GLFW, create window, make OpenGL context current, request v-sync
 glfw.init()
-window = glfw.create_window(int(1200*0.6), int(900*0.6), "Quadruped", None, None)
+window = glfw.create_window(int(1200*0.6), int(900*0.6), "Balance Ball", None, None)
 glfw.make_context_current(window)
 # glfw.swap_interval(1)
 
@@ -179,13 +183,14 @@ cam.azimuth = 45
 cam.elevation = -35
 cam.orthographic = 1
 
-# sphere_address = model.jnt_qposadr[sphere]  # Get qpos index for the cube joint
-
-joint_id = mj.mj_name2id(model, mj.mjtObj.mjOBJ_JOINT, "bb8_free")
+# Get qpos address for the sphere_free joint
+joint_id = mj.mj_name2id(model, mj.mjtObj.mjOBJ_JOINT, "sphere_free")
 qpos_addr = model.jnt_qposadr[joint_id]
 
-head_id = mj.mj_name2id(model, mj.mjtObj.mjOBJ_BODY, "head")
-# head_site_id = mj.mj_name2id(model, mj.mjtObj.mjOBJ_SITE, "head_site")
+box_body_id = mj.mj_name2id(model, mj.mjtObj.mjOBJ_BODY, "box_body")
+
+# Get sensor ID for the gyro
+gyro_top_id = mj.mj_name2id(model, mj.mjtObj.mjOBJ_SENSOR, "box_weight_gyro_top")
 
 # Define the four tilted motor axes (fixed relative to world frame)
 # Two axes in x-z plane, 45° from z-axis
@@ -425,26 +430,25 @@ while not glfw.window_should_close(window):
             cameraControl = 'none'
             print("Camera reset to default position")
 
-     # Get the site ID once (do this outside the loop)
-
-        # # Inside your render loop:
-        bb8_pos = data.qpos[qpos_addr : qpos_addr + 3]  # ball's world position
-        new_head_pos = bb8_pos + np.array([0.0, 0.0, 0.01])  # 0.01m above ball center
-        # # data.qpos[head_id] = new_head_pos[0]
-
-        #         # Use MuJoCo API to set body position
-        # mj.mj_set_body_xpos(model, data, head_id, new_head_pos)
-
-        head_bid = mj.mj_name2id(model, mj.mjtObj.mjOBJ_BODY, "head")
-        data.mocap_pos[head_bid] = new_head_pos
+        # Get sphere position (the sphere has a free joint, so its position is in qpos)
+        sphere_pos = data.qpos[qpos_addr : qpos_addr + 3]  # sphere's world position
         
-        # MuJoCo doesn't let you directly set site_xpos, so you need to:
-        # (1) define a mocap body, or
-        # (2) draw a marker at the updated position each frame
-        # (3) or manually move the site body using a 'head' body instead
+        # Note: The box_body is a child of link_body, which is constrained to sphere_center
+        # via equality constraint, so it should move automatically with the sphere.
+        # No need to manually position it.
 
         # Step the MuJoCo simulation
         mj.mj_step(model, data)
+        
+        # Get and print gyro data
+        # Gyro sensor returns 3 values: [wx, wy, wz] (angular velocity in rad/s)
+        # Use sensor address to get the correct location in sensordata array
+        gyro_top_addr = model.sensor_adr[gyro_top_id]
+        
+        gyro_top_data = data.sensordata[gyro_top_addr:gyro_top_addr + 3]
+        
+        print(f"Gyro Top: [{gyro_top_data[0]:.4f}, {gyro_top_data[1]:.4f}, {gyro_top_data[2]:.4f}] rad/s")
+        
         glfw.poll_events()
 
 
@@ -453,8 +457,9 @@ while not glfw.window_should_close(window):
     viewport_width, viewport_height = glfw.get_framebuffer_size(window)
     viewport = mj.MjrRect(0, 0, viewport_width, viewport_height)
 
-    # Camera updates (tracking robot position)
-    cam.lookat[0:3] = data.qpos[qpos_addr : qpos_addr + 3]  # [x, y, z]
+    # Camera updates (tracking sphere position)
+    sphere_pos = data.qpos[qpos_addr : qpos_addr + 3]  # sphere's world position
+    cam.lookat[0:3] = sphere_pos  # [x, y, z]
 
         # Move first light to 2m above the sphere
     # model.light_pos[0][:3] = data.qpos[qpos_addr : qpos_addr + 3] + np.array([0.0, 0.0, 2.0])
