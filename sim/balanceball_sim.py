@@ -83,8 +83,8 @@ def keyboard_callback(window, key, scancode, action, mods):
 
 # PID gains for horizontal displacement control
 Kp = 8.0   # Proportional gain
-Kd = 1.5   # Derivative gain (damping)
-KI = 2.0   # Integral gain
+Kd = 1.5  # Derivative gain (damping)
+KI = 1.0   # Integral gain
 IMax = 0.3  # Maximum integral term
 
 # Velocity control parameters
@@ -136,7 +136,9 @@ while not glfw.window_should_close(window):
         # Compute horizontal error (head displacement from ball center in x-y plane)
         # This is the key: we want to move the ball to reduce this horizontal displacement
         error_xy = head_pos[:2] - ball_pos[:2]  # [error_x, error_y]
-        
+        error_xy[0] = round(error_xy[0], 3)
+        error_xy[1] = round(error_xy[1], 3)
+        print(error_xy)
         # Get head velocity to predict future position (optional, helps with stability)
         #head_vel = data.xvelp[head_id][:2] if hasattr(data, 'xvelp') else np.array([0.0, 0.0])
         

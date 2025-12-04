@@ -26,7 +26,7 @@
         <!-- sphere_body stays as-is (has free joint) -->
         <body name="sphere_body" pos="0 0 0.5">
             <joint name="sphere_free" type="free"/>
-            <geom name="sphere" type="sphere" size="0.253"  material="box_mat" mass="8" contype="1" conaffinity="1" friction="0.5 0.1 0.1"/>
+            <geom name="sphere" type="sphere" size="0.253"  material="box_mat" mass="8" contype="1" conaffinity="1" friction="1 1 0.1"/>
             <site name="sphere_center" pos="0 0 0" size="0.01" rgba="1 0 0 0.8"/>
         </body>
 
@@ -47,7 +47,7 @@
             <body name="box_body" pos="0 0 0.2065">
                 <!-- ball joint gives 3 rotational DOF for the head relative to the link -->
                 <joint name="head_joint" type="ball"/>
-                <geom name="box" type="box" size="0.14 0.14 0.08" material="box_mat" mass="2" contype="1" conaffinity="1" friction="0.5 0.1 0.1"/>
+                <geom name="box" type="box" size="0.14 0.14 0.08" material="box_mat" mass="2" contype="1" conaffinity="1" friction="1 1 0.1"/>
                 <site name="box_bottom" pos="0 0 -0.08" size="0.01" rgba="0 1 0 0.8"/>
             </body>
 
