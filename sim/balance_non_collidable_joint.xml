@@ -26,7 +26,7 @@
         <!-- sphere_body stays as-is (has free joint) -->
         <body name="sphere_body" pos="0 0 0.5">
             <joint name="sphere_free" type="free"/>
-            <geom name="sphere" type="sphere" size="0.253"  material="box_mat" mass="8" contype="1" conaffinity="1" friction="0.5 0.1 0.1"/>
+            <geom name="sphere" type="sphere" size="0.253"  material="sphere_mat" mass="8" contype="1" conaffinity="1" />
             <site name="sphere_center" pos="0 0 0" size="0.01" rgba="1 0 0 0.8"/>
         </body>
 
@@ -39,21 +39,26 @@
             <site name="link_bottom" pos="0 0 -0.1265" size="0.01" rgba="0 1 0 0.8"/>
             <site name="link_top" pos="0 0 0.1265" size="0.01" rgba="0 1 0 0.8"/>
 
-            <!-- <body name="box_weight" pos="0 0 -0.25">
-                <geom name="box_weight" type="box" size="0.1 0.1 0.08" material="box_mat" mass="10" contype="0" conaffinity="0"/>
-            </body> -->
+            <body name="box_weight" pos="0 0 -0.25">
+                <geom name="box_weight" type="box" size="0.1 0.1 0.08" material="box_mat" mass="0.001" contype="0" conaffinity="0"/>
+                <site name="box_weight_top" pos="0 0 0.08" size="0.01" rgba="1 0 0 0.8"/>
+            </body>
 
             <!-- head (box) attached to link via a joint so it's free relative to the link -->
             <body name="box_body" pos="0 0 0.2065">
                 <!-- ball joint gives 3 rotational DOF for the head relative to the link -->
                 <joint name="head_joint" type="ball"/>
-                <geom name="box" type="box" size="0.14 0.14 0.08" material="box_mat" mass="2" contype="1" conaffinity="1" friction="0.5 0.1 0.1"/>
+                <geom name="box" type="box" size="0.14 0.14 0.08" material="box_mat" mass="2" contype="1" conaffinity="1"/>
                 <site name="box_bottom" pos="0 0 -0.08" size="0.01" rgba="0 1 0 0.8"/>
             </body>
 
         </body>
 
     </worldbody>
+    
+    <sensor>
+        <gyro name="box_weight_gyro_top" site="box_weight_top"/>
+    </sensor>
     
     <equality>
         <!-- keep link_bottom coincident with sphere_center (position constraint only) -->
