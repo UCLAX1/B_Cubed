@@ -1,0 +1,81 @@
+<mujoco>
+    <option gravity="0 0 -9.80" timestep="0.002"/>
+    <size nstack="5000"/>
+    
+    <asset>
+        <texture type="skybox" builtin="gradient" rgb1=".3 .5 .7" rgb2="0 0 0" width="32" height="512"/>
+        <texture name="grid" type="2d" builtin="checker" width="512" height="512" rgb1=".1 .2 .3" rgb2=".2 .3 .4"/>
+        <texture name='highlight' type='2d' builtin='gradient' rgb1='255 255 255' rgb2='255 255 255' width='512' height='512'/>
+        <material name='ball' texture='highlight' texrepeat='1 1' texuniform='true'/>
+        <material name="grid" texture="grid" texrepeat="1 1" texuniform="true" reflectance=".0"/>
+
+        <texture name="bb8_tex" type="2d" file="../bb8_textures/bb8one.png" />
+		<material name="bb8_mat" texture="bb8_tex" texrepeat="1 1" texuniform="false"/>
+    </asset>
+
+    <worldbody>
+        <geom name="floor" size="10 10 .05" type="plane" material="grid" friction="3.0 1.5 0.5"/>
+        <light name="spotlight" mode="targetbodycom" target="bb8" diffuse=".8 .8 .8" specular="0.3 0.3 0.3" pos="0 -6 4" cutoff="30"/>
+        <light name="top" pos="0 0 2" mode="trackcom"/>
+
+        <body name="bb8" pos="0 0 0.11">
+            <joint name="bb8_free" type="free"/>
+            <geom type="sphere" size="0.001" mass="0.0001" rgba="0 0 0 0"/>
+            <!-- Visible outer sphere -->
+
+
+
+                        <!-- Internal chassis that carries 4 wheel joints -->
+                        <!-- Internal chassis: a small fixed mass inside the sphere -->
+            <body name="chassis" pos="0 0 0">
+                <joint name="chassis_fixed" type="ball" limited="false" />
+                <geom name="bb8_outer" type="sphere" size="0.12" rgba="1 1 1 0.2" mass="2.0" material="bb8_mat" euler="90 0 0"/>
+
+
+                                <!-- Wheel at 0° (pointing +Y) -->
+                <body name="wheel_0deg" pos="0.0 0.1 0.0">
+                    <!-- tangent axis = (-y, x) → (-0.1, 0.0) -->
+                    <joint name="wheel_0deg_joint" type="hinge" axis="-1 0 0" limited="false"/>
+                    <geom type="capsule" fromto="0 0 0  0 0.02 0" size="0.005" mass="0.005" rgba="0 0 1 1"/>
+                </body>
+
+                                    <!-- Wheel at 120° (x=-0.0866, y=-0.05) -->
+                <body name="wheel_120deg" pos="-0.0866 -0.05 0.0">
+                    <!-- tangent axis = (-y, x) → (0.05, -0.0866) -->
+                    <joint name="wheel_120deg_joint" type="hinge" axis="0.5 -0.866 0" limited="false"/>
+                    <geom type="capsule" fromto="0 0 0  0.01 -0.0173 0" size="0.005" mass="0.005" rgba="0 1 0 1"/>
+                </body>
+                                    <!-- Wheel at 240° (x=0.0866, y=-0.05) -->
+                <body name="wheel_240deg" pos="0.0866 -0.05 0.0">
+                    <!-- tangent axis = (-y, x) → (0.05, 0.0866) -->
+                    <joint name="wheel_240deg_joint" type="hinge" axis="0.5 0.866 0" limited="false"/>
+                    <geom type="capsule" fromto="0 0 0  0.01 0.0173 0" size="0.005" mass="0.005" rgba="1 0 0 1"/>
+                </body>
+            </body>
+
+
+            <!-- Head -->
+            <body name="head" pos="0 0 0.16">
+                <joint name="head_joint"/>
+                <geom type="box" size=".06 .06 .06" rgba="1 1 1 1" mass="0.3"/>
+            </body>
+        </body>
+    </worldbody>
+
+    <actuator>
+      <!-- Front @ 0° : contributes +τx -->
+      <motor name="motor_front" joint="bb8_free"
+             gear="0 0 0  1 0 0" ctrlrange="-3 3"/>
+              <!-- Motor at 120° -->
+      <motor name="motor_120deg" joint="bb8_free"
+             gear="0 0 0  -0.5 0.866 0" ctrlrange="-3 3"/>
+              <!-- Motor at 240° -->
+      <motor name="motor_240deg" joint="bb8_free"
+             gear="0 0 0  -0.5 -0.866 0" ctrlrange="-3 3"/>
+
+
+    </actuator>
+
+
+
+</mujoco>

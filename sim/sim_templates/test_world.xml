@@ -1,0 +1,32 @@
+<mujoco>
+    <option gravity="0 0 -9.80"/>
+	<asset>
+		<texture type="skybox" builtin="gradient" rgb1=".3 .5 .7" rgb2="0 0 0" width="32" height="512"/>
+        <texture name="grid" type="2d" builtin="checker" width="512" height="512" rgb1=".1 .2 .3" rgb2=".2 .3 .4"/>
+        <texture name = 'highlight' type = '2d' builtin='gradient' rgb1 = '255 255 255' rgb2 = '255 255 255' width = '512' height = '512'/>
+        <material name = 'ball' texture = 'highlight' texrepeat ='1 1' texuniform = 'true'/>
+        <material name="grid" texture="grid" texrepeat="1 1" texuniform="true" reflectance=".0"/>
+
+		<texture name="bb8_tex" type="2d" file="bb8_textures/bb8one.png"/>
+		<material name="bb8_mat" texture="bb8_tex" texrepeat="1 1" texuniform="false"/>
+
+		<texture name="bb8_head_tex" type="2d" file="bb8_textures/bb8head.png"/>
+		<material name="bb8_head_mat" texture="bb8_head_tex" texrepeat=".8 1.2" texuniform="false"/>
+	</asset>
+	<worldbody>
+		<geom name="floor" size="0 0 .05" type="plane" material="grid"/>
+        <light name="spotlight" mode="targetbodycom" target="bb8" diffuse=".8 .8 .8" specular="0.3 0.3 0.3" pos="0 -6 4" cutoff="30"/>
+        <light name="top" pos="0 0 2" mode="trackcom"/>
+
+		<body name = 'bb8' pos="0 0 1">
+			<joint name = 'bb8_free' type="free" />
+			<geom name = "bb8" type = "sphere" size = ".1" material="bb8_mat"/>
+		</body>
+
+		<body pos= "0 0 .1" mocap = 'true'>
+			<geom name="head" pos="0 0 0.1" size=".06" type="sphere" rgba="1 1 1 1" contype="0" conaffinity="0" material="bb8_head_mat" euler="90 0 0"/>
+		</body>
+
+
+	</worldbody>
+</mujoco>
