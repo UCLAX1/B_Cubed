@@ -193,7 +193,7 @@ send_position_set(1, 1.0)
 
 while True:
     # send_speed_set(1, 1000.0)
-    send_duty_cycle(1, 0.1)
+    send_duty_cycle(1, -0.05)
     # send_position_set(1, 1.0)
     read_can_once()
     # send_position_set(1, 1.0)
