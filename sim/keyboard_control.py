@@ -122,29 +122,64 @@ def keyboard_callback(window, key, scancode, action, mods):
         elif key == glfw.KEY_DELETE: state.cam_control = CameraControl.HOME
 
         # Head action controls: map number keys to HeadActions
-        # 1: idle, 2: fast, 3: fast turn, 4: inquisitive, 5: head shake, 6: head spin, 7: hurt
+        # 1: idle, 2: fast, 3: fast turn, 4: inquisitive, 5: head shake, 6: head spin, 7: hurt, 8: 360 spin
         # Only accept new actions if not currently locked (animation in progress)
         if key == glfw.KEY_1 and not state.head_action_locked:
             state.head_actions = HeadActions.EXPRESSION_IDLE
             state.head_action_locked = True
+            # Stop all movement when preset starts
+            state.body_x_speed = 0.0
+            state.body_y_speed = 0.0
+            state.body_r_speed = 0.0
         elif key == glfw.KEY_2 and not state.head_action_locked:
             state.head_actions = HeadActions.EXPRESSION_FAST
             state.head_action_locked = True
+            # Stop all movement when preset starts
+            state.body_x_speed = 0.0
+            state.body_y_speed = 0.0
+            state.body_r_speed = 0.0
         elif key == glfw.KEY_3 and not state.head_action_locked:
             state.head_actions = HeadActions.EXPRESSION_FAST_TURN
             state.head_action_locked = True
+            # Stop all movement when preset starts
+            state.body_x_speed = 0.0
+            state.body_y_speed = 0.0
+            state.body_r_speed = 0.0
         elif key == glfw.KEY_4 and not state.head_action_locked:
             state.head_actions = HeadActions.EXPRESSION_INQUISITIVE
             state.head_action_locked = True
+            # Stop all movement when preset starts
+            state.body_x_speed = 0.0
+            state.body_y_speed = 0.0
+            state.body_r_speed = 0.0
         elif key == glfw.KEY_5 and not state.head_action_locked:
             state.head_actions = HeadActions.EXPRESSION_HEAD_SHAKE
             state.head_action_locked = True
+            # Stop all movement when preset starts
+            state.body_x_speed = 0.0
+            state.body_y_speed = 0.0
+            state.body_r_speed = 0.0
         elif key == glfw.KEY_6 and not state.head_action_locked:
             state.head_actions = HeadActions.EXPRESSION_HEAD_SPIN
             state.head_action_locked = True
+            # Stop all movement when preset starts
+            state.body_x_speed = 0.0
+            state.body_y_speed = 0.0
+            state.body_r_speed = 0.0
         elif key == glfw.KEY_7 and not state.head_action_locked:
             state.head_actions = HeadActions.EXPRESSION_HURT
             state.head_action_locked = True
+            # Stop all movement when preset starts
+            state.body_x_speed = 0.0
+            state.body_y_speed = 0.0
+            state.body_r_speed = 0.0
+        elif key == glfw.KEY_8 and not state.head_action_locked:
+            state.head_actions = HeadActions.EXPRESSION_360_SPIN
+            state.head_action_locked = True
+            # Stop all movement when preset starts
+            state.body_x_speed = 0.0
+            state.body_y_speed = 0.0
+            state.body_r_speed = 0.0
 
 
     elif action == glfw.RELEASE:

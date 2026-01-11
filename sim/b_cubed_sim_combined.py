@@ -22,7 +22,7 @@ Key Reference (from existing keyboard_control mapping):
   Camera: Arrow keys, PageUp/PageDown (zoom), Home (reset)
 
 Notes:
- - Preset actions override joint targets while active; manual adjustments resume after completion.
+ - Preset actions stop all movement when started and override joint targets while active; manual adjustments resume after completion.
  - Body actuator values (body_x/y/r_speed) are large forces; adjust keyboard_control.py for different scaling.
 """
 
