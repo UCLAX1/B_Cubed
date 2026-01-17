@@ -1,5 +1,6 @@
 #include <cctype>
 #include <iostream>
+#include <linux/can.h>
 
 
 enum control_mode {
