@@ -1,4 +1,27 @@
-# B_Cubed
+# B_Cubed: Motors Testing
+
+## HOW TO TEST THE MOTORS:
+
+1. plug the jhoinrch CAN bus into the SPARK MAX (green to green).\
+a. DO NOT TOUCH THE CAN BUS SWITCHES. the 12 ohm switch should be down, and the boot switch should be up.
+2. plug the motor into the big box. don't plug into the middle one on the big box, only the left and right ones.
+3. plug your computer into the can bus using the usb-c hole.
+4. turn on the box and set it to 12 volts and 1.8 amps
+5. run the program
+
+if these steps do not work, skip the CAN bus and plug your computer into the SPARK MAX using usb-c
+
+use REV Hardware Client to see if the motors spin
+
+## what the heck are the files in this branch
+robot.py and test.py are separate programs, and are a bit antequated.
+
+HardwareInterface.py and motor_test.py are ripped from Akhilesh's code from the BruinBear github.\
+I fixed a lot of stupid stuff in the code to fit it to B-Cubed and to make it more usable  
+
+
+## original readme description VVV
+
 UCLA X1 Robotics 2025-26 B^3 Project
 
 1. Install ROS2 Humble
