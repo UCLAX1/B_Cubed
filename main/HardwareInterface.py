@@ -43,7 +43,8 @@ class CanBus:
         """
         self.notifier = None
         self.bus = None
-        self.motor_pos: list[float] = []
+        self.motor_pos: list[float] = [None] * 30
+        # self.motor_pos: [None] * 30
         self.channel = channel
         self.interface = interface
         self.bitrate = bitrate
@@ -155,7 +156,7 @@ class Motor:
         """
         get motor position (i'm not sure whether it's in like radians or counts or rotations, figure it out)
 
-        :return: motor position
+        :return: motor position including offset from init_pos_json file
         """
         return self.can_bus.motor_pos[self.motor_id] - self.init_pos
 
