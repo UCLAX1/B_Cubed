@@ -27,7 +27,7 @@ dummy = torch.randn(1, 42, dtype=torch.float32)
 torch.onnx.export(
     model,
     dummy,
-    "gesture_classifier.onnx",
+    "../models/gesture_classifier.onnx",
     opset_version=18,
     input_names=["input"],
     output_names=["logits"],
