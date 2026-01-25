@@ -25,6 +25,7 @@ setup(
     entry_points={
         'console_scripts': [
             'person = person_tracking.person_tracking:main',
+            'hands = person_tracking.hand_gesture:main',
         ],
     },
 )
