@@ -28,7 +28,7 @@ torch.onnx.export(
     model,
     dummy,
     "gesture_classifier.onnx",
-    opset_version=13,
+    opset_version=18,
     input_names=["input"],
     output_names=["logits"],
     dynamic_axes={
