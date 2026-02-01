@@ -109,7 +109,8 @@ class Motor:
 
         # wait to get a motor position to ensure motor is connected via CAN
         self.log(f"waiting for motor {self.motor_id}")
-        max_wait = 3
+        # max_wait = 3
+        max_wait = 10000
         start = time.time()
         while self.can_bus.motor_pos[self.motor_id] is None:
             if time.time() - start > max_wait:
@@ -161,6 +162,10 @@ class Motor:
         return self.can_bus.motor_pos[self.motor_id] - self.init_pos
 
     def reset_encoder(self):
+        """
+        makes it so the motor encoders start at 0 instead of the current position by saving current motor position to the json file
+        :return:
+        """
         pos = self.can_bus.motor_pos[self.motor_id]
         self.init_pos = pos
 
