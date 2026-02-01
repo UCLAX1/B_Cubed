@@ -38,9 +38,6 @@ ROOT_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 if ROOT_DIR not in sys.path:
     sys.path.insert(0, ROOT_DIR)
 
-import keyboard_control  # key callback + state mutations
-from enums import CameraControl, AngularVelocityControl
-from control_state import state
 from preset_actions import update_preset_actions
 from input_management import update_input_matrix
 
@@ -88,7 +85,7 @@ glfw.make_context_current(window)
 mj.mjv_defaultOption(opt)
 scene = mj.MjvScene(model, maxgeom=10000)
 context = mj.MjrContext(model, mj.mjtFontScale.mjFONTSCALE_150.value)
-glfw.set_key_callback(window, keyboard_control.keyboard_callback)
+
 
 # Timing
 sim_dt = 0.001
@@ -106,89 +103,7 @@ while not glfw.window_should_close(window):
 
     # Physics steps
     while elapsed_time >= sim_dt:
-        # Update preset head actions (may modify state.target_* positions)
-        update_preset_actions(dt=sim_dt)
 
-        # Wheel / body movement control
-        if w1_motor_id != -1:
-            data.ctrl[w1_motor_id] = state.w1_speed
-        if w2_motor_id != -1:
-            data.ctrl[w2_motor_id] = state.w2_speed
-        if w3_motor_id != -1:
-            data.ctrl[w3_motor_id] = state.w3_speed
-        if w4_motor_id != -1:
-            data.ctrl[w4_motor_id] = state.w4_speed
-        if body_x_id != -1:
-            data.ctrl[body_x_id] = state.body_x_speed
-        if body_y_id != -1:
-            data.ctrl[body_y_id] = state.body_y_speed
-        if body_r_id != -1:
-            data.ctrl[body_r_id] = state.body_r_speed
-
-        # (Optional) Angular velocity control placeholder - could set data.qvel for rotation if desired
-        if state.angular_vel_control == AngularVelocityControl.LEFT:
-            pass  # Implement custom angular velocity if needed
-        elif state.angular_vel_control == AngularVelocityControl.RIGHT:
-            pass
-
-        # Apply joint targets (after presets have potentially updated them)
-        if a1_motor_id != -1:
-            data.ctrl[a1_motor_id] = state.target_a1_pos
-        if a2_motor_id != -1:
-            data.ctrl[a2_motor_id] = state.target_a2_pos
-        if h_motor_id != -1:
-            # Head always points in direction of movement, unless recently manually controlled
-            current_time = time.time()
-            manual_control_recent = (current_time - state.last_head_manual_control) < 1.0  # 1 second grace period
-            
-            if not manual_control_recent:
-                # Calculate movement direction from body speeds
-                movement_x = state.body_x_speed
-                movement_y = -state.body_y_speed  # Flip Y direction
-                
-                # If there's significant movement, point head in that direction
-                movement_magnitude = np.sqrt(movement_x**2 + movement_y**2)
-                if movement_magnitude > 1000:  # Threshold to avoid jittering at low speeds
-                    # Calculate angle of movement direction
-                    angle = np.arctan2(movement_y, movement_x)
-                    # Convert to head joint coordinate system (joint rotates around -X axis)
-                    state.target_h_pos = -angle
-                    # Clamp to joint limits
-                    state.target_h_pos = np.clip(state.target_h_pos, -3.14159, 3.14159)
-                # If no significant movement, gradually return head to center
-                else:
-                    # Smoothly return to center position
-                    center_diff = 0.0 - state.target_h_pos
-                    if abs(center_diff) > 0.01:
-                        state.target_h_pos += np.sign(center_diff) * 0.05  # Slow return speed
-            
-            data.ctrl[h_motor_id] = state.target_h_pos
-
-        # Camera control
-        if state.cam_control == CameraControl.UP:
-            cam.elevation += 2
-            state.cam_control = CameraControl.NONE
-        elif state.cam_control == CameraControl.DOWN:
-            cam.elevation -= 2
-            state.cam_control = CameraControl.NONE
-        elif state.cam_control == CameraControl.LEFT:
-            cam.azimuth -= 2
-            state.cam_control = CameraControl.NONE
-        elif state.cam_control == CameraControl.RIGHT:
-            cam.azimuth += 2
-            state.cam_control = CameraControl.NONE
-        elif state.cam_control == CameraControl.ZOOM_IN:
-            cam.distance = max(0.5, cam.distance - 0.1)
-            state.cam_control = CameraControl.NONE
-        elif state.cam_control == CameraControl.ZOOM_OUT:
-            cam.distance = min(10.0, cam.distance + 0.1)
-            state.cam_control = CameraControl.NONE
-        elif state.cam_control == CameraControl.RESET_CAMERA:
-            cam.distance = 2
-            cam.azimuth = 45
-            cam.elevation = -35
-            state.cam_control = CameraControl.NONE
-            print("[CAM] Reset to default")
 
         # Shared input matrix update (non-critical if missing)
         try:

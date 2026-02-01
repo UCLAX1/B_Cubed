@@ -1,0 +1,89 @@
+<!--
+  MuJoCo XML model for bb8_car
+  This file describes a robot with a base, two arm segments, a head, and four wheels.
+  STL mesh files are used for visualization, and actuators are defined for control.
+  Key sections are explained below.
+-->
+<mujoco model="bb8_car">
+  <!-- Set angles to radians for all joints and actuators -->
+  <compiler angle="radian" />
+  <!-- Simulation options: timestep and integrator type -->
+  <option timestep="0.001" integrator="implicit" gravity="0 0 0">
+    <flag warmstart="enable" />
+  </option>
+
+  <!--
+    Asset section:
+    - STL mesh files for each robot part (base, arms, head, wheels)
+    - A checkerboard texture and material for the ground plane
+    Note: All mesh files must be present in the same directory as this XML.
+  -->
+  <asset>
+    <mesh name="base_link" content_type="model/stl" file="base_link.STL" scale="1.3 1.3 1.3"/>
+    <mesh name="a1" content_type="model/stl" file="a1.STL" />
+    <mesh name="a2" content_type="model/stl" file="a2.STL" />
+    <mesh name="h" content_type="model/stl" file="h.STL" scale="1.275 1.275 1.275"/>
+    <mesh name="w1" content_type="model/stl" file="w1.STL" scale="1.125 1.125 1.125"/>
+    <mesh name="w2" content_type="model/stl" file="w2.STL" scale="1.125 1.125 1.125"/>
+    <mesh name="w3" content_type="model/stl" file="w3.STL" scale="1.125 1.125 1.125"/>
+    <mesh name="w4" content_type="model/stl" file="w4.STL" scale="1.125 1.125 1.125"/>
+    <texture name="grid" type="2d" builtin="checker" rgb1=".1 .2 .3" rgb2=".2 .3 .4" width="300" height="300" />
+    <material name="grid" texture="grid" texrepeat="8 8" reflectance=".2" />
+  </asset>
+
+  <!--
+    worldbody section:
+    - Defines the physical world, including the ground plane, lighting, and the robot's body hierarchy.
+    - The robot consists of a base, two arm segments (a1, a2), a head (h), and four wheels (w1-w4).
+    - Each body has its own position, orientation, inertial properties, and geometry.
+    - Joints connect the bodies and allow for articulation.
+    - Mesh geoms are used for visualization; a sphere geom is used for a visual marker on the head.
+    - The camera is positioned to track the robot's center of mass.
+  -->
+  <worldbody>
+    <light name="top" pos="0 0 20" />
+    <body name="base_link" pos="0 0 0.6" quat="-0.707107 0.707107 0 0">
+      <!-- The main body of the robot, with a freejoint for 6-DOF movement -->
+      <freejoint name="base_link_freejoint" />
+      <camera name="track_com" pos="1.253 -1.502 0.378" xyaxes="0.768 0.641 0.000 -0.101 0.122 0.987" mode="trackcom" />
+      <inertial pos="-4.4409E-16 0.027063 -3.3307E-16" quat="0 0 0 1" mass="20" diaginertia="0.0059267 0.0098916 0.0059267" />
+      <geom type="mesh" rgba="0.79216 0.81961 0.93333 1" mesh="base_link" />
+      <!-- Arm segment a1 -->
+      <body name="a1" pos="0 -0.02 0" quat="0.356335 0.356338 0.610757 -0.610757">
+        <inertial pos="0 0 0.033964" quat="0.707107 0 0 0.707107" mass="0.027142" diaginertia="5.8419e-06 5.8158e-06 1.7833e-06" />
+        <joint name="a1" pos="0 0 0" axis="0 0 -1" ref="0.4363" />
+        <geom type="mesh" rgba="0.79216 0.81961 0.93333 1" mesh="a1" />
+        <!-- Arm segment a2 -->
+        <body name="a2" pos="0 0 0.06" quat="1 0 0 0">
+          <inertial pos="4.0307e-08 1.6883e-08 0.12424" quat="0.999977 0 0 0.0067613" mass="0.072732" diaginertia="0.00032679 0.00032678 3.6454e-06" />
+          <joint name="a2" pos="0 0 0" axis="1 0 0" ref="0.0"/>
+          <geom type="mesh" rgba="0.79216 0.81961 0.93333 1" mesh="a2" friction = "1 1 1" condim = "6"/>
+          <!-- Head -->
+          <body name="h" pos="0 0 0.34" quat="0.51312 0.486525 0.513122 -0.486527">
+            <inertial pos="0.0625 0 0" mass="0.5" diaginertia="0.0083776 0.0054323 0.0054323" />
+            <joint name="h" pos="0 0 0" axis="-1 0 0" ref="0.0"/>
+            <geom type="mesh" rgba="0.79216 0.81961 0.93333 1" mesh="h"/>
+            <!-- black sphere on the front of the head (visual only, no collision) -->
+            <geom type="sphere" pos="0.07 0.0 -0.12" size="0.03" rgba="0 0 0 1" contype="0" conaffinity="0" />
+          </body>
+        </body>
+      </body>
+      
+    </body>
+  </worldbody>
+
+  <!--
+    actuator section:
+    - Defines actuators for controlling the robot's joints and base.
+    - 'position' actuators for the arm and head joints (a1, a2, h)
+    - 'velocity' actuators for the base's freejoint (bd_motor, bf_motor, br_motor)
+    - Each actuator specifies the joint it controls, gains, and control range.
+  -->
+  <actuator>
+    <position name="a1_motor" joint="a1" kp="5" kv="1" ctrlrange="-3.14159 3.14159" />
+    <position name="a2_motor" joint="a2" kp="10" kv="5" ctrlrange="-0.5236 0.5236"/>
+    <position name="h_motor" joint="h" kp="5" kv="1" ctrlrange="-3.14159 3.14159" />
+
+    <!-- b motors removed as requested -->
+  </actuator>
+</mujoco>
