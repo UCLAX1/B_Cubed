@@ -37,12 +37,12 @@ MODEL_PATH = os.path.join(ROOT_DIR, "urdf", "imu_head_balance.xml")
 # Shared variable for IMU data (pitch, roll, yaw)
 global_imu_angles = np.zeros(3)
 
-# ROS2 callback: receives IMU data as [pitch, roll, yaw] (radians)
+# ROS2 callback: receives IMU data as [pitch, roll, yaw] (degrees)
 def imu_callback(msg):
     global global_imu_angles
-    # Expecting msg.data = [pitch, roll, yaw] in radians
+    # Expecting msg.data = [pitch, roll, yaw] in degrees, convert to radians
     if len(msg.data) == 3:
-        global_imu_angles = np.array(msg.data)
+        global_imu_angles = np.array(msg.data) * np.pi / 180.0
 
 # ROS2 Node that subscribes to the IMU topic
 class ImuListener(Node):
@@ -63,6 +63,7 @@ def start_ros2_node():
     rclpy.spin(node)
     rclpy.shutdown()
 
+def main():
     # Start ROS2 node in a separate thread to receive IMU data
     ros_thread = Thread(target=start_ros2_node, daemon=True)
     ros_thread.start()
