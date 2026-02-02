@@ -57,7 +57,7 @@
         <!-- Arm segment a2 -->
         <body name="a2" pos="0 0 0.06" quat="1 0 0 0">
           <inertial pos="4.0307e-08 1.6883e-08 0.12424" quat="0.999977 0 0 0.0067613" mass="0.072732" diaginertia="0.00032679 0.00032678 3.6454e-06" />
-          <joint name="a2" pos="0 0 0" axis="1 0 0" ref="0.0"/>
+          <joint name="a2" pos="0 0 0" axis="1 0 0" ref="0.35"/>
           <geom type="mesh" rgba="0.79216 0.81961 0.93333 1" mesh="a2" friction = "1 1 1" condim = "6"/>
           <!-- Head -->
           <body name="h" pos="0 0 0.34" quat="0.51312 0.486525 0.513122 -0.486527">
