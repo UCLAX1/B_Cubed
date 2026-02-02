@@ -8,7 +8,7 @@
   <!-- Set angles to radians for all joints and actuators -->
   <compiler angle="radian" />
   <!-- Simulation options: timestep and integrator type -->
-  <option timestep="0.001" integrator="implicit" gravity="0 0 0">
+  <option timestep="0.001" integrator="implicit" gravity="0 0 -9.81">
     <flag warmstart="enable" />
   </option>
 
@@ -42,10 +42,11 @@
   -->
   <worldbody>
     <light name="top" pos="0 0 20" />
+    <geom name="floor" type="plane" pos="0 0 0" size="10 10 0.1" material="grid" friction="1.0 0.005 0.0001" contype="1" conaffinity="1"/>
     <body name="base_link" pos="0 0 0.6" quat="-0.707107 0.707107 0 0">
       <!-- The main body of the robot, with a freejoint for 6-DOF movement -->
       <freejoint name="base_link_freejoint" />
-      <camera name="track_com" pos="1.253 -1.502 0.378" xyaxes="0.768 0.641 0.000 -0.101 0.122 0.987" mode="trackcom" />
+      <!-- Camera removed from base_link; will be attached to head -->
       <inertial pos="-4.4409E-16 0.027063 -3.3307E-16" quat="0 0 0 1" mass="20" diaginertia="0.0059267 0.0098916 0.0059267" />
       <geom type="mesh" rgba="0.79216 0.81961 0.93333 1" mesh="base_link" />
       <!-- Arm segment a1 -->
@@ -63,6 +64,8 @@
             <inertial pos="0.0625 0 0" mass="0.5" diaginertia="0.0083776 0.0054323 0.0054323" />
             <joint name="h" pos="0 0 0" axis="-1 0 0" ref="0.0"/>
             <geom type="mesh" rgba="0.79216 0.81961 0.93333 1" mesh="h"/>
+            <!-- Camera attached to the head so it rotates with the head -->
+            <camera name="head_cam" pos="0 0 5" xyaxes="0 1 0 -1 0 0" />
             <!-- black sphere on the front of the head (visual only, no collision) -->
             <geom type="sphere" pos="0.07 0.0 -0.12" size="0.03" rgba="0 0 0 1" contype="0" conaffinity="0" />
           </body>
