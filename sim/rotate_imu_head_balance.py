@@ -110,6 +110,9 @@ def main():
             # Get latest roll, yaw, pitch from IMU (in radians)
             roll, yaw, pitch = global_imu_angles
             
+            # Print the current pitch and roll in degrees
+            print(f"Pitch: {pitch * 180/np.pi:.2f} deg, Roll: {roll * 180/np.pi:.2f} deg")
+            
             # Use find_motor_angles to compute a1 (Lazy_Susan) and a2 (Arm) angles (expects degrees)
             arm, lazy_susan = find_motor_angles(pitch * 180/np.pi, roll * 180/np.pi)
             
