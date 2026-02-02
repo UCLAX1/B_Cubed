@@ -108,8 +108,8 @@ def main():
 
         # Physics steps (advance simulation)
         while elapsed_time >= sim_dt:
-            # Get latest pitch, roll, yaw from IMU (in radians)
-            pitch, roll, yaw = global_imu_angles
+            # Get latest roll, yaw, pitch from IMU (in radians)
+            roll, yaw, pitch = global_imu_angles
             # Set base orientation using Euler angles (MuJoCo expects (z, y, x) order)
             euler = np.array([yaw, pitch, roll]).reshape(3, 1)
             quat = np.zeros((4, 1))
