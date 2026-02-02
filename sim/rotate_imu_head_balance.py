@@ -123,6 +123,10 @@ def main():
     
     # Debug counter
     debug_counter = 0
+    
+    # Test mode: oscillate motors if no IMU data
+    test_mode = True
+    sim_time = 0.0
 
     # Main simulation loop
     while not glfw.window_should_close(window):
@@ -136,10 +140,20 @@ def main():
         
         # Physics steps (advance simulation)
         while elapsed_time >= sim_dt:
+            sim_time += sim_dt
+            
             # Get latest roll, yaw, pitch from IMU (in radians)
             roll, yaw, pitch = global_imu_angles
-            # Don't set base orientation - let it stay fixed
-            # Instead, only use IMU data to calculate motor positions
+            
+            # Check if we're receiving IMU data
+            if np.allclose(global_imu_angles, 0) and test_mode:
+                # Test mode: oscillate motors
+                test_angle = 0.3 * np.sin(sim_time * 2)  # Oscillate at 2 rad/s
+                arm = test_angle * 180/np.pi
+                lazy_susan = test_angle * 180/np.pi
+            else:
+                # Use find_motor_angles to compute a1 (Lazy_Susan) and a2 (Arm) angles (expects degrees)
+                arm, lazy_susan = find_motor_angles(pitch * 180/np.pi, roll * 180/np.pi)
             
             # Debug output every 1000 steps
             debug_counter += 1
@@ -149,9 +163,6 @@ def main():
                 print(f"Ctrl values: a1={data.ctrl[a1_id]:.4f}, a2={data.ctrl[a2_id]:.4f}")
                 print(f"Joint positions: a1={data.qpos[model.jnt_qposadr[a1_joint_id]]:.4f}, a2={data.qpos[model.jnt_qposadr[a2_joint_id]]:.4f}")
             
-            
-            # Use find_motor_angles to compute a1 (Lazy_Susan) and a2 (Arm) angles (expects degrees)
-            arm, lazy_susan = find_motor_angles(pitch * 180/np.pi, roll * 180/np.pi)
             # Set actuator controls (convert degrees to radians)
             if a1_id != -1:
                 data.ctrl[a1_id] = lazy_susan * np.pi/180
