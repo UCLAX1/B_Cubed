@@ -46,7 +46,7 @@ def imu_callback(msg):
 
 # ROS2 Node that subscribes to the IMU topic
 class ImuListener(Node):
-    def __init__(self, topic_name="imu/pitch_roll_yaw"):
+    def __init__(self, topic_name="/sense_hat/raw"):
         super().__init__('imu_listener')
         self.subscription = self.create_subscription(
             Float32MultiArray,
