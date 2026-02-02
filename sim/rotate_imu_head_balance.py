@@ -80,6 +80,7 @@ def main():
     # Find actuator IDs for a1 (Lazy_Susan) and a2 (Arm)
     a1_id = mj.mj_name2id(model, mj.mjtObj.mjOBJ_ACTUATOR, "a1_motor")
     a2_id = mj.mj_name2id(model, mj.mjtObj.mjOBJ_ACTUATOR, "a2_motor")
+    print(f"Actuator IDs - a1: {a1_id}, a2: {a2_id}")
     # Note: base orientation quaternion is at qpos[3:7]
 
     # Setup the MuJoCo viewer window and camera
@@ -103,6 +104,9 @@ def main():
     target_fps = 60
     frame_dt = 1.0 / target_fps
     prev_render_t = time_prev
+    
+    # Debug counter
+    debug_counter = 0
 
     # Main simulation loop
     while not glfw.window_should_close(window):
@@ -117,6 +121,14 @@ def main():
             roll, yaw, pitch = global_imu_angles
             # Don't set base orientation - let it stay fixed
             # Instead, only use IMU data to calculate motor positions
+            
+            # Debug output every 1000 steps
+            debug_counter += 1
+            if debug_counter % 1000 == 0:
+                print(f"IMU (deg): roll={roll*180/np.pi:.2f}, yaw={yaw*180/np.pi:.2f}, pitch={pitch*180/np.pi:.2f}")
+                print(f"Motor angles (deg): arm={arm:.2f}, lazy_susan={lazy_susan:.2f}")
+                print(f"Ctrl values: a1={lazy_susan*np.pi/180:.4f}, a2={arm*np.pi/180:.4f}")
+            
             
             # Use find_motor_angles to compute a1 (Lazy_Susan) and a2 (Arm) angles (expects degrees)
             arm, lazy_susan = find_motor_angles(pitch * 180/np.pi, roll * 180/np.pi)
