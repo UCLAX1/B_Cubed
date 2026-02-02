@@ -37,19 +37,17 @@ MODEL_PATH = os.path.join(ROOT_DIR, "urdf", "imu_head_balance.xml")
 # Shared variable for IMU data (pitch, roll, yaw)
 global_imu_angles = np.zeros(3)
 
-# ROS2 callback: receives IMU data as [pitch, roll, yaw] (degrees)
+# ROS2 callback: receives IMU data as [roll, yaw, pitch] (degrees)
 def imu_callback(msg):
     global global_imu_angles
-    # Expecting msg.data = [pitch, roll, yaw] in degrees, convert to radians
+    # Expecting msg.data = [roll, yaw, pitch] in degrees, convert to radians
     if len(msg.data) == 3:
         global_imu_angles = np.array(msg.data) * np.pi / 180.0
-        print(f"[ROS2 Callback] Received: {msg.data}")
 
 # ROS2 Node that subscribes to the IMU topic
 class ImuListener(Node):
     def __init__(self, topic_name="/sense_hat/raw"):
         super().__init__('imu_listener')
-        print(f"[ROS2] Subscribing to topic: {topic_name}")
         self.subscription = self.create_subscription(
             Float32MultiArray,
             topic_name,
@@ -57,13 +55,7 @@ class ImuListener(Node):
             10
         )
         self.subscription  # prevent unused variable warning
-        print("[ROS2] Subscription created successfully")
 
-# Start the ROS2 node in a background thread
-def start_ros2_node():
-    node = ImuListener()
-    rclpy.spin(node)
-    
 def main():
     # Initialize ROS2
     rclpy.init()
@@ -74,30 +66,10 @@ def main():
     # Load the MuJoCo model from XML file
     model = mj.MjModel.from_xml_path(MODEL_PATH)
     data = mj.MjData(model)
-    
-    # Debug: print gravity
-    print(f"Gravity: {model.opt.gravity}")
-    print(f"Model bodies: {[mj.mj_id2name(model, mj.mjtObj.mjOBJ_BODY, i) for i in range(model.nbody)]}")
-    print(f"Model actuators: {[mj.mj_id2name(model, mj.mjtObj.mjOBJ_ACTUATOR, i) for i in range(model.nu)]}")
 
     # Find actuator IDs for a1 (Lazy_Susan) and a2 (Arm)
     a1_id = mj.mj_name2id(model, mj.mjtObj.mjOBJ_ACTUATOR, "a1_motor")
     a2_id = mj.mj_name2id(model, mj.mjtObj.mjOBJ_ACTUATOR, "a2_motor")
-    a1_joint_id = mj.mj_name2id(model, mj.mjtObj.mjOBJ_JOINT, "a1")
-    a2_joint_id = mj.mj_name2id(model, mj.mjtObj.mjOBJ_JOINT, "a2")
-    print(f"Actuator IDs - a1: {a1_id}, a2: {a2_id}")
-    print(f"Joint IDs - a1: {a1_joint_id}, a2: {a2_joint_id}")
-    print(f"Joint a1 qpos index: {model.jnt_qposadr[a1_joint_id]}")
-    print(f"Joint a2 qpos index: {model.jnt_qposadr[a2_joint_id]}")
-    
-    # Test: Set motors to specific angles on startup
-    test_angle = 0.5  # radians (~28 degrees)
-    if a1_id != -1:
-        data.ctrl[a1_id] = test_angle
-    if a2_id != -1:
-        data.ctrl[a2_id] = test_angle
-    print(f"Test: Setting motor targets to {test_angle} radians")
-    # Note: base orientation quaternion is at qpos[3:7]
 
     # Setup the MuJoCo viewer window and camera
     glfw.init()
@@ -120,13 +92,6 @@ def main():
     target_fps = 60
     frame_dt = 1.0 / target_fps
     prev_render_t = time_prev
-    
-    # Debug counter
-    debug_counter = 0
-    
-    # Test mode: oscillate motors if no IMU data
-    test_mode = True
-    sim_time = 0.0
 
     # Main simulation loop
     while not glfw.window_should_close(window):
@@ -142,28 +107,11 @@ def main():
         
         # Physics steps (advance simulation)
         while elapsed_time >= sim_dt:
-            sim_time += sim_dt
-            
             # Get latest roll, yaw, pitch from IMU (in radians)
             roll, yaw, pitch = global_imu_angles
             
-            # Check if we're receiving IMU data
-            if np.allclose(global_imu_angles, 0) and test_mode:
-                # Test mode: oscillate motors
-                test_angle = 0.3 * np.sin(sim_time * 2)  # Oscillate at 2 rad/s
-                arm = test_angle * 180/np.pi
-                lazy_susan = test_angle * 180/np.pi
-            else:
-                # Use find_motor_angles to compute a1 (Lazy_Susan) and a2 (Arm) angles (expects degrees)
-                arm, lazy_susan = find_motor_angles(pitch * 180/np.pi, roll * 180/np.pi)
-            
-            # Debug output every 1000 steps
-            debug_counter += 1
-            if debug_counter % 1000 == 0:
-                print(f"IMU (deg): roll={roll*180/np.pi:.2f}, yaw={yaw*180/np.pi:.2f}, pitch={pitch*180/np.pi:.2f}")
-                print(f"Motor angles (deg): arm={arm:.2f}, lazy_susan={lazy_susan:.2f}")
-                print(f"Ctrl values: a1={data.ctrl[a1_id]:.4f}, a2={data.ctrl[a2_id]:.4f}")
-                print(f"Joint positions: a1={data.qpos[model.jnt_qposadr[a1_joint_id]]:.4f}, a2={data.qpos[model.jnt_qposadr[a2_joint_id]]:.4f}")
+            # Use find_motor_angles to compute a1 (Lazy_Susan) and a2 (Arm) angles (expects degrees)
+            arm, lazy_susan = find_motor_angles(pitch * 180/np.pi, roll * 180/np.pi)
             
             # Set actuator controls (convert degrees to radians)
             if a1_id != -1:
