@@ -84,6 +84,13 @@ def main():
     a1_id = mj.mj_name2id(model, mj.mjtObj.mjOBJ_ACTUATOR, "a1_motor")
     a2_id = mj.mj_name2id(model, mj.mjtObj.mjOBJ_ACTUATOR, "a2_motor")
     print(f"Actuator IDs - a1: {a1_id}, a2: {a2_id}")
+    
+    # Test: Set motors to 45 degrees on startup
+    if a1_id != -1:
+        data.ctrl[a1_id] = 45 * np.pi/180
+    if a2_id != -1:
+        data.ctrl[a2_id] = 45 * np.pi/180
+    print("Test: Setting motors to 45 degrees")
     # Note: base orientation quaternion is at qpos[3:7]
 
     # Setup the MuJoCo viewer window and camera
