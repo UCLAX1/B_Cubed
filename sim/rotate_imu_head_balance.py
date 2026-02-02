@@ -83,14 +83,20 @@ def main():
     # Find actuator IDs for a1 (Lazy_Susan) and a2 (Arm)
     a1_id = mj.mj_name2id(model, mj.mjtObj.mjOBJ_ACTUATOR, "a1_motor")
     a2_id = mj.mj_name2id(model, mj.mjtObj.mjOBJ_ACTUATOR, "a2_motor")
+    a1_joint_id = mj.mj_name2id(model, mj.mjtObj.mjOBJ_JOINT, "a1")
+    a2_joint_id = mj.mj_name2id(model, mj.mjtObj.mjOBJ_JOINT, "a2")
     print(f"Actuator IDs - a1: {a1_id}, a2: {a2_id}")
+    print(f"Joint IDs - a1: {a1_joint_id}, a2: {a2_joint_id}")
+    print(f"Joint a1 qpos index: {model.jnt_qposadr[a1_joint_id]}")
+    print(f"Joint a2 qpos index: {model.jnt_qposadr[a2_joint_id]}")
     
-    # Test: Set motors to 45 degrees on startup
+    # Test: Set motors to specific angles on startup
+    test_angle = 0.5  # radians (~28 degrees)
     if a1_id != -1:
-        data.ctrl[a1_id] = 45 * np.pi/180
+        data.ctrl[a1_id] = test_angle
     if a2_id != -1:
-        data.ctrl[a2_id] = 45 * np.pi/180
-    print("Test: Setting motors to 45 degrees")
+        data.ctrl[a2_id] = test_angle
+    print(f"Test: Setting motor targets to {test_angle} radians")
     # Note: base orientation quaternion is at qpos[3:7]
 
     # Setup the MuJoCo viewer window and camera
@@ -140,7 +146,8 @@ def main():
             if debug_counter % 1000 == 0:
                 print(f"IMU (deg): roll={roll*180/np.pi:.2f}, yaw={yaw*180/np.pi:.2f}, pitch={pitch*180/np.pi:.2f}")
                 print(f"Motor angles (deg): arm={arm:.2f}, lazy_susan={lazy_susan:.2f}")
-                print(f"Ctrl values: a1={lazy_susan*np.pi/180:.4f}, a2={arm*np.pi/180:.4f}")
+                print(f"Ctrl values: a1={data.ctrl[a1_id]:.4f}, a2={data.ctrl[a2_id]:.4f}")
+                print(f"Joint positions: a1={data.qpos[model.jnt_qposadr[a1_joint_id]]:.4f}, a2={data.qpos[model.jnt_qposadr[a2_joint_id]]:.4f}")
             
             
             # Use find_motor_angles to compute a1 (Lazy_Susan) and a2 (Arm) angles (expects degrees)
