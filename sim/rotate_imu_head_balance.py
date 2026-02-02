@@ -111,7 +111,7 @@ def main():
             # Get latest pitch, roll, yaw from IMU (in radians)
             pitch, roll, yaw = global_imu_angles
             # Set base orientation using Euler angles (MuJoCo expects (z, y, x) order)
-            quat = mj.euler2quat(yaw, pitch, roll)
+            quat = mj.mju_euler2Quat(np.array([yaw, pitch, roll]))
             data.qpos[3:7] = quat
             # Use find_motor_angles to compute a1 (Lazy_Susan) and a2 (Arm) angles (expects degrees)
             arm, lazy_susan = find_motor_angles(pitch * 180/np.pi, roll * 180/np.pi)
