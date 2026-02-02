@@ -43,11 +43,13 @@ def imu_callback(msg):
     # Expecting msg.data = [pitch, roll, yaw] in degrees, convert to radians
     if len(msg.data) == 3:
         global_imu_angles = np.array(msg.data) * np.pi / 180.0
+        print(f"[ROS2 Callback] Received: {msg.data}")
 
 # ROS2 Node that subscribes to the IMU topic
 class ImuListener(Node):
     def __init__(self, topic_name="/sense_hat/raw"):
         super().__init__('imu_listener')
+        print(f"[ROS2] Subscribing to topic: {topic_name}")
         self.subscription = self.create_subscription(
             Float32MultiArray,
             topic_name,
@@ -55,6 +57,7 @@ class ImuListener(Node):
             10
         )
         self.subscription  # prevent unused variable warning
+        print("[ROS2] Subscription created successfully")
 
 # Start the ROS2 node in a background thread
 def start_ros2_node():
