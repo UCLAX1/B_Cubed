@@ -130,12 +130,14 @@ def main():
 
     # Main simulation loop
     while not glfw.window_should_close(window):
+        # Spin ROS2 multiple times to receive callbacks (non-blocking)
+        for _ in range(10):
+            rclpy.spin_once(imu_node, timeout_sec=0.001)
+        
         c_time = time.perf_counter()
         frame_time = c_time - time_prev
         time_prev = c_time
         elapsed_time += frame_time
-# Spin ROS2 to receive callbacks (non-blocking)
-        rclpy.spin_once(imu_node, timeout_sec=0.0)
         
         
         # Physics steps (advance simulation)
