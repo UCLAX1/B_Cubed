@@ -71,6 +71,11 @@ def main():
     # Load the MuJoCo model from XML file
     model = mj.MjModel.from_xml_path(MODEL_PATH)
     data = mj.MjData(model)
+    
+    # Debug: print gravity
+    print(f"Gravity: {model.opt.gravity}")
+    print(f"Model bodies: {[mj.mj_id2name(model, mj.mjtObj.mjOBJ_BODY, i) for i in range(model.nbody)]}")
+    print(f"Model actuators: {[mj.mj_id2name(model, mj.mjtObj.mjOBJ_ACTUATOR, i) for i in range(model.nu)]}")
 
     # Find actuator IDs for a1 (Lazy_Susan) and a2 (Arm)
     a1_id = mj.mj_name2id(model, mj.mjtObj.mjOBJ_ACTUATOR, "a1_motor")
