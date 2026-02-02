@@ -61,15 +61,19 @@ class ImuListener(Node):
 
 # Start the ROS2 node in a background thread
 def start_ros2_node():
-    rclpy.init()
     node = ImuListener()
     rclpy.spin(node)
-    rclpy.shutdown()
-
+    
 def main():
+    # Initialize ROS2 BEFORE starting the thread
+    rclpy.init()
+    
     # Start ROS2 node in a separate thread to receive IMU data
     ros_thread = Thread(target=start_ros2_node, daemon=True)
     ros_thread.start()
+    
+    # Give ROS2 time to connect
+    time.sleep(1)
 
     # Load the MuJoCo model from XML file
     model = mj.MjModel.from_xml_path(MODEL_PATH)
