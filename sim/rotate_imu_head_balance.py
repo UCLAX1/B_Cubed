@@ -31,7 +31,7 @@ from std_msgs.msg import Float32MultiArray
 from head_balance_math import find_motor_angles
 
 # Path setup for imu_head_balance.xml (relative to this script)
-ROOT_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), "../.."))
+ROOT_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 MODEL_PATH = os.path.join(ROOT_DIR, "urdf", "imu_head_balance.xml")
 
 # Shared variable for IMU data (pitch, roll, yaw)
