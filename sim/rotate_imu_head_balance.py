@@ -28,7 +28,7 @@ from rclpy.node import Node
 from std_msgs.msg import Float32MultiArray
 
 # Import the function to compute motor angles from pitch/roll
-from sim.head_balance_math import find_motor_angles
+from head_balance_math import find_motor_angles
 
 # Path setup for imu_head_balance.xml (relative to this script)
 ROOT_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), "../.."))
