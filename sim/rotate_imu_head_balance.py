@@ -65,16 +65,12 @@ def start_ros2_node():
     rclpy.spin(node)
     
 def main():
-    # Initialize ROS2 BEFORE starting the thread
+    # Initialize ROS2
     rclpy.init()
     
-    # Start ROS2 node in a separate thread to receive IMU data
-    ros_thread = Thread(target=start_ros2_node, daemon=True)
-    ros_thread.start()
+    # Create ROS2 node for IMU subscription
+    imu_node = ImuListener()
     
-    # Give ROS2 time to connect
-    time.sleep(1)
-
     # Load the MuJoCo model from XML file
     model = mj.MjModel.from_xml_path(MODEL_PATH)
     data = mj.MjData(model)
@@ -121,7 +117,10 @@ def main():
         frame_time = c_time - time_prev
         time_prev = c_time
         elapsed_time += frame_time
-
+# Spin ROS2 to receive callbacks (non-blocking)
+        rclpy.spin_once(imu_node, timeout_sec=0.0)
+        
+        
         # Physics steps (advance simulation)
         while elapsed_time >= sim_dt:
             # Get latest roll, yaw, pitch from IMU (in radians)
@@ -158,6 +157,7 @@ def main():
             mj.mjr_render(viewport, scene, context)
             glfw.swap_buffers(window)
             glfw.poll_events()
+    rclpy.shutdown()
 
     # Clean up and close the window
     glfw.terminate()
