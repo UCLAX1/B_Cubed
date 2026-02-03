@@ -37,10 +37,10 @@ MODEL_PATH = os.path.join(ROOT_DIR, "urdf", "imu_head_balance.xml")
 # Shared variable for IMU data (pitch, roll, yaw)
 global_imu_angles = np.zeros(3)
 
-# ROS2 callback: receives IMU data as [roll, yaw, pitch] (degrees)
+# ROS2 callback: receives IMU data as [pitch, yaw, roll] (degrees)
 def imu_callback(msg):
     global global_imu_angles
-    # Expecting msg.data = [roll, yaw, pitch] in degrees, convert to radians
+    # Expecting msg.data = [pitch, yaw, roll] in degrees, convert to radians
     if len(msg.data) == 3:
         global_imu_angles = np.array(msg.data) * np.pi / 180.0
 
@@ -107,8 +107,8 @@ def main():
         
         # Physics steps (advance simulation)
         while elapsed_time >= sim_dt:
-            # Get latest roll, yaw, pitch from IMU (in radians)
-            roll, pitch, yaw = global_imu_angles
+            # Get latest pitch, yaw, roll from IMU (in radians)
+            pitch, yaw, roll = global_imu_angles
             
             # Print the current pitch and roll in degrees
             print(f"Pitch: {pitch * 180/np.pi:.2f} deg, Roll: {roll * 180/np.pi:.2f} deg")
