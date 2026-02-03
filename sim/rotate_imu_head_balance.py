@@ -107,8 +107,8 @@ def main():
         
         # Physics steps (advance simulation)
         while elapsed_time >= sim_dt:
-            # Get latest pitch, yaw, roll from IMU (in radians)
-            pitch, yaw, roll = global_imu_angles
+            # Get latest roll, yaw, pitch from IMU (in radians)
+            roll, pitch, yaw = global_imu_angles
             
             # Print the current pitch and roll in degrees
             print(f"Pitch: {pitch * 180/np.pi:.2f} deg, Roll: {roll * 180/np.pi:.2f} deg")
