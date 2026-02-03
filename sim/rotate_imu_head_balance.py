@@ -109,14 +109,26 @@ def main():
         while elapsed_time >= sim_dt:
             # Get latest roll, yaw, pitch from IMU (in radians)
             roll, pitch, yaw = global_imu_angles
-            pitch, yaw, roll = global_imu_angles
             
-            arm, lazy_susan = find_motor_angles(pitch * 180/np.pi, roll * 180/np.pi)
+            # Print the current pitch and roll in degrees (input)
+            pitch_deg = pitch * 180/np.pi
+            roll_deg = roll * 180/np.pi
+            print(f"[INPUT] Pitch: {pitch_deg:.2f}°, Roll: {roll_deg:.2f}°")
             
+            # Use find_motor_angles to compute a1 (Lazy_Susan) and a2 (Arm) angles (expects degrees)
+            arm, lazy_susan = find_motor_angles(pitch_deg, roll_deg)
+            
+            # Print the computed motor angles (output)
+            print(f"[OUTPUT] Arm: {arm:.2f}°, Lazy Susan: {lazy_susan:.2f}°")
+            
+            # Set actuator controls (convert degrees to radians)
             if a1_id != -1:
                 data.ctrl[a1_id] = lazy_susan * np.pi/180
             if a2_id != -1:
                 data.ctrl[a2_id] = arm * np.pi/180
+            # Step the simulation
+            mj.mj_step(model, data)
+            elapsed_time -= sim_dt
 
         # Rendering (update the viewer window)
         if c_time - prev_render_t >= frame_dt:
