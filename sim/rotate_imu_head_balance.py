@@ -113,13 +113,13 @@ def main():
             # Print the current pitch and roll in degrees (input)
             pitch_deg = pitch * 180/np.pi
             roll_deg = roll * 180/np.pi
-            print(f"[INPUT] Pitch: {pitch_deg:.2f}°, Roll: {roll_deg:.2f}°")
+            # print(f"[INPUT] Pitch: {pitch_deg:.2f}°, Roll: {roll_deg:.2f}°")
             
             # Use find_motor_angles to compute a1 (Lazy_Susan) and a2 (Arm) angles (expects degrees)
             arm, lazy_susan = find_motor_angles(pitch_deg, roll_deg)
             
             # Print the computed motor angles (output)
-            print(f"[OUTPUT] Arm: {arm:.2f}°, Lazy Susan: {lazy_susan:.2f}°")
+            # print(f"[OUTPUT] Arm: {arm:.2f}°, Lazy Susan: {lazy_susan:.2f}°")
             
             # Set actuator controls (convert degrees to radians)
             if a1_id != -1:
