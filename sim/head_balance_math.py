@@ -17,10 +17,8 @@ def find_motor_angles(pitch, roll):
     
     if pitch > np.pi: 
         Arm = -Arm
-    if roll > np.pi and roll < 3*np.pi/2: 
+    if roll > np.pi: 
         Lazy_Susan = - Lazy_Susan
-    elif roll >= 3*np.pi/2:
-        Lazy_Susan = Lazy_Susan
     
     return(Arm, Lazy_Susan)
 
