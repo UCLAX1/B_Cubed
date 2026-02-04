@@ -2,7 +2,7 @@ import math
 import numpy as np
 
 def find_motor_angles(pitch, roll):
-    pitch = -pitch * np.pi/180
+    pitch = pitch * np.pi/180
     roll = roll * np.pi/180
     Lazy_Susan = 0
     Arm = 0
