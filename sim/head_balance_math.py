@@ -19,10 +19,10 @@ def find_motor_angles(pitch, roll):
     if roll != 0:
         Lazy_Susan = math.acos(n1/math.sqrt(n1**2 + n2**2)) * 180/np.pi
     
-    if pitch > np.pi: 
+    if pitch < np.pi: 
         Arm = -Arm
     if roll > np.pi: 
         Lazy_Susan = - Lazy_Susan
     
-    return(-Arm, Lazy_Susan)
+    return(Arm, Lazy_Susan)
 
