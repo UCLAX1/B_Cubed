@@ -24,5 +24,5 @@ def find_motor_angles(pitch, roll):
     if roll > np.pi: 
         Lazy_Susan = - Lazy_Susan
     
-    return(Arm, Lazy_Susan)
+    return(-Arm, Lazy_Susan)
 
