@@ -4,6 +4,14 @@ import tkinter as tk
 import threading
 import time
 
+# tasks:
+# 1. see which power maps to which motor speed (figure out units)
+#   this will likely be done with a velocity PID controller reading from the encoder
+#   the main theory is that the encoder units are in rotations of the output shaft
+# 2. test with the pi
+#    perchance add a keyboard controller
+#    need to do the math for the velocity
+
 # https://stackoverflow.com/questions/459083/how-do-you-run-your-own-code-alongside-tkinters-event-loop
 class App(threading.Thread):
 

@@ -1,6 +1,7 @@
 from gpiozero import Servo
-from time import sleep
-
+from gpiozero import RotaryEncoder
+import time
+import math
 # main resource:
 # https://www.digikey.com/en/maker/tutorials/2021/how-to-control-servo-motors-with-a-raspberry-pi
 
@@ -14,16 +15,47 @@ from time import sleep
 
 
 servo = Servo(16)
-val = -1
+encoder = RotaryEncoder(26, 6) # params: "A" output gpio pin, "B" output gpio pin
+# white wire goes to gpio 5 (abs encoder position)
+# A: 26
+# B: 6
 
+# val = -1
+val = 0
+
+
+print("SLEEPING 1 SEC...")
+time.sleep(1)
+
+# timer in seconds
+timer = 0
+start = time.time()
+current_time = start
+previous_time = current_time
+dt = 0
+
+previous_encoder_steps = 0
+current_encoder_steps = 0
 
 try:
     while True:
-        servo.value = val
-        print(val)
-        sleep(0.1)
-        val = val + 0.1
-        if val > 1:
-            val = -1
+        current_time = time.time()
+        dt = previous_time - current_time
+        previous_time = current_time
+        timer = current_time - start
+
+        current_encoder_steps = encoder.steps
+
+        # half a period every second
+        val = math.sin(timer / (0.5 * (2.0 * math.pi)))
+
+        # servo.value = val
+        # print(val)
+        if current_encoder_steps != previous_encoder_steps:
+            print(encoder.steps)
+
+        previous_encoder_steps = current_encoder_steps
+
+
 except KeyboardInterrupt:
     print("Program stopped")
