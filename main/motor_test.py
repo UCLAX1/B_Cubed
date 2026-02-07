@@ -32,6 +32,7 @@ class App(threading.Thread):
 def exit_gracefully():
     motor.set_power(0.0)
     bus.close()
+    print("exception occurred")
     exit(1)
 
 
@@ -76,8 +77,8 @@ current_time = start
 previous_time = current_time
 dt = 0
 
-while timer < MAX_DURATION:
-    try:
+try:
+    while timer < MAX_DURATION:
 
         current_time = time.time()
         dt = previous_time - current_time
@@ -99,8 +100,8 @@ while timer < MAX_DURATION:
 
         previous_pos = current_pos
         # previous_pid_power = pid_power
-    except KeyboardInterrupt:
-        exit_gracefully()
+except KeyboardInterrupt:
+    exit_gracefully()
 
 
 

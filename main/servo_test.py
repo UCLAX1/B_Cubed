@@ -7,6 +7,11 @@ from time import sleep
 # backup:
 # https://www.instructables.com/Servo-Motor-Control-With-Raspberry-Pi/
 
+# step 1: connect servo to pi correctly
+# step 2: power the pi somehow
+# step 3: use tailscale to ssh to the pi
+# step 4: run the code on the pi
+
 
 servo = Servo(16)
 val = -1
