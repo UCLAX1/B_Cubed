@@ -2,6 +2,9 @@ from gpiozero import Servo
 from gpiozero import RotaryEncoder
 import time
 import math
+from gpiozero import RotaryEncoder
+import time
+import math
 # main resource:
 # https://www.digikey.com/en/maker/tutorials/2021/how-to-control-servo-motors-with-a-raspberry-pi
 
@@ -13,9 +16,14 @@ import math
 # step 3: use tailscale to ssh to the pi
 # step 4: run the code on the pi
 
+# step 1: connect servo to pi correctly
+# step 2: power the pi somehow
+# step 3: use tailscale to ssh to the pi
+# step 4: run the code on the pi
 
-servo = Servo(16)
-encoder = RotaryEncoder(26, 6) # params: "A" output gpio pin, "B" output gpio pin
+
+# servo = Servo(16)
+encoder = RotaryEncoder(26, 6, max_steps=100000000000000) # params: "A" output gpio pin, "B" output gpio pin
 # white wire goes to gpio 5 (abs encoder position)
 # A: 26
 # B: 6
@@ -46,16 +54,17 @@ try:
 
         current_encoder_steps = encoder.steps
 
-        # half a period every second
-        val = math.sin(timer / (0.5 * (2.0 * math.pi)))
+        # val = math.sin(timer)
 
         # servo.value = val
+        # servo.value = 0
         # print(val)
-        if current_encoder_steps != previous_encoder_steps:
+        
+        if (current_encoder_steps != previous_encoder_steps):
             print(encoder.steps)
-
         previous_encoder_steps = current_encoder_steps
 
 
 except KeyboardInterrupt:
     print("Program stopped")
+
