@@ -15,6 +15,7 @@ Run:
 import os
 import sys
 import time
+from xml.parsers.expat import model
 import numpy as np
 from threading import Thread
 
@@ -72,7 +73,6 @@ def main():
     a1_id = mj.mj_name2id(model, mj.mjtObj.mjOBJ_ACTUATOR, "a1_motor")
     a2_id = mj.mj_name2id(model, mj.mjtObj.mjOBJ_ACTUATOR, "a2_motor")
     h_id = mj.mj_name2id(model, mj.mjtObj.mjOBJ_ACTUATOR, "h_motor")
-
     # Setup the MuJoCo viewer window and camera
     glfw.init()
     window = glfw.create_window(720, 540, "IMU Head Balance", None, None)
