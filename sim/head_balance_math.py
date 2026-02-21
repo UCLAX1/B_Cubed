@@ -1,9 +1,10 @@
 import math 
 import numpy as np
 
-def find_motor_angles(pitch, roll):
+def find_motor_angles(pitch, roll, desired_angle):
     pitch = pitch * np.pi/180
     roll = roll * np.pi/180
+    desired_angle = desired_angle * np.pi/180;
     Lazy_Susan = 0
     Arm = 0
     
@@ -28,5 +29,21 @@ def find_motor_angles(pitch, roll):
     Arm = -Arm
     Lazy_Susan = -Lazy_Susan
 
-    return(Arm, Lazy_Susan)
+    if (abs(Lazy_Susan) > 90):
+        Arm = -Arm
+        if(Lazy_Susan > 0):
+            Lazy_Susan = Lazy_Susan - 180
+        else:
+            Lazy_Susan = Lazy_Susan + 180
+
+    head = desired_angle - Lazy_Susan
+
+    return(Arm, Lazy_Susan, head)
+
+
+a = int(input('Enter pitch number: '))
+b = int(input('Enter roll number: '))
+c = int(input('Enter desired head angle: '))
+
+print(f'motor angles are {find_motor_angles(a, b, c)}')
 
