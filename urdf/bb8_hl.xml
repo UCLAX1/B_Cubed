@@ -22,6 +22,10 @@
     <light name="top" pos="0 0 20" />
     <geom name="floor" type="plane" pos="0 0 0" size="10 10 0.1" material="grid" friction="1.0 0.005 0.0001" contype="1"
       conaffinity="1"/>
+    
+    <!-- Thin wall placed 2 meters in front of the robot's sphere (front face at y = 2.253) -->
+    <geom name="front_wall" type="box" size="1.0 0.05 1.0" pos="0.057 2.203 1.0" rgba="0.8 0.2 0.2 1" contype="1" conaffinity="1"/>
+
     <body name="base_link" pos="0 0 0.6" quat="-0.707107 0.707107 0 0">
       <!-- <freejoint /> -->
 

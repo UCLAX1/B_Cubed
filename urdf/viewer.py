@@ -3,7 +3,7 @@ import mujoco.viewer
 import numpy as np
 import time
 
-model = mujoco.MjModel.from_xml_path("bb8_car/urdf/bb8_car_converted.xml")
+model = mujoco.MjModel.from_xml_path("bb8_car/urdf/bb8_hl.xml")
 data = mujoco.MjData(model)
 mujoco.mj_resetData(model, data)
 
