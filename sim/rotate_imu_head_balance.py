@@ -36,6 +36,7 @@ MODEL_PATH = os.path.join(ROOT_DIR, "urdf", "imu_head_balance.xml")
 
 # Shared variable for IMU data (pitch, roll, yaw)
 global_imu_angles = np.zeros(3)
+desired_head = 0.0;
 
 # ROS2 callback: receives IMU data as [roll, yaw, pitch] (degrees)
 def imu_callback(msg):
@@ -70,6 +71,7 @@ def main():
     # Find actuator IDs for a1 (Lazy_Susan) and a2 (Arm)
     a1_id = mj.mj_name2id(model, mj.mjtObj.mjOBJ_ACTUATOR, "a1_motor")
     a2_id = mj.mj_name2id(model, mj.mjtObj.mjOBJ_ACTUATOR, "a2_motor")
+    h_id = mj.mj_name2id(model, mj.mjtObj.mjOBJ_ACTUATOR, "h_motor")
 
     # Setup the MuJoCo viewer window and camera
     glfw.init()
@@ -116,7 +118,7 @@ def main():
             # print(f"[INPUT] Pitch: {pitch_deg:.2f}°, Roll: {roll_deg:.2f}°")
             
             # Use find_motor_angles to compute a1 (Lazy_Susan) and a2 (Arm) angles (expects degrees)
-            arm, lazy_susan = find_motor_angles(pitch_deg, roll_deg)
+            arm, lazy_susan, head = find_motor_angles(pitch_deg, roll_deg, desired_head)
             
             # Print the computed motor angles (output)
             # print(f"[OUTPUT] Arm: {arm:.2f}°, Lazy Susan: {lazy_susan:.2f}°")
@@ -126,6 +128,8 @@ def main():
                 data.ctrl[a1_id] = lazy_susan * np.pi/180
             if a2_id != -1:
                 data.ctrl[a2_id] = arm * np.pi/180
+            if h_id != -1:
+                data.ctrl[h_id] = head * np.pi/180
             # Step the simulation
             mj.mj_step(model, data)
             elapsed_time -= sim_dt
