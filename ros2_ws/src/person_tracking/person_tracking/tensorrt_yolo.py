@@ -156,3 +156,138 @@ class TRTModel:
             out = out.T
 
         return out
+
+
+class TRTVectorModel:
+    """
+    Generic TensorRT runner for non-image inputs (e.g., gesture classifier: (1,42) -> (1,4)).
+    Works with TRT10 name API when available, otherwise TRT8 bindings.
+    """
+    def __init__(self, engine_path: str, input_shape=None):
+        """
+        input_shape: tuple like (1, 42) used if engine input has dynamic dims.
+                     If your engine is fixed shape, you can omit.
+        """
+        self.logger = trt.Logger(trt.Logger.ERROR)
+        trt.init_libnvinfer_plugins(self.logger, "")
+
+        with open(engine_path, "rb") as f, trt.Runtime(self.logger) as runtime:
+            self.engine = runtime.deserialize_cuda_engine(f.read())
+        if self.engine is None:
+            raise RuntimeError(f"Failed to deserialize TensorRT engine: {engine_path}")
+
+        self.context = self.engine.create_execution_context()
+        if self.context is None:
+            raise RuntimeError("Failed to create execution context")
+
+        self.stream = cuda.Stream()
+
+        self._use_name_api = hasattr(self.engine, "num_io_tensors") and hasattr(self.engine, "get_tensor_name")
+
+        if self._use_name_api:
+            self.input_names, self.output_names = self._get_io_names_trt10()
+            if len(self.input_names) != 1:
+                raise RuntimeError(f"Expected exactly 1 input tensor, got: {self.input_names}")
+            if len(self.output_names) != 1:
+                # Most classifiers are 1 output; adjust if yours has more.
+                raise RuntimeError(f"Expected exactly 1 output tensor, got: {self.output_names}")
+
+            self.input_name = self.input_names[0]
+            self.output_name = self.output_names[0]
+
+            in_shape = tuple(self.engine.get_tensor_shape(self.input_name))
+            if any(d < 0 for d in in_shape):
+                if input_shape is None:
+                    raise RuntimeError(
+                        f"Engine has dynamic input shape {in_shape} but input_shape was not provided."
+                    )
+                ok = self.context.set_input_shape(self.input_name, tuple(input_shape))
+                if not ok:
+                    raise RuntimeError(f"set_input_shape failed for {self.input_name} with shape {input_shape}")
+
+            self.in_shape = tuple(self.context.get_tensor_shape(self.input_name))
+            self.out_shape = tuple(self.context.get_tensor_shape(self.output_name))
+
+            self.in_dtype = trt.nptype(self.engine.get_tensor_dtype(self.input_name))
+            self.out_dtype = trt.nptype(self.engine.get_tensor_dtype(self.output_name))
+
+        else:
+            self.input_idx, self.output_idx = self._get_io_indices_trt8()
+            self.in_shape = tuple(self.engine.get_binding_shape(self.input_idx))
+            self.out_shape = tuple(self.engine.get_binding_shape(self.output_idx))
+
+            self.in_dtype = trt.nptype(self.engine.get_binding_dtype(self.input_idx))
+            self.out_dtype = trt.nptype(self.engine.get_binding_dtype(self.output_idx))
+
+            if any(d < 0 for d in self.in_shape):
+                if input_shape is None:
+                    raise RuntimeError(
+                        f"TRT8 engine has dynamic input shape {self.in_shape} but input_shape not provided."
+                    )
+                self.context.set_binding_shape(self.input_idx, tuple(input_shape))
+                self.in_shape = tuple(self.context.get_binding_shape(self.input_idx))
+                self.out_shape = tuple(self.context.get_binding_shape(self.output_idx))
+
+        # Allocate flat pinned buffers (works for any rank)
+        self.input_host = cuda.pagelocked_empty(int(np.prod(self.in_shape)), dtype=self.in_dtype)
+        self.output_host = cuda.pagelocked_empty(int(np.prod(self.out_shape)), dtype=self.out_dtype)
+
+        self.input_dev = cuda.mem_alloc(self.input_host.nbytes)
+        self.output_dev = cuda.mem_alloc(self.output_host.nbytes)
+
+        # TRT10: bind addresses by tensor name
+        if self._use_name_api and hasattr(self.context, "set_tensor_address"):
+            self.context.set_tensor_address(self.input_name, int(self.input_dev))
+            self.context.set_tensor_address(self.output_name, int(self.output_dev))
+
+    def _get_io_names_trt10(self):
+        inputs, outputs = [], []
+        for i in range(self.engine.num_io_tensors):
+            name = self.engine.get_tensor_name(i)
+            mode = self.engine.get_tensor_mode(name)
+            if mode == trt.TensorIOMode.INPUT:
+                inputs.append(name)
+            elif mode == trt.TensorIOMode.OUTPUT:
+                outputs.append(name)
+        return inputs, outputs
+
+    def _get_io_indices_trt8(self):
+        input_idx = output_idx = None
+        for i in range(self.engine.num_bindings):
+            if self.engine.binding_is_input(i):
+                input_idx = i
+            else:
+                output_idx = i
+        if input_idx is None or output_idx is None:
+            raise RuntimeError("Could not find input/output bindings in TRT8 fallback")
+        return input_idx, output_idx
+
+    def infer(self, x: np.ndarray) -> np.ndarray:
+        """
+        x: array-like matching self.in_shape (or broadcastable to it).
+        returns: output array shaped self.out_shape
+        """
+        x = np.asarray(x, dtype=self.in_dtype)
+        x = np.ascontiguousarray(x).reshape(self.in_shape)
+
+        np.copyto(self.input_host, x.ravel())
+        cuda.memcpy_htod_async(self.input_dev, self.input_host, self.stream)
+
+        if hasattr(self.context, "execute_async_v3"):
+            self.context.execute_async_v3(stream_handle=self.stream.handle)
+        elif hasattr(self.context, "execute_async_v2"):
+            bindings = [0] * self.engine.num_bindings
+            bindings[self.input_idx] = int(self.input_dev)
+            bindings[self.output_idx] = int(self.output_dev)
+            self.context.execute_async_v2(bindings=bindings, stream_handle=self.stream.handle)
+        else:
+            self.context.execute_v2([int(self.input_dev), int(self.output_dev)])
+
+        # cuda.memcpy_dtoh_async(self.output_dev, self.output_host, self.stream)  # <-- WRONG order
+        # Fix: dtoh is (host, device)
+        # (leaving this line commented so you see the correct call below)
+
+        cuda.memcpy_dtoh_async(self.output_host, self.output_dev, self.stream)
+        self.stream.synchronize()
+
+        return np.array(self.output_host, copy=True).reshape(self.out_shape)

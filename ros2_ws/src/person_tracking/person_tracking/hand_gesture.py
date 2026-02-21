@@ -6,10 +6,17 @@ from cv_bridge import CvBridge
 import threading
 import numpy as np
 
-from .tensorrt_yolo import TRTModel
-
+from .tensorrt_yolo import TRTModel, TRTVectorModel
 # Load TensorRT engine instead of PyTorch model
 model = TRTModel("/home/jetson-nano-x1/Documents/B_Cubed/models/hand_keypoints_trained.engine")
+
+GESTURES = ["open_hand", "fist", "point", "thumbs_up"]
+
+gesture_engine = TRTVectorModel(
+    "/home/jetson-nano-x1/Documents/B_Cubed/models/gesture_classifier.engine",
+    input_shape=(1, 42)  # only needed if the engine has dynamic dims
+)
+
 
 
 class RGBSubscriber(Node):
@@ -89,43 +96,23 @@ def nms_xyxy(boxes, scores, threshold = 0.45):
     return keep
 
 def detect_hands(frame, conf_thr=0.4, kpt_thr=0.25, nk=21, dim=3, hand_class=0):
-    trt_output = model.infer(frame)   # <-- uses global model
-
-    boxes = []
-    scores = []
-    kpts_out = []
-
-    # detections = []
-
-    """
-    frame: BGR image
-    model: your TRTModel(...)
-    Returns: annotated_frame, detections
-      detections: [{'bbox':(x1,y1,x2,y2), 'conf':float, 'kpts':[(x,y,c),...]}]
-    """
-    # trt_output = model.infer(frame)
+    trt_output = model.infer(frame)
 
     Hf, Wf = frame.shape[:2]
-    Hi, Wi = model.h, model.w  # input size the engine expects
+    Hi, Wi = model.h, model.w
 
     detections = []
     if trt_output is None or trt_output.size == 0:
         return frame, detections
 
-    # If output accidentally came as (D, N), transpose it
-    if trt_output.ndim == 2 and trt_output.shape[0] < trt_output.shape[1] and trt_output.shape[0] in (68, 69, 70, 84, 85, 90, 100):
-        # heuristic; safe to remove if you know your shape
-        pass
+    # transpose heuristic (optional)
     if trt_output.ndim == 2 and trt_output.shape[0] in (68, 69, 70, 84, 85) and trt_output.shape[1] > trt_output.shape[0]:
         trt_output = trt_output.T
 
-    # Scaling (assumes your TRTModel preprocess is a straight resize to Wi x Hi)
     sx = Wf / float(Wi)
     sy = Hf / float(Hi)
 
     row_len = trt_output.shape[1]
-
-    # infer nc from row length
     kpt_len = nk * dim
     nc = row_len - 4 - kpt_len
     if nc <= 0:
@@ -133,22 +120,17 @@ def detect_hands(frame, conf_thr=0.4, kpt_thr=0.25, nk=21, dim=3, hand_class=0):
 
     kpt_start = 4 + nc
 
-    for row in trt_output:
-        row = row.astype(np.float32)
+    boxes, scores, all_kpts = [], [], []
 
-        # class scores are [4 : 4+nc]
+    for row in trt_output.astype(np.float32):
         cls_scores = row[4:4+nc]
         cls = int(np.argmax(cls_scores))
         conf = float(cls_scores[cls])
 
-        # If your model only has 1 class, cls will always be 0 anyway
-        if cls != hand_class:
-            continue
-        if conf < conf_thr:
+        if cls != hand_class or conf < conf_thr:
             continue
 
         cx, cy, w, h = row[0:4]
-
         x1 = (cx - w / 2.0) * sx
         y1 = (cy - h / 2.0) * sy
         x2 = (cx + w / 2.0) * sx
@@ -158,76 +140,83 @@ def detect_hands(frame, conf_thr=0.4, kpt_thr=0.25, nk=21, dim=3, hand_class=0):
         y1 = max(0, min(Hf - 1, int(y1)))
         x2 = max(0, min(Wf - 1, int(x2)))
         y2 = max(0, min(Hf - 1, int(y2)))
-
         if x2 <= x1 or y2 <= y1:
             continue
-        boxes.append([x1, y1, x2, y2])
-        scores.append(conf)
 
-        # extract keypoints
-        kpts_raw = row[kpt_start:kpt_start + kpt_len]
-        kpts = kpts_raw.reshape(nk, dim)  # (nk,3) = (x,y,conf) typically
+        kpts_raw = row[kpt_start:kpt_start + kpt_len].reshape(nk, dim)  # (21,3)
 
-        # If kpts are normalized, scale them up
-        # We’ll check first point as heuristic
-        if np.max(kpts[:, :2]) <= 1.5:
-            kpts[:, 0] *= Wi
-            kpts[:, 1] *= Hi
+        # If kpts look normalized, scale to model input pixels
+        if np.max(kpts_raw[:, :2]) <= 1.5:
+            kpts_raw[:, 0] *= Wi
+            kpts_raw[:, 1] *= Hi
 
-        # scale keypoints to original frame, clip
+        # Scale to original frame
+        kpts = []
         for i in range(nk):
-            xk = float(kpts[i, 0] * sx)
-            yk = float(kpts[i, 1] * sy)
-            ck = float(kpts[i, 2]) if dim >= 3 else 1.0
-
+            xk = float(kpts_raw[i, 0] * sx)
+            yk = float(kpts_raw[i, 1] * sy)
+            ck = float(kpts_raw[i, 2]) if dim >= 3 else 1.0
             xk = max(0.0, min(float(Wf - 1), xk))
             yk = max(0.0, min(float(Hf - 1), yk))
-            kpts_out.append((xk, yk, ck))
-        #
-        # detections.append({'bbox': (x1, y1, x2, y2), 'conf': conf, 'kpts': kpts_out})
-        #
-        # # ---- draw ----
-        # cv2.rectangle(frame, (x1, y1), (x2, y2), (0, 255, 0), 2)
-        # cv2.putText(frame, f"hand {conf:.2f}", (x1, max(0, y1 - 10)),
-        #             cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 0), 2)
-        #
-        # # keypoints
-        # for (xk, yk, ck) in kpts_out:
-        #     if ck < kpt_thr:
-        #         continue
-        #     cv2.circle(frame, (int(xk), int(yk)), 3, (0, 255, 255), -1)
-        #
-        # # skeleton lines
-        # for a, b in HAND_EDGES:
-        #     xa, ya, ca = kpts_out[a]
-        #     xb, yb, cb = kpts_out[b]
-        #     if ca < kpt_thr or cb < kpt_thr:
-        #         continue
-        #     cv2.line(frame, (int(xa), int(ya)), (int(xb), int(yb)), (255, 0, 0), 2)
-    keep = nms_xyxy(boxes, scores)
-    boxes = [boxes[i] for i in keep]
-    scores = [scores[i] for i in keep]
-    detections.append({'bbox': boxes, 'conf': scores})
+            kpts.append((xk, yk, ck))
 
-    for (x1, y1, x2, y2), conf in zip(boxes, scores):
-        cv2.rectangle(frame, (x1, y1), (x2, y2), (0, 255, 0), 2)
-        cv2.putText(
-            frame,
-            f"hand {conf:.2f}",
-            (x1, max(0, y1 - 10)),
-            cv2.FONT_HERSHEY_SIMPLEX,
-            0.6,
-            (0, 255, 0),
-            2
-        )
-    if len(kpts_out) > 0:
+        boxes.append([x1, y1, x2, y2])
+        scores.append(conf)
+        all_kpts.append(kpts)
+
+    keep = nms_xyxy(boxes, scores)
+
+    # Build final detections list AFTER NMS
+    for i in keep:
+        x1, y1, x2, y2 = boxes[i]
+        conf = scores[i]
+        kpts = all_kpts[i]
+        detections.append({"bbox": (x1, y1, x2, y2), "conf": conf, "kpts": kpts})
+
+        # draw bbox
+        cv2.rectangle(frame, (x1, y1), (x2, y2), (0,255,0), 2)
+
+        # draw skeleton
         for a, b in HAND_EDGES:
-            xa, ya, ca = kpts_out[a]
-            xb, yb, cb = kpts_out[b]
+            xa, ya, ca = kpts[a]
+            xb, yb, cb = kpts[b]
             if ca < kpt_thr or cb < kpt_thr:
                 continue
-            cv2.line(frame, (int(xa), int(ya)), (int(xb), int(yb)), (255, 0, 0), 2)
+            cv2.line(frame, (int(xa), int(ya)), (int(xb), int(yb)), (255,0,0), 2)
+
+        # draw keypoints
+        for (xk, yk, ck) in kpts:
+            if ck < kpt_thr:
+                continue
+            cv2.circle(frame, (int(xk), int(yk)), 3, (0,255,255), -1)
+
+        cv2.putText(frame, f"hand {conf:.2f}", (x1, max(0, y1-10)),
+                    cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0,255,0), 2)
+    for det in detections:
+        x1, y1, x2, y2 = det["bbox"]
+        kpts = np.array(det["kpts"], dtype=np.float32)  # (21,3)
+
+        pts_xy = kpts[:, :2].reshape(1, 42)  # (1,42)
+
+        # If you trained using raw pixel coords, use pts_xy as-is.
+        # If you trained normalized-to-bb   ox, do that same normalization here.
+        # (Only keep this if that matches training!)
+        bw = max(1.0, float(x2 - x1))
+        bh = max(1.0, float(y2 - y1))
+        cx = (x1 + x2) * 0.5
+        cy = (y1 + y2) * 0.5
+        pts_xy[:, 0::2] = (pts_xy[:, 0::2] - cx) / bw
+        pts_xy[:, 1::2] = (pts_xy[:, 1::2] - cy) / bh
+
+        logits = gesture_engine.infer(pts_xy)  # likely (1,4)
+        pred = int(np.argmax(logits, axis=1)[0])
+        gesture = GESTURES[pred]
+
+        cv2.putText(frame, gesture, (x1, max(0, y1 - 15)),
+                    cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 255, 0), 2)
+
     return frame, detections
+
 
 
 def main():
