@@ -14,6 +14,12 @@ gnome-terminal --title="person tracking" -- bash -lc "
   exec bash
 "
 
+gnome-terminal --title="depth processing" -- bash -lc "
+  source '/home/jetson-nano-x1/Documents/B_Cubed/ros2_ws/install/local_setup.bash'
+  ros2 run depth_processing depth
+  exec bash
+"
+
 ros2 launch zed_wrapper zed_camera.launch.py camera_model:=zedm
 
 
