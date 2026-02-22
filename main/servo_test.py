@@ -78,7 +78,7 @@ class ServoEx(Servo):
     POSITION_CENTERING_DEADZONE_ERROR: float = 0.08
 
     # center position every x seconds
-    POSITION_CENTERING_DELAY: float = 0.50
+    POSITION_CENTERING_DELAY: float = 0.25
 
     def __init__(self, servo_pin: int, encoder_pin_a: int, encoder_pin_b: int, absolute_encoder_pin: int):
         super().__init__(servo_pin)
@@ -136,8 +136,14 @@ class ServoEx(Servo):
     def get_position(self) -> float:
         return self.encoder.steps / self.COUNTS_PER_REVOLUTION
 
+    def get_position_radians(self) -> float:
+        return (self.encoder.steps / self.COUNTS_PER_REVOLUTION) * 2.0 * math.pi
+
     def get_absolute_position(self) -> float:
         return self.absolute_encoder.position
+
+    def get_absolute_position_radians(self) -> float:
+        return self.absolute_encoder.position * 2.0 * math.pi
 
     def update(self):
         self.update_absolute_encoder()
@@ -194,8 +200,6 @@ class ServoEx(Servo):
         with open(self.INIT_POS_FILE, "w") as f:
             json.dump(data, f, indent=2)
 
-    def get_position_radians(self) -> float:
-        return (self.encoder.steps / self.COUNTS_PER_REVOLUTION) * 2 * math.pi
 
     def __get_data_from_servo_init_pos_file(self) -> dict:
         data = {}
