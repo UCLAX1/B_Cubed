@@ -37,20 +37,21 @@ screen = pygame.display.set_mode(WINDOW_SIZE)
 pygame.display.set_caption('Pygame Keyboard Test')
 pygame.mouse.set_visible(1)
 
+
 bus = CanBus(channel='COM5', interface='slcan', bitrate=1000000)
 bus.start()
 
-top_left_motor = Motor(bus, 3)
-top_left_motor.set_power(0)
-top_left_motor.reset_encoder()
-
-top_right_motor = Motor(bus, 7)
-top_right_motor.set_power(0)
-top_right_motor.reset_encoder()
+# top_left_motor = Motor(bus, 3)
+# top_left_motor.set_power(0)
+# top_left_motor.reset_encoder()
 #
-bottom_motor = Motor(bus, 9)
-bottom_motor.set_power(0)
-bottom_motor.reset_encoder()
+# top_right_motor = Motor(bus, 7)
+# top_right_motor.set_power(0)
+# top_right_motor.reset_encoder()
+#
+# bottom_motor = Motor(bus, 9)
+# bottom_motor.set_power(0)
+# bottom_motor.reset_encoder()
 
 
 DRAW_SCALE = 100.0
@@ -65,20 +66,6 @@ bottom_vec = np.array([1, 0])
 
 # MAX_DURATION = 30
 MAX_DURATION = 9999
-
-
-pidController = PIDController(0.04, 0.00, -0.004)
-pidController.set_setpoint(10.0)
-
-pid_power : float
-previous_pid_power : float = 0.0
-current_pos : float = 0.0
-previous_pos : float = 0.0
-
-pos_error = 0.01
-pid_power_error = 0.01
-
-
 
 print("SLEEPING 1 SEC...")
 time.sleep(1)
@@ -115,8 +102,6 @@ right_pressed = False
 cw_pressed = False
 ccw_pressed = False
 
-speed_increase_pressed = False
-speed_decrease_pressed = False
 
 mouse_pressed = False
 
@@ -128,8 +113,8 @@ try:
         previous_time = current_time
         timer = current_time - start
 
-        # motor.send_heartbeat()
-        # current_pos = motor.get_pos()
+        # HANDLE INPUT
+
         for event in pygame.event.get():
             if event.type == MOUSEBUTTONDOWN:
                 mouse_pressed = True
@@ -138,30 +123,21 @@ try:
                 mouse_pressed = False
 
             if event.type == KEYDOWN:
-                if event.key == K_w: up_pressed = True
-                if event.key == K_s: down_pressed = True
-                if event.key == K_a: left_pressed = True
-                if event.key == K_d: right_pressed = True
 
                 if event.key == K_RIGHT: cw_pressed = True
                 if event.key == K_LEFT: ccw_pressed = True
 
-                if event.key == K_UP: speed_increase_pressed = True
-                if event.key == K_DOWN: speed_decrease_pressed = True
 
             if event.type == KEYUP:
-                if event.key == K_w: up_pressed = False
-                if event.key == K_s: down_pressed = False
-                if event.key == K_a: left_pressed = False
-                if event.key == K_d: right_pressed = False
 
                 if event.key == K_RIGHT: cw_pressed = False
                 if event.key == K_LEFT: ccw_pressed = False
 
-                if event.key == K_UP: speed_increase_pressed = False
-                if event.key == K_DOWN: speed_decrease_pressed = False
 
         mouse_pos = np.array(pygame.mouse.get_pos())
+
+        # CALCULATE MOTOR SPEEDS AND VELOCITIES
+
         mouse_vec = (mouse_pos - MIDDLE_COORD) / DRAW_SCALE
         mouse_vec = np.array([mouse_vec[0], -mouse_vec[1]])
 
@@ -172,33 +148,26 @@ try:
             else:
                 velocity = np.array([0.0, 0.0])
 
-        angular_velocity += SPEED_CHANGE_RATE * dt * (ccw_pressed - cw_pressed)
-        # speed += SPEED_CHANGE_RATE * dt * (speed_increase_pressed - speed_decrease_pressed)
-        # speed = np.clip(0, 1, speed)
 
-        # velocity[0] = right_pressed - left_pressed
-        # velocity[1] = up_pressed - down_pressed
-        # # set magnitude to speed
-        # norm = np.linalg.norm(velocity)
-        # if norm != 0.0:
-        #     velocity *= speed / norm
-        # # print("velocity: ", velocity)
+        angular_velocity += SPEED_CHANGE_RATE * dt * (ccw_pressed - cw_pressed)
 
         top_left_speed: float = np.dot(velocity, top_left_vec) + angular_velocity
         top_right_speed: float = np.dot(velocity, top_right_vec) + angular_velocity
         bottom_speed: float = np.dot(velocity, bottom_vec) + angular_velocity
 
-        top_left_motor.send_heartbeat()
-        top_right_motor.send_heartbeat()
-        bottom_motor.send_heartbeat()
+        # MAKE MOTORS NOT BREAK
 
-        top_left_motor.set_power(top_left_speed)
-        top_right_motor.set_power(top_right_speed)
-        bottom_motor.set_power(bottom_speed)
+        # top_left_motor.send_heartbeat()
+        # top_right_motor.send_heartbeat()
+        # bottom_motor.send_heartbeat()
 
+        # SET MOTOR SPEEDS
 
-        previous_pos = current_pos
-        # previous_pid_power = pid_power
+        # top_left_motor.set_power(top_left_speed)
+        # top_right_motor.set_power(top_right_speed)
+        # bottom_motor.set_power(bottom_speed)
+
+        # DRAWING
 
         screen.fill((0, 0, 0))
 
