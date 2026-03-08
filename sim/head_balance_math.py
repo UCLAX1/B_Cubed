@@ -1,10 +1,9 @@
-import math 
-import numpy as np
+import math
 
 def find_motor_angles(pitch, roll, desired_angle):
-    pitch = pitch * np.pi/180
-    roll = roll * np.pi/180
-    desired_angle = desired_angle * np.pi/180;
+    pitch = pitch * math.pi/180
+    roll = roll * math.pi/180
+    desired_angle = desired_angle * math.pi/180;
     Lazy_Susan = 0
     Arm = 0
     
@@ -12,17 +11,17 @@ def find_motor_angles(pitch, roll, desired_angle):
     n2 = -math.sin(roll)
     n3 = math.cos(pitch) * math.cos(roll)
     
-    Arm = math.acos(n3) * 180/np.pi
+    Arm = math.acos(n3) * 180/math.pi
     # Determine sign of Arm based on n1 (forward/backward direction)
     if n1 > 0:
         Arm = -Arm
     
     if roll != 0:
-        Lazy_Susan = math.acos(n1/math.sqrt(n1**2 + n2**2)) * 180/np.pi
+        Lazy_Susan = math.acos(n1/math.sqrt(n1**2 + n2**2)) * 180/math.pi
     
-    if pitch > np.pi: 
+    if pitch > math.pi: 
         Arm = -Arm
-    if roll > np.pi: 
+    if roll > math.pi: 
         Lazy_Susan = - Lazy_Susan
     
     # Flip directions
@@ -41,9 +40,10 @@ def find_motor_angles(pitch, roll, desired_angle):
     return(Arm, Lazy_Susan, head)
 
 
-a = int(input('Enter pitch number: '))
-b = int(input('Enter roll number: '))
-c = int(input('Enter desired head angle: '))
+if __name__ == "__main__":
+    a = int(input('Enter pitch number: '))
+    b = int(input('Enter roll number: '))
+    c = int(input('Enter desired head angle: '))
 
-print(f'motor angles are {find_motor_angles(a, b, c)}')
+    print(f'motor angles are {find_motor_angles(a, b, c)}')
 
