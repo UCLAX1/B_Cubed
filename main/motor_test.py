@@ -50,7 +50,7 @@ app = App()
 
 bus = CanBus(channel='COM5', interface='slcan', bitrate=1000000)
 bus.start()
-motor = Motor(bus, 1)
+motor = Motor(bus, 3)
 
 # motor.set_power(-0.125)
 # motor.set_power(1.0)
