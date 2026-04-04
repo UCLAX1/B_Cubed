@@ -115,6 +115,95 @@ class ZedDepthViewer(Node):
             # Stop spinning cleanly
             rclpy.shutdown()
 
+    def blur_depth_image(self, depth_image, h, w):
+        ratio = 100
+        kernel_width = max(1, w // ratio)
+        kernel_height = max(1, h // ratio)
+
+        kernel = np.ones((kernel_height, kernel_width), np.float32)
+        kernel /= (kernel_width * kernel_height)
+
+        # filter2D will not behave nicely with NaNs, so temporarily replace invalids
+        valid_mask = np.isfinite(depth_image) & (depth_image > 0.0)
+        filled = depth_image.copy()
+        filled[~valid_mask] = 0.0
+
+        blurred_sum = cv2.filter2D(filled, -1, kernel)
+        blurred_count = cv2.filter2D(valid_mask.astype(np.float32), -1, kernel)
+
+        out = np.full_like(filled, np.nan, dtype=np.float32)
+        good = blurred_count > 1e-6
+        out[good] = blurred_sum[good] / blurred_count[good]
+
+        return out
+
+    def blur_depth_image_gpu(self, depth_image, h, w):
+        ratio = 100
+        kernel_width = max(1, w // ratio)
+        kernel_height = max(1, h // ratio)
+
+        kernel = np.ones((kernel_height, kernel_width), np.float32)
+        kernel /= (kernel_width * kernel_height)
+
+        valid_mask = (np.isfinite(depth_image) & (depth_image > 0.0)).astype(np.float32)
+        filled = depth_image.copy().astype(np.float32)
+        filled[~np.isfinite(filled)] = 0.0
+        filled[filled <= 0.0] = 0.0
+
+        gpu_image = cv2.cuda_GpuMat()
+        gpu_mask = cv2.cuda_GpuMat()
+        gpu_image.upload(filled)
+        gpu_mask.upload(valid_mask)
+
+        gpu_filter = cv2.cuda.createLinearFilter(cv2.CV_32F, cv2.CV_32F, kernel)
+
+        gpu_blurred_sum = gpu_filter.apply(gpu_image)
+        gpu_blurred_count = gpu_filter.apply(gpu_mask)
+
+        blurred_sum = gpu_blurred_sum.download()
+        blurred_count = gpu_blurred_count.download()
+
+        out = np.full_like(filled, np.nan, dtype=np.float32)
+        good = blurred_count > 1e-6
+        out[good] = blurred_sum[good] / blurred_count[good]
+
+        return out
+
+    def get_cell_data(self, depth_image, grid_size):
+        h, w = depth_image.shape
+
+        depth_image = depth_image.astype(np.float32, copy=False)
+        valid_mask = np.isfinite(depth_image) & (depth_image > 0.0)
+
+        if not np.any(valid_mask):
+            return np.full(grid_size, np.inf, dtype=np.float32)
+
+        try:
+            if cv2.cuda.getCudaEnabledDeviceCount() > 0:
+                blurred_depth_image = self.blur_depth_image_gpu(depth_image, h, w)
+            else:
+                blurred_depth_image = self.blur_depth_image(depth_image, h, w)
+        except Exception:
+            blurred_depth_image = self.blur_depth_image(depth_image, h, w)
+
+        cell_h, cell_w = h // grid_size[0], w // grid_size[1]
+        cell_averages = np.full(grid_size, np.inf, dtype=np.float32)
+
+        for i in range(grid_size[0]):
+            for j in range(grid_size[1]):
+                row_start = i * cell_h
+                row_end = h if i == grid_size[0] - 1 else (i + 1) * cell_h
+                col_start = j * cell_w
+                col_end = w if j == grid_size[1] - 1 else (j + 1) * cell_w
+
+                cell = blurred_depth_image[row_start:row_end, col_start:col_end]
+                valid_cell = cell[np.isfinite(cell) & (cell > 0.0)]
+
+                if valid_cell.size > 0:
+                    cell_averages[i, j] = float(np.mean(valid_cell))
+
+        return cell_averages
+
     def _make_depth_view(self, depth_m: np.ndarray) -> np.ndarray:
         # Clip and normalize to 0..255
         d = depth_m.copy()
