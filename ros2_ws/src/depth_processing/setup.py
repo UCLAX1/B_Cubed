@@ -15,7 +15,7 @@ setup(
     zip_safe=True,
     maintainer='jetson-nano-x1',
     maintainer_email='saturnvdt@gmail.com',
-    description='TODO: Package description',
+    description='ROS 2 nodes for ZED depth viewing and positional tracking',
     license='Apache-2.0',
     extras_require={
         'test': [
@@ -25,6 +25,7 @@ setup(
     entry_points={
         'console_scripts': [
             'depth = depth_processing.depth_processing:main',
+            'zed_tracking = depth_processing.zed_positional_tracking:main',
         ],
     },
 )
