@@ -1,0 +1,14 @@
+zed_scan_from_cloud:
+  ros__parameters:
+    target_frame: base_link
+    transform_tolerance: 0.1
+    min_height: -0.20
+    max_height: 0.60
+    angle_min: -1.5707963
+    angle_max: 1.5707963
+    angle_increment: 0.00872665
+    scan_time: 0.1
+    range_min: 0.25
+    range_max: 8.0
+    use_inf: true
+    inf_epsilon: 1.0
