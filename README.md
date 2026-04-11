@@ -26,8 +26,14 @@ Useful options:
 - `--ros-args -p input_pose_topic:=/zed/zed_node/pose`
 - `--ros-args -p input_pose_cov_topic:=/zed/zed_node/pose_with_covariance`
 - `--ros-args -p input_odom_topic:=/zed/zed_node/odom`
+- `--ros-args -p input_image_topic:=/zed/zed_node/rgb/color/rect/image/compressed`
+- `--ros-args -p input_image_is_compressed:=true`
 - `--ros-args -p require_odom_for_localized:=true`
+- `--ros-args -p show_visualization_window:=true`
 
 Notes:
-- `zed_tracking` does not access the camera directly. It only subscribes to the ZED ROS 2 wrapper topics.
+- `zed_tracking` does not estimate localization itself. The ZED ROS 2 wrapper does that work; this node republishes the wrapper outputs in simpler topics for the rest of the robot.
 - The wrapper pose is the camera pose in the map frame. For your BB-8 style robot, that means this is the head-mounted camera pose unless you add a separate transform/fusion step to estimate the body center.
+- The node now also subscribes to the ZED color stream so it can show a live camera view with localization status, pose text, and a top-down trajectory inset.
+- It publishes the recent camera trajectory on `zed/path`, which is useful in RViz.
+- It publishes an annotated image on `zed/localization_view/compressed`, so you can inspect the localization overlay with `rqt_image_view` if the OpenCV window is inconvenient.
