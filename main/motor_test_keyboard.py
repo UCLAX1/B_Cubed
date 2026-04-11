@@ -16,186 +16,214 @@ import numpy as np
 
 # https://stackoverflow.com/questions/459083/how-do-you-run-your-own-code-alongside-tkinters-event-loop
 
+
+
 def exit_gracefully():
-    # motor.set_power(0.0)
+    # top_left_motor.set_power(0)
+    # top_right_motor.set_power(0)
+    # bottom_motor.set_power(0)
     # bus.close()
     print("exception occurred")
     exit(1)
 
-WINDOW_SIZE = np.array([640, 480])
-MIDDLE_COORD = WINDOW_SIZE / 2
 
-def flip_y(vec: np.ndarray) -> np.ndarray:
-    return np.array([vec[0], 2 * MIDDLE_COORD[1] - vec[1]])
+class InputHandler:
 
+    def __init__(self):
+        self.up_pressed: bool = False
+        self.down_pressed: bool = False
+        self.left_pressed: bool = False
+        self.right_pressed: bool = False
 
+        self.cw_pressed: bool = False
+        self.ccw_pressed: bool = False
 
-# https://stackoverflow.com/questions/13207678/whats-the-simplest-way-of-detecting-keyboard-input-in-a-script-from-the-termina
-# https://www.pygame.org/docs/tut/newbieguide.html
-pygame.init()
-screen = pygame.display.set_mode(WINDOW_SIZE)
-pygame.display.set_caption('Pygame Keyboard Test')
-pygame.mouse.set_visible(1)
+        self.mouse_pressed: bool = False
 
-
-bus = CanBus(channel='COM5', interface='slcan', bitrate=1000000)
-bus.start()
-
-# top_left_motor = Motor(bus, 3)
-# top_left_motor.set_power(0)
-# top_left_motor.reset_encoder()
-#
-# top_right_motor = Motor(bus, 7)
-# top_right_motor.set_power(0)
-# top_right_motor.reset_encoder()
-#
-# bottom_motor = Motor(bus, 9)
-# bottom_motor.set_power(0)
-# bottom_motor.reset_encoder()
+        self.mouse_pos: np.ndarray = np.array([0.0, 0.0])
 
 
-DRAW_SCALE = 100.0
-
-top_left_coord = MIDDLE_COORD + DRAW_SCALE * np.array([-np.sqrt(3) / 2, 0.5])
-top_right_coord = MIDDLE_COORD + DRAW_SCALE * np.array([np.sqrt(3) / 2, 0.5])
-bottom_coord = MIDDLE_COORD + DRAW_SCALE * np.array([0, -1])
-
-top_left_vec = np.array([-0.5, -np.sqrt(3)/2])
-top_right_vec = np.array([-0.5, np.sqrt(3)/2])
-bottom_vec = np.array([1, 0])
-
-# MAX_DURATION = 30
-MAX_DURATION = 9999
-
-print("SLEEPING 1 SEC...")
-time.sleep(1)
-
-# timer in seconds
-timer = 0
-start = time.time()
-current_time = start
-previous_time = current_time
-dt = 0
-
-velocity = np.array([0.0, 0.0])
-speed: float = 1.0
-# speed: float = 0.01
-angular_velocity : float = 0
-
-# units per second
-SPEED_CHANGE_RATE : float = 0.5
-
-# 0: top left wheel
-# 1: top right wheel
-# 2: bottom wheel
-# TODO: make this work
-wheel_velocities = np.array([0.0, 0.0, 0.0])
-
-mouse_pos : np.ndarray = np.array([0.0, 0.0])
-mouse_vec : np.ndarray = np.array([0.0, 0.0])
-
-up_pressed = False
-down_pressed = False
-left_pressed = False
-right_pressed = False
-
-cw_pressed = False
-ccw_pressed = False
-
-
-mouse_pressed = False
-
-try:
-    while timer < MAX_DURATION:
-
-        current_time = time.time()
-        dt = current_time - previous_time
-        previous_time = current_time
-        timer = current_time - start
-
+    def get_input(self):
         # HANDLE INPUT
 
         for event in pygame.event.get():
             if event.type == MOUSEBUTTONDOWN:
-                mouse_pressed = True
+                self.mouse_pressed = True
 
             if event.type == MOUSEBUTTONUP:
-                mouse_pressed = False
+                self.mouse_pressed = False
 
             if event.type == KEYDOWN:
 
-                if event.key == K_RIGHT: cw_pressed = True
-                if event.key == K_LEFT: ccw_pressed = True
+                if event.key == K_RIGHT: self.cw_pressed = True
+                if event.key == K_LEFT: self.ccw_pressed = True
 
 
             if event.type == KEYUP:
 
-                if event.key == K_RIGHT: cw_pressed = False
-                if event.key == K_LEFT: ccw_pressed = False
+                if event.key == K_RIGHT: self.cw_pressed = False
+                if event.key == K_LEFT: self.ccw_pressed = False
 
 
-        mouse_pos = np.array(pygame.mouse.get_pos())
+        self.mouse_pos = np.array(pygame.mouse.get_pos())
 
+
+
+
+class App:
+    WINDOW_SIZE: np.ndarray = np.array([640, 480])
+    MIDDLE_COORD: np.ndarray = WINDOW_SIZE / 2
+    DRAW_SCALE: float = 100.0
+
+    # units per second
+    SPEED_CHANGE_RATE: float = 0.5
+
+    TOP_LEFT_WHEEL_COORD: np.ndarray = MIDDLE_COORD + DRAW_SCALE * np.array([-np.sqrt(3) / 2, 0.5])
+    TOP_RIGHT_WHEEL_COORD: np.ndarray = MIDDLE_COORD + DRAW_SCALE * np.array([np.sqrt(3) / 2, 0.5])
+    BOTTOM_WHEEL_COORD: np.ndarray = MIDDLE_COORD + DRAW_SCALE * np.array([0, -1])
+
+    # vectors perpendicular to the wheels
+    # the axes that the wheels are lying on
+    TOP_LEFT_VEC: np.ndarray = np.array([-0.5, -np.sqrt(3) / 2])
+    TOP_RIGHT_VEC: np.ndarray = np.array([-0.5, np.sqrt(3) / 2])
+    BOTTOM_VEC: np.ndarray = np.array([1, 0])
+
+    MAX_DURATION: float = 9999.0
+
+    def __init__(self):
+        # timer in seconds
+        self.timer: float = 0.0
+        self.start: float = time.time()
+        self.current_time: float = self.start
+        self.previous_time: float = self.current_time
+        self.dt: float = 0.0
+
+        self.input_handler = InputHandler()
+        self.mouse_vec: np.ndarray = np.array([0.0, 0.0])
+
+        self.velocity: np.ndarray = np.array([0.0, 0.0])
+        self.speed: float = 1.0
+        # speed: float = 0.01
+        self.angular_velocity: float = 0
+
+        self.top_left_speed: float = 0.0
+        self.top_right_speed: float = 0.0
+        self.bottom_speed: float = 0.0
+
+        self.bus: CanBus = CanBus(channel='COM5', interface='slcan', bitrate=1000000)
+        self.bus.start()
+
+        if not self.bus.started_successfully():
+            print("CAN bus did not start, only running graphical")
+
+        if self.bus.started_successfully():
+            self.top_left_motor: Motor = Motor(self.bus, 3)
+            self.top_left_motor.set_power(0)
+            self.top_left_motor.reset_encoder()
+
+            self.top_right_motor: Motor = Motor(self.bus, 7)
+            self.top_right_motor.set_power(0)
+            self.top_right_motor.reset_encoder()
+
+            self.bottom_motor = Motor(self.bus, 9)
+            self.bottom_motor.set_power(0)
+            self.bottom_motor.reset_encoder()
+
+        # https://stackoverflow.com/questions/13207678/whats-the-simplest-way-of-detecting-keyboard-input-in-a-script-from-the-termina
+        # https://www.pygame.org/docs/tut/newbieguide.html
+        pygame.init()
+        self.screen = pygame.display.set_mode(self.WINDOW_SIZE)
+        pygame.display.set_caption('Pygame Keyboard Test')
+        pygame.mouse.set_visible(1)
+
+        # 0: top left wheel
+        # 1: top right wheel
+        # 2: bottom wheel
+        # TODO: make this work
+        # self.wheel_velocities: np.ndarray = np.array([0.0, 0.0, 0.0])
+
+    def flip_y(self, vec: np.ndarray) -> np.ndarray:
+        return np.array([vec[0], 2 * self.MIDDLE_COORD[1] - vec[1]])
+
+    def run(self):
+        try:
+            while self.timer < self.MAX_DURATION:
+                self.current_time = time.time()
+                self.dt = self.current_time - self.previous_time
+                self.previous_time = self.current_time
+                self.timer = self.current_time - self.start
+
+                app.update(self.dt)
+                app.draw()
+
+                # DRAWING
+
+
+        except KeyboardInterrupt:
+            exit_gracefully()
+
+    def update(self, dt):
+        self.input_handler.get_input()
         # CALCULATE MOTOR SPEEDS AND VELOCITIES
 
-        mouse_vec = (mouse_pos - MIDDLE_COORD) / DRAW_SCALE
-        mouse_vec = np.array([mouse_vec[0], -mouse_vec[1]])
+        self.mouse_vec = (self.input_handler.mouse_pos - self.MIDDLE_COORD) / self.DRAW_SCALE
+        self.mouse_vec = np.array([self.mouse_vec[0], -self.mouse_vec[1]])
 
-        if mouse_pressed:
-            speed = np.clip(0, 1, np.linalg.norm(mouse_vec))
+        if self.input_handler.mouse_pressed:
+            speed = np.clip(0, 1, np.linalg.norm(self.mouse_vec))
             if speed != 0.0:
-                velocity = (mouse_vec / np.linalg.norm(mouse_vec)) * speed
+                self.velocity = (self.mouse_vec / np.linalg.norm(self.mouse_vec)) * speed
             else:
-                velocity = np.array([0.0, 0.0])
+                self.velocity = np.array([0.0, 0.0])
 
 
-        angular_velocity += SPEED_CHANGE_RATE * dt * (ccw_pressed - cw_pressed)
+        self.angular_velocity += self.SPEED_CHANGE_RATE * dt * (self.input_handler.ccw_pressed - self.input_handler.cw_pressed)
+        # angular_velocity *= RADIUS
 
-        top_left_speed: float = np.dot(velocity, top_left_vec) + angular_velocity
-        top_right_speed: float = np.dot(velocity, top_right_vec) + angular_velocity
-        bottom_speed: float = np.dot(velocity, bottom_vec) + angular_velocity
+        self.top_left_speed: float = np.dot(self.velocity, self.TOP_LEFT_VEC) + self.angular_velocity
+        self.top_right_speed: float = np.dot(self.velocity, self.TOP_RIGHT_VEC) + self.angular_velocity
+        self.bottom_speed: float = np.dot(self.velocity, self.BOTTOM_VEC) + self.angular_velocity
 
-        # MAKE MOTORS NOT BREAK
+        if self.bus.started_successfully():
+            # MAKE MOTORS NOT BREAK
 
-        # top_left_motor.send_heartbeat()
-        # top_right_motor.send_heartbeat()
-        # bottom_motor.send_heartbeat()
+            self.top_left_motor.send_heartbeat()
+            self.top_right_motor.send_heartbeat()
+            self.bottom_motor.send_heartbeat()
 
-        # SET MOTOR SPEEDS
+            # SET MOTOR SPEEDS
 
-        # top_left_motor.set_power(top_left_speed)
-        # top_right_motor.set_power(top_right_speed)
-        # bottom_motor.set_power(bottom_speed)
+            self.top_left_motor.set_power(self.top_left_speed)
+            self.top_right_motor.set_power(self.top_right_speed)
+            self.bottom_motor.set_power(self.bottom_speed)
 
-        # DRAWING
+    def draw(self):
+        self.screen.fill((0, 0, 0))
 
-        screen.fill((0, 0, 0))
+        pygame.draw.circle(self.screen, (255, 255, 255), self.MIDDLE_COORD, self.DRAW_SCALE - 2, 2)
 
-        pygame.draw.circle(screen, (255, 255, 255), MIDDLE_COORD, DRAW_SCALE - 2, 2)
-
-        pygame.draw.line(screen, (0, 0, 255), flip_y(top_left_coord - DRAW_SCALE * top_left_vec), flip_y(top_left_coord + DRAW_SCALE * top_left_vec), 1)
-        pygame.draw.line(screen, (0, 0, 255), flip_y(top_right_coord - DRAW_SCALE * top_right_vec), flip_y(top_right_coord + DRAW_SCALE * top_right_vec), 1)
-        pygame.draw.line(screen, (0, 0, 255), flip_y(bottom_coord - DRAW_SCALE * bottom_vec), flip_y(bottom_coord + DRAW_SCALE * bottom_vec), 1)
+        pygame.draw.line(self.screen, (0, 0, 255), self.flip_y(self.TOP_LEFT_WHEEL_COORD - self.DRAW_SCALE * self.TOP_LEFT_VEC), self.flip_y(self.TOP_LEFT_WHEEL_COORD + self.DRAW_SCALE * self.TOP_LEFT_VEC), 1)
+        pygame.draw.line(self.screen, (0, 0, 255), self.flip_y(self.TOP_RIGHT_WHEEL_COORD - self.DRAW_SCALE * self.TOP_RIGHT_VEC), self.flip_y(self.TOP_RIGHT_WHEEL_COORD + self.DRAW_SCALE * self.TOP_RIGHT_VEC), 1)
+        pygame.draw.line(self.screen, (0, 0, 255), self.flip_y(self.BOTTOM_WHEEL_COORD - self.DRAW_SCALE * self.BOTTOM_VEC), self.flip_y(self.BOTTOM_WHEEL_COORD + self.DRAW_SCALE * self.BOTTOM_VEC), 1)
 
 
-        pygame.draw.line(screen, (255, 0, 0), flip_y(MIDDLE_COORD), flip_y(MIDDLE_COORD + DRAW_SCALE * velocity), 5)
+        pygame.draw.line(self.screen, (255, 0, 0), self.flip_y(self.MIDDLE_COORD), self.flip_y(self.MIDDLE_COORD + self.DRAW_SCALE * self.velocity), 5)
 
-        pygame.draw.line(screen, (0, 255, 0), flip_y(top_left_coord), flip_y(top_left_coord + DRAW_SCALE * top_left_speed * top_left_vec), 5)
-        pygame.draw.line(screen, (0, 255, 0), flip_y(top_right_coord), flip_y(top_right_coord + DRAW_SCALE * top_right_speed * top_right_vec), 5)
-        pygame.draw.line(screen, (0, 255, 0), flip_y(bottom_coord), flip_y(bottom_coord + DRAW_SCALE * bottom_speed * bottom_vec), 5)
+        pygame.draw.line(self.screen, (0, 255, 0), self.flip_y(self.TOP_LEFT_WHEEL_COORD), self.flip_y(self.TOP_LEFT_WHEEL_COORD + self.DRAW_SCALE * self.top_left_speed * self.TOP_LEFT_VEC), 5)
+        pygame.draw.line(self.screen, (0, 255, 0), self.flip_y(self.TOP_RIGHT_WHEEL_COORD), self.flip_y(self.TOP_RIGHT_WHEEL_COORD + self.DRAW_SCALE * self.top_right_speed * self.TOP_RIGHT_VEC), 5)
+        pygame.draw.line(self.screen, (0, 255, 0), self.flip_y(self.BOTTOM_WHEEL_COORD), self.flip_y(self.BOTTOM_WHEEL_COORD + self.DRAW_SCALE * self.bottom_speed * self.BOTTOM_VEC), 5)
 
         pygame.display.update()
 
-except KeyboardInterrupt:
-    exit_gracefully()
+
+print("SLEEPING 1 SEC...")
+time.sleep(1)
 
 
 
-# motor.set_power(0.0)
-# motor.reset_encoder()
+app = App()
 
-exit_gracefully()
-# bus.close()
+app.run()
 
 # on testing, the motor position updates about every 0.01-0.03 seconds
 

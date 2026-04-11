@@ -60,6 +60,9 @@ class CanBus:
             print(f"Failed to start CAN bus: {e}")
             self.bus = None
 
+    def started_successfully(self) -> bool:
+        return self.bus is not None
+
     # def send_message(self, arbitration_id: int, data: list[int]):
     def send_message(self, arbitration_id: int, data: bytes):
         """ send a list of bytes to the can bus
