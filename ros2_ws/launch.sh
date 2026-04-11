@@ -12,13 +12,13 @@ gnome-terminal --title="person tracking" -- bash -lc "
   source '/home/jetson-nano-x1/Documents/B_Cubed/ros2_ws/install/local_setup.bash'
   ros2 run person_tracking person
   exec bash
-"
-
-gnome-terminal --title="depth processing" -- bash -lc "
-  source '/home/jetson-nano-x1/Documents/B_Cubed/ros2_ws/install/local_setup.bash'
-  ros2 run depth_processing depth
-  exec bash
-"
+#"
+#
+#gnome-terminal --title="depth processing" -- bash -lc "
+#  source '/home/jetson-nano-x1/Documents/B_Cubed/ros2_ws/install/local_setup.bash'
+#  ros2 run depth_processing depth
+#  exec bash
+#"
 
 gnome-terminal --title="zed tracking" -- bash -lc "
   source '/home/jetson-nano-x1/Documents/B_Cubed/ros2_ws/install/local_setup.bash'
