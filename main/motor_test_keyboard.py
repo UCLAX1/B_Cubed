@@ -75,6 +75,9 @@ class App:
     MIDDLE_COORD: np.ndarray = WINDOW_SIZE / 2
     DRAW_SCALE: float = 100.0
 
+    TARGET_UPDATES_PER_SECOND: float = 240.0
+    TARGET_SECONDS_PER_UPDATE: float = 1.0 / TARGET_UPDATES_PER_SECOND
+
     # units per second
     SPEED_CHANGE_RATE: float = 0.5
 
@@ -97,6 +100,7 @@ class App:
         self.current_time: float = self.start
         self.previous_time: float = self.current_time
         self.dt: float = 0.0
+        self.accumulator: float = 0.0
 
         self.input_handler = InputHandler()
         self.mouse_vec: np.ndarray = np.array([0.0, 0.0])
@@ -153,7 +157,12 @@ class App:
                 self.previous_time = self.current_time
                 self.timer = self.current_time - self.start
 
-                app.update(self.dt)
+                # delta time
+                self.accumulator += self.dt
+                while self.accumulator > self.TARGET_SECONDS_PER_UPDATE:
+                    app.update(self.dt)
+                    self.accumulator -= self.TARGET_SECONDS_PER_UPDATE
+
                 app.draw()
 
                 # DRAWING
@@ -200,6 +209,11 @@ class App:
     def draw(self):
         self.screen.fill((0, 0, 0))
 
+        intersection_a_scalar = np.dot(self.TOP_RIGHT_VEC, self.TOP_RIGHT_VEC - self.TOP_LEFT_VEC) / np.cross(self.TOP_RIGHT_VEC, self.TOP_LEFT_VEC)
+        intersection_a = self.TOP_LEFT_VEC + intersection_a_scalar * np.array(-self.TOP_LEFT_VEC[1], self.TOP_LEFT_VEC[0])
+        pygame.draw.circle(self.screen, (0, 255, 255), self.DRAW_SCALE * self.flip_y(intersection_a), 4, 2)
+
+
         pygame.draw.circle(self.screen, (255, 255, 255), self.MIDDLE_COORD, self.DRAW_SCALE - 2, 2)
 
         pygame.draw.line(self.screen, (0, 0, 255), self.flip_y(self.TOP_LEFT_WHEEL_COORD - self.DRAW_SCALE * self.TOP_LEFT_VEC), self.flip_y(self.TOP_LEFT_WHEEL_COORD + self.DRAW_SCALE * self.TOP_LEFT_VEC), 1)
@@ -216,10 +230,8 @@ class App:
         pygame.display.update()
 
 
-print("SLEEPING 1 SEC...")
-time.sleep(1)
-
-
+# print("SLEEPING 0.5 SEC...")
+# time.sleep(0.5)
 
 app = App()
 
