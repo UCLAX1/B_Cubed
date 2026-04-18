@@ -97,12 +97,12 @@
 
   <actuator>
     <position name="a1_motor" joint="a1" kp="100" kv="20" ctrlrange="-3.14 3.14" />
-    <position name="a2_motor" joint="a2" kp="50" kv="15" ctrlrange="-1.57 1.57" />
-  <position name="h_motor" joint="h" kp="300" kv="10" ctrlrange="-3.14 3.14" />
-    <!-- <motor name="w1_motor" joint="w1" gear="5" ctrllimited="true" ctrlrange="-1 1" />
+    <position name="a2_motor" joint="a2" kp="50" kv="15" ctrlrange="-0.5236 0.5236" />
+  <position name="h_motor" joint="h" kp="300" kv="10" />
+    <motor name="w1_motor" joint="w1" gear="5" ctrllimited="true" ctrlrange="-1 1" />
     <motor name="w2_motor" joint="w2" gear="5" ctrllimited="true" ctrlrange="-1 1" />
     <motor name="w3_motor" joint="w3" gear="5" ctrllimited="true" ctrlrange="-1 1" />
-    <motor name="w4_motor" joint="w4" gear="5" ctrllimited="true" ctrlrange="-1 1" /> -->
+    <motor name="w4_motor" joint="w4" gear="5" ctrllimited="true" ctrlrange="-1 1" />
 
   </actuator>
 </mujoco>

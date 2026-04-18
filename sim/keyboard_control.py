@@ -67,17 +67,15 @@ def keyboard_callback(window, key, scancode, action, mods):
         # k, l keys: a2 joint increase and decrease (0.2 increment)
         elif key == glfw.KEY_O:
             state.target_a2_pos += 0.2
-            state.target_a2_pos = max(0.7, min(1.5, state.target_a2_pos))
+            state.target_a2_pos = max(-0.5236, min(0.5236, state.target_a2_pos))
         elif key == glfw.KEY_K:
             state.target_a2_pos -= 0.2
-            state.target_a2_pos = max(0.7, min(1.5, state.target_a2_pos))
+            state.target_a2_pos = max(-0.5236, min(0.5236, state.target_a2_pos))
         # o, p keys: h (head) joint increase and decrease (0.2 increment)
         elif key == glfw.KEY_P:
             state.target_h_pos += 0.2
-            state.target_h_pos = max(-3.14, min(3.14, state.target_h_pos))
         elif key == glfw.KEY_L:
             state.target_h_pos -= 0.2
-            state.target_h_pos = max(-3.14, min(3.14, state.target_h_pos))
 
         # Camera control (Note: Left/Right arrows are now used for angular velocity)
         # Only Up/Down arrows and other keys control camera now

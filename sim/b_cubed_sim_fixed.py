@@ -12,8 +12,12 @@ if ROOT_DIR not in sys.path:
 import keyboard_control
 from enums import CameraControl
 from control_state import state
-from preset_actions import update_preset_actions
 from input_management import update_input_matrix
+from state_machine import (
+    KeyboardInputSource,
+    MuJoCoOutputSink,
+    RobotStateMachine,
+)
 
 # load model & set up data and camera
 # Use absolute path so script can be run from anywhere
@@ -41,6 +45,29 @@ base_link_body_id = mj.mj_name2id(model, mj.mjtObj.mjOBJ_BODY, "base_link")
 a1_motor_id = mj.mj_name2id(model, mj.mjtObj.mjOBJ_ACTUATOR, "a1_motor")
 a2_motor_id = mj.mj_name2id(model, mj.mjtObj.mjOBJ_ACTUATOR, "a2_motor")
 h_motor_id = mj.mj_name2id(model, mj.mjtObj.mjOBJ_ACTUATOR, "h_motor")
+w1_motor_id = mj.mj_name2id(model, mj.mjtObj.mjOBJ_ACTUATOR, "w1_motor")
+w2_motor_id = mj.mj_name2id(model, mj.mjtObj.mjOBJ_ACTUATOR, "w2_motor")
+w3_motor_id = mj.mj_name2id(model, mj.mjtObj.mjOBJ_ACTUATOR, "w3_motor")
+w4_motor_id = mj.mj_name2id(model, mj.mjtObj.mjOBJ_ACTUATOR, "w4_motor")
+
+actuator_ids = {
+    "a1_motor": a1_motor_id,
+    "a2_motor": a2_motor_id,
+    "h_motor": h_motor_id,
+    "w1_motor": w1_motor_id,
+    "w2_motor": w2_motor_id,
+    "w3_motor": w3_motor_id,
+    "w4_motor": w4_motor_id,
+}
+
+# Adapter wiring point:
+# - replace KeyboardInputSource() with VisionInputSource(...) for CV inputs
+# - replace MuJoCoOutputSink(...) with RealMotorOutputSink(...) for hardware
+state_machine = RobotStateMachine(
+    state=state,
+    input_source=KeyboardInputSource(),
+    output_sink=MuJoCoOutputSink(actuator_ids),
+)
 
 # Get joint IDs and qpos addresses for joint position tracking
 a1_joint_id = mj.mj_name2id(model, mj.mjtObj.mjOBJ_JOINT, "a1")
@@ -82,25 +109,7 @@ while not glfw.window_should_close(window):
     # simulation loop
     while elapsed_time >= sim_dt:
 
-        # ============================================
-        # PRESET ACTIONS UPDATE
-        # ============================================
-        # Update joint targets from preset actions (if active)
-        update_preset_actions(dt=sim_dt)
-
-        # ============================================
-        # JOINT POSITION CONTROL SECTION
-        # ============================================
-        # Individual joint position control (i, j, k, l, o, p keys)
-        # Positions are updated one-time per key press in keyboard_control.py
-        # Just apply the current target positions from state
-        if a1_motor_id != -1:
-            data.ctrl[a1_motor_id] = state.target_a1_pos
-        if a2_motor_id != -1:
-            data.ctrl[a2_motor_id] = state.target_a2_pos
-        if h_motor_id != -1:
-            data.ctrl[h_motor_id] = state.target_h_pos
-        # ============================================
+        state_machine.step(sim_dt, output_context={"data": data})
 
         # Handle camera controls (matching mujoco_test.py behavior)
         if state.cam_control == CameraControl.UP:
@@ -138,8 +147,6 @@ while not glfw.window_should_close(window):
         mj.mj_step(model, data)
         elapsed_time -= sim_dt
 
-
-
     # Rendering Steps
     if c_time - prev_render_t >= frame_dt:
         prev_render_t = c_time
@@ -155,6 +162,5 @@ while not glfw.window_should_close(window):
         mj.mjr_render(viewport, scene, context)
         glfw.swap_buffers(window)
         glfw.poll_events()
-
 
 glfw.terminate()

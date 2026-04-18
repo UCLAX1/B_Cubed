@@ -301,6 +301,6 @@ def update_preset_actions(dt: float = 0.001) -> None:
     
     # Convert output from degrees to radians and apply to targets
     # output[0]=h, output[1]=a2(head_bend), output[2]=a1(base_rotate)
-    state.target_h_pos = np.clip(np.radians(output[0]), -3.14, 3.14)
+    state.target_h_pos = np.radians(output[0])
     state.target_a2_pos = np.clip(np.radians(output[1]), -1.57, 1.57)
     state.target_a1_pos = np.clip(np.radians(output[2]), -3.14, 3.14)

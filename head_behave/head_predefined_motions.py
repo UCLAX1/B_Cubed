@@ -164,19 +164,23 @@ def head_spin(
     start_time: Optional[float] = None,
     t: float = 0.0
 ) -> tuple[float, float]:
-    """Rotate head continuously (360° rotation)."""
+    """Rotate head continuously without wrapping.
+
+    The returned angle keeps increasing for as long as the action is active.
+    """
     period = 2.0
+    revolutions_per_second = 1.0 / period
     
     if controller is not None:
         st = start_time if start_time is not None else getattr(controller, "current_time", 0.0)
         if abs(t) < 1e-9:
             controller.move([360.0, 0.0, 0.0], durations=[period, period, period], start_time=st)
-        return 0.0, (t + dt) % period
+        return 360.0 * revolutions_per_second * t, t + dt
 
-    # Live mode: compute value and advance timer
-    val = (t / period) * 360.0 % 360.0
+    # Live mode: compute value and advance timer without modulo wrap.
+    val = 360.0 * revolutions_per_second * t
     output_arr[0] = val
-    return val, (t + dt) % period
+    return val, t + dt
 
 
 def hurt_sequence(output_arr: np.ndarray, dt: float = 0.02, state_mem: Optional[Dict] = None, controller: Optional[object] = None, start_time: Optional[float] = None) -> None:
