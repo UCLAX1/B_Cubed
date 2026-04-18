@@ -24,7 +24,7 @@ def generate_launch_description() -> LaunchDescription:
             DeclareLaunchArgument("cloud_topic", default_value="/zed/zed_node/point_cloud/cloud_registered"),
             DeclareLaunchArgument("scan_topic", default_value="/scan"),
             DeclareLaunchArgument("base_frame", default_value="base_link"),
-            DeclareLaunchArgument("base_to_camera_translation", default_value="0.0,0.0,0.0"),
+            DeclareLaunchArgument("base_to_camera_translation", default_value="0.0,0.0,0.381"),
             DeclareLaunchArgument("base_to_camera_rpy", default_value="0.0,0.0,0.0"),
             DeclareLaunchArgument("localization_params_file", default_value=localization_params),
             DeclareLaunchArgument("map_file_name", default_value=""),

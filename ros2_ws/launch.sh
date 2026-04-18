@@ -21,7 +21,7 @@ MAP_YAML_FILE="${MAP_PREFIX}.yaml"
 MAP_POSEGRAPH_FILE="${MAP_PREFIX}.posegraph"
 MAP_DATA_FILE="${MAP_PREFIX}.data"
 
-BASE_TO_CAMERA_TRANSLATION="${BASE_TO_CAMERA_TRANSLATION:-0.0,0.0,0.0}"
+BASE_TO_CAMERA_TRANSLATION="${BASE_TO_CAMERA_TRANSLATION:-0.0,0.0,0.381}"
 BASE_TO_CAMERA_RPY="${BASE_TO_CAMERA_RPY:-0.0,0.0,0.0}"
 BASE_FRAME="${BASE_FRAME:-base_link}"
 
@@ -88,7 +88,10 @@ launch_navigation_mode() {
       "echo 'Localization mode is running with serialized map prefix:'; \
        echo '  $MAP_PREFIX'; \
        echo; \
-       echo 'Set NAVIGATION_AUTOSTART_COMMAND in ros2_ws/launch.sh or your shell to auto-run the full navigation stack here.'"
+       echo 'Set NAVIGATION_AUTOSTART_COMMAND to:'; \
+       echo '  ros2 launch depth_processing zed_nav2_bringup.launch.py'; \
+       echo; \
+       echo 'Then rerun ros2_ws/launch.sh to auto-run the full navigation stack here.'"
   fi
 
   echo "Post-mapping mode launched."

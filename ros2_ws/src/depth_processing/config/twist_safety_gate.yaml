@@ -1,0 +1,17 @@
+twist_safety_gate:
+  ros__parameters:
+    input_cmd_topic: cmd_vel_nav
+    output_cmd_topic: cmd_vel
+    localized_topic: zed/is_localized
+    scan_topic: scan
+    status_topic: nav/cmd_vel_gate_status
+    require_localized: true
+    block_on_unknown_localization: true
+    require_scan: true
+    publish_zero_when_blocked: true
+    zero_if_cmd_times_out: true
+    localized_timeout_sec: 1.0
+    scan_timeout_sec: 1.0
+    cmd_timeout_sec: 0.75
+    status_publish_rate_hz: 2.0
+    zero_publish_rate_hz: 5.0

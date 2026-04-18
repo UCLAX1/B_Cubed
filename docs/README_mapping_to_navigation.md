@@ -95,6 +95,14 @@ In this phase:
 
 This is the correct phase to start full navigation behavior.
 
+The repo now includes a dedicated Nav2 bringup launch for this phase:
+
+- [zed_nav2_bringup.launch.py](/Users/sara/Documents/My-Documents/X1 Robotics/B_Cubed/ros2_ws/src/depth_processing/launch/zed_nav2_bringup.launch.py)
+
+If you want a single command for the full stack instead, use:
+
+- [zed_slam_nav.launch.py](/Users/sara/Documents/My-Documents/X1 Robotics/B_Cubed/ros2_ws/src/depth_processing/launch/zed_slam_nav.launch.py)
+
 ## Why this approach fits changing environments
 
 The robot is expected to work in many different environments, so a prebuilt static map is not enough.
@@ -111,7 +119,8 @@ The repo now covers the mapping and post-mapping localization stages, but there 
 
 - `zed_base_adapter` assumes the ZED camera is rigidly mounted relative to the robot body
 - the 2D scan depends on point cloud projection parameters that may need tuning per robot geometry
-- the full autonomous Nav2 bringup is not yet wired into the repo as a finished stack
+- the robot still needs a real hardware node that consumes `/cmd_vel`
+- Nav2 tuning still needs to be validated on the physical robot
 
 ## Practical mental model
 
@@ -121,4 +130,5 @@ The easiest way to think about the whole flow is:
 - `zed_base_adapter` turns camera motion into robot motion
 - `zed_mapping_pass.launch.py` learns the environment
 - `zed_localization_mode.launch.py` reuses that learned environment
-- the future Nav2 stack will sit on top of the localization mode
+- `zed_nav2_bringup.launch.py` runs the autonomous stack on top of the map and scan topics
+- `zed_slam_nav.launch.py` can run SLAM plus Nav2 in one command

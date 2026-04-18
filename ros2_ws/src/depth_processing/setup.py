@@ -30,6 +30,7 @@ setup(
             'depth = depth_processing.depth_processing:main',
             'zed_tracking = depth_processing.zed_positional_tracking:main',
             'zed_base_adapter = depth_processing.zed_base_adapter:main',
+            'twist_safety_gate = depth_processing.twist_safety_gate:main',
         ],
     },
 )

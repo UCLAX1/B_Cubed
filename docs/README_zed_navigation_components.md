@@ -14,6 +14,9 @@ Those three launch files are:
 - [zed_mapping_pass.launch.py](/Users/sara/Documents/My-Documents/X1 Robotics/B_Cubed/ros2_ws/src/depth_processing/launch/zed_mapping_pass.launch.py)
 - [zed_localization_mode.launch.py](/Users/sara/Documents/My-Documents/X1 Robotics/B_Cubed/ros2_ws/src/depth_processing/launch/zed_localization_mode.launch.py)
 
+For the newer Nav2 and full-stack launches that sit on top of these three, see
+[Full SLAM stack](/Users/sara/Documents/My-Documents/X1 Robotics/B_Cubed/docs/README_full_slam_stack.md).
+
 ## What problem `zed_base_adapter` solves
 
 The ZED wrapper gives you localization for the camera.

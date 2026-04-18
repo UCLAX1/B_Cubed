@@ -86,18 +86,28 @@ Recommended first navigation path:
 What is now in the repo:
 
 - `ros2 launch depth_processing zed_localization_mode.launch.py map_file_name:=/absolute/path/to/posegraph_prefix`
+- `ros2 launch depth_processing zed_nav2_bringup.launch.py`
+- `ros2 launch depth_processing zed_slam_nav.launch.py slam_mode:=mapping|localization`
+- `config/nav2_zed_slam.yaml`
+- `config/twist_safety_gate.yaml`
 
-What still needs to be added:
+What is now wired:
 
-- a validated `cmd_vel` consumer on the robot
-- Nav2 parameter files tuned for the robot footprint, controller limits, and costmaps
-- a map-save and mode-switch workflow helper
-- recovery behavior and safety gating before autonomous motion
+- Nav2 planner, controller, behavior server, and BT navigator
+- a `cmd_vel` safety gate that blocks motion when localization or `/scan` goes stale
+- one-command bringup for continuous mapping plus navigation in the same run
+
+What still needs field validation:
+
+- the real robot drive node that consumes `/cmd_vel`
+- final footprint, velocity, and costmap tuning on hardware
+- the operator workflow for deciding when to stay in mapping mode versus switching to localization mode
 
 ## Suggested order
 
 1. Validate `zed_base_adapter` and `/scan` on the Jetson.
 2. Run `zed_mapping_pass.launch.py` and tune the mapping pass until the square route produces a clean occupancy map.
 3. Save a first map and serialized pose graph, then relaunch with `zed_localization_mode.launch.py`.
-4. Add Nav2 bringup against the robot's real drive interface.
+4. Bring up `zed_nav2_bringup.launch.py` against the robot's real drive interface.
 5. Tune controller and costmap behavior in place.
+6. Use `zed_slam_nav.launch.py slam_mode:=mapping` when you want the map to keep updating while Nav2 is active.

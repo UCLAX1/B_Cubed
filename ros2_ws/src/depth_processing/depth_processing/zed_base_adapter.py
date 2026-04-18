@@ -233,7 +233,7 @@ class ZedBaseAdapterNode(Node):
         self.declare_parameter("output_path_topic", "zed/base_path")
 
         self.declare_parameter("base_frame_id", "base_link")
-        self.declare_parameter("base_to_camera_translation", "0.0,0.0,0.0")
+        self.declare_parameter("base_to_camera_translation", "0.0,0.0,0.381")
         self.declare_parameter("base_to_camera_rpy", "0.0,0.0,0.0")
         self.declare_parameter("publish_odom_tf", True)
         self.declare_parameter("publish_map_to_odom_tf", False)

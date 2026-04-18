@@ -79,6 +79,7 @@ You can adjust the launcher behavior without editing the script by exporting env
 - `BASE_FRAME`
   Default: `base_link`
 - `BASE_TO_CAMERA_TRANSLATION`
+  Default: `0.0,0.0,0.381`
   Format: `x,y,z`
 - `BASE_TO_CAMERA_RPY`
   Format: `roll,pitch,yaw`
@@ -110,7 +111,7 @@ If this is set, `launch.sh` will start that command in a new terminal after loca
 Example:
 
 ```bash
-export NAVIGATION_AUTOSTART_COMMAND="ros2 launch your_nav_package your_nav_launch.py"
+export NAVIGATION_AUTOSTART_COMMAND="ros2 launch depth_processing zed_nav2_bringup.launch.py"
 ./launch.sh
 ```
 
@@ -121,9 +122,9 @@ If it is not set, the script opens a reminder terminal instead of guessing how y
 ```bash
 export MAP_SESSION_NAME="warehouse_bay_1"
 export MAP_OUTPUT_DIR="/home/jetson-nano-x1/Documents/B_Cubed/maps"
-export BASE_TO_CAMERA_TRANSLATION="0.10,0.00,0.42"
+export BASE_TO_CAMERA_TRANSLATION="0.0,0.0,0.381"
 export BASE_TO_CAMERA_RPY="0.0,0.0,0.0"
-export NAVIGATION_AUTOSTART_COMMAND="ros2 launch your_nav_package your_nav_launch.py"
+export NAVIGATION_AUTOSTART_COMMAND="ros2 launch depth_processing zed_nav2_bringup.launch.py"
 
 cd ~/Documents/B_Cubed/ros2_ws
 ./launch.sh
@@ -165,4 +166,6 @@ Most likely cause:
 
 - `NAVIGATION_AUTOSTART_COMMAND` has not been set yet
 
-That part is intentionally left explicit so the repo does not guess at a navigation launch that does not exist yet.
+Recommended value:
+
+- `ros2 launch depth_processing zed_nav2_bringup.launch.py`

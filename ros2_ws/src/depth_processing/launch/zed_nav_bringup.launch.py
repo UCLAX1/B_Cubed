@@ -32,7 +32,7 @@ def generate_launch_description() -> LaunchDescription:
             DeclareLaunchArgument("base_frame", default_value="base_link"),
             DeclareLaunchArgument(
                 "base_to_camera_translation",
-                default_value="0.0,0.0,0.0",
+                default_value="0.0,0.0,0.381",
             ),
             DeclareLaunchArgument(
                 "base_to_camera_rpy",

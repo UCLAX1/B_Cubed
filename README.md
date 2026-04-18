@@ -15,7 +15,7 @@ https://www.stereolabs.com/docs/ros2
 Relevant wrapper parameters:
 - `pos_tracking.pos_tracking_enabled: true`
 - `pos_tracking.publish_tf: true`
-- `pos_tracking.publish_map_tf: true`
+- `pos_tracking.publish_map_tf: false` while `slam_toolbox` mapping or localization owns `map -> odom`
 - `pos_tracking.area_memory: true`
 - `pos_tracking.two_d_mode: true` for a ground robot
 
@@ -33,6 +33,7 @@ Useful options:
 
 Notes:
 - `zed_tracking` does not estimate localization itself. The ZED ROS 2 wrapper does that work; this node republishes the wrapper outputs in simpler topics for the rest of the robot.
+- When you are running `slam_toolbox` mapping or localization, do not let a second node publish a competing `map -> odom` transform at the same time.
 - The wrapper pose is the camera pose in the map frame. For your BB-8 style robot, that means this is the head-mounted camera pose unless you add a separate transform/fusion step to estimate the body center.
 - The node now also subscribes to the ZED color stream so it can show a live camera view with localization status, pose text, and a top-down trajectory inset.
 - It publishes the recent camera trajectory on `zed/path`, which is useful in RViz.
@@ -40,17 +41,20 @@ Notes:
 
 6. Navigation groundwork
 
-To make the ZED localization usable for mapping and Nav2, there is now a base-frame adapter and a point-cloud-to-scan bringup launch.
+To make the ZED localization usable for mapping and Nav2, there is now a
+base-frame adapter, a point-cloud-to-scan bringup launch, and a first
+end-to-end Nav2 stack.
 
 Base-frame adapter:
 - `ros2 run depth_processing zed_base_adapter`
 - Converts camera-centric ZED topics into:
   - `zed/base_pose`
-  - `zed/base_pose_with_covariance`
-  - `zed/base_odom`
-  - `zed/base_path`
+- `zed/base_pose_with_covariance`
+- `zed/base_odom`
+- `zed/base_path`
 - Publishes `odom -> base_link` by default.
-- It can also publish `map -> odom`, but that is off by default so it does not fight the ZED wrapper if `pos_tracking.publish_map_tf: true` is already enabled.
+- It can also publish `map -> odom`, but that is off by default so it does not fight whichever node already owns the global map transform.
+- The default rigid transform now assumes the ZED is mounted `0.381 m` above the chassis origin.
 
 Navigation groundwork launch:
 - `ros2 launch depth_processing zed_nav_bringup.launch.py`
@@ -74,15 +78,38 @@ Localization-after-mapping launch:
   - `slam_toolbox` in localization mode using a saved pose graph
 - This is the intended second mode after the robot finishes its mapping pass in that environment.
 
+Nav2 bringup on top of an already-running SLAM or localization stack:
+- `ros2 launch depth_processing zed_nav2_bringup.launch.py`
+- Starts:
+  - Nav2 planner, controller, behavior server, and BT navigator
+  - `twist_safety_gate`
+- Expects:
+  - `map`
+  - `/scan`
+  - `map -> odom -> base_link`
+  - `zed/is_localized`
+
+One-command full SLAM + navigation launch:
+- `ros2 launch depth_processing zed_slam_nav.launch.py slam_mode:=mapping`
+- `ros2 launch depth_processing zed_slam_nav.launch.py slam_mode:=localization map_file_name:=/absolute/path/to/posegraph_prefix`
+- In `mapping` mode, the occupancy map continues updating while Nav2 is running.
+- In `localization` mode, the saved environment is reused and Nav2 runs on top of that localization layer.
+
+Safety gating:
+- Nav2 publishes motion to `cmd_vel_nav`.
+- `twist_safety_gate` only forwards that to `cmd_vel` when localization and `/scan` are healthy.
+- Gate status is published on `nav/cmd_vel_gate_status`.
+
 Useful options:
 - `base_to_camera_translation:=x,y,z`
 - `base_to_camera_rpy:=roll,pitch,yaw`
 - `base_frame:=base_link`
-- `publish_map_to_odom_tf:=true` if the wrapper is not already publishing `map -> odom`
+- `publish_map_to_odom_tf:=true` only for ZED-only debugging when `slam_toolbox` is not owning `map -> odom`
 
 See these docs for more detail:
 - [Navigation plan](/Users/sara/Documents/My-Documents/X1 Robotics/B_Cubed/docs/navigation_plan.md)
 - [Mapping to navigation workflow](/Users/sara/Documents/My-Documents/X1 Robotics/B_Cubed/docs/README_mapping_to_navigation.md)
+- [Full SLAM stack](/Users/sara/Documents/My-Documents/X1 Robotics/B_Cubed/docs/README_full_slam_stack.md)
 - [Using launch.sh](/Users/sara/Documents/My-Documents/X1 Robotics/B_Cubed/docs/README_launch_sh.md)
 - [ZED adapter and launch files](/Users/sara/Documents/My-Documents/X1 Robotics/B_Cubed/docs/README_zed_navigation_components.md)
 
@@ -100,4 +127,4 @@ Useful environment overrides before running `launch.sh`:
 - `MAP_OUTPUT_DIR=/home/jetson-nano-x1/Documents/B_Cubed/maps`
 - `BASE_TO_CAMERA_TRANSLATION=x,y,z`
 - `BASE_TO_CAMERA_RPY=roll,pitch,yaw`
-- `NAVIGATION_AUTOSTART_COMMAND='ros2 launch your_nav_package your_nav_launch.py'`
+- `NAVIGATION_AUTOSTART_COMMAND='ros2 launch depth_processing zed_nav2_bringup.launch.py'`
