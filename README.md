@@ -110,6 +110,7 @@ See these docs for more detail:
 - [Navigation plan](/Users/sara/Documents/My-Documents/X1 Robotics/B_Cubed/docs/navigation_plan.md)
 - [Mapping to navigation workflow](/Users/sara/Documents/My-Documents/X1 Robotics/B_Cubed/docs/README_mapping_to_navigation.md)
 - [Full SLAM stack](/Users/sara/Documents/My-Documents/X1 Robotics/B_Cubed/docs/README_full_slam_stack.md)
+- [Handheld mapping test](/Users/sara/Documents/My-Documents/X1 Robotics/B_Cubed/docs/README_handheld_mapping_test.md)
 - [Using launch.sh](/Users/sara/Documents/My-Documents/X1 Robotics/B_Cubed/docs/README_launch_sh.md)
 - [ZED adapter and launch files](/Users/sara/Documents/My-Documents/X1 Robotics/B_Cubed/docs/README_zed_navigation_components.md)
 

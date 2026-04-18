@@ -44,6 +44,17 @@ def generate_launch_description() -> LaunchDescription:
             DeclareLaunchArgument("enable_nav2", default_value="true"),
             DeclareLaunchArgument("autostart_nav2", default_value="true"),
             DeclareLaunchArgument("cloud_topic", default_value="/zed/zed_node/point_cloud/cloud_registered"),
+            DeclareLaunchArgument("input_pose_topic", default_value="/zed/zed_node/pose"),
+            DeclareLaunchArgument(
+                "input_pose_cov_topic",
+                default_value="/zed/zed_node/pose_with_covariance",
+            ),
+            DeclareLaunchArgument("input_odom_topic", default_value="/zed/zed_node/odom"),
+            DeclareLaunchArgument(
+                "input_image_topic",
+                default_value="/zed/zed_node/rgb/color/rect/image/compressed",
+            ),
+            DeclareLaunchArgument("input_image_is_compressed", default_value="true"),
             DeclareLaunchArgument("scan_topic", default_value="/scan"),
             DeclareLaunchArgument("base_frame", default_value="base_link"),
             DeclareLaunchArgument(
@@ -67,6 +78,16 @@ def generate_launch_description() -> LaunchDescription:
                 output="screen",
                 parameters=[
                     {
+                        "input_pose_topic": LaunchConfiguration("input_pose_topic"),
+                        "input_pose_cov_topic": LaunchConfiguration(
+                            "input_pose_cov_topic"
+                        ),
+                        "input_odom_topic": LaunchConfiguration("input_odom_topic"),
+                        "input_image_topic": LaunchConfiguration("input_image_topic"),
+                        "input_image_is_compressed": ParameterValue(
+                            LaunchConfiguration("input_image_is_compressed"),
+                            value_type=bool,
+                        ),
                         "require_odom_for_localized": True,
                         "enable_visualization": ParameterValue(
                             LaunchConfiguration("enable_tracking_visualization"),

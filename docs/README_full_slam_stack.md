@@ -86,6 +86,19 @@ Use this when you want one command that starts:
 - Nav2
 - the `cmd_vel` safety gate
 
+This launch does not start the ZED wrapper itself.
+
+You still need the wrapper running first so these upstream topics exist:
+
+- `/zed/zed_node/pose`
+- `/zed/zed_node/pose_with_covariance`
+- `/zed/zed_node/odom`
+- `/zed/zed_node/rgb/color/rect/image/compressed`
+- `/zed/zed_node/point_cloud/cloud_registered`
+
+If your wrapper publishes under different topic names, `zed_slam_nav.launch.py`
+now exposes launch arguments for the tracking input topics.
+
 It supports two modes.
 
 ### Mapping mode
@@ -165,3 +178,10 @@ What it still does not contain is the robot-specific hardware drive node that
 consumes `/cmd_vel` and turns it into motor motion. If your base controller
 already subscribes to `/cmd_vel`, this stack can sit directly on top of it. If
 not, that final hardware interface still has to exist outside this repo.
+
+## Camera-only testing
+
+For a handheld camera test before the full robot is ready, use
+[launch_handheld_mapping.sh](/Users/sara/Documents/My-Documents/X1 Robotics/B_Cubed/ros2_ws/launch_handheld_mapping.sh)
+and the companion notes in
+[README_handheld_mapping_test.md](/Users/sara/Documents/My-Documents/X1 Robotics/B_Cubed/docs/README_handheld_mapping_test.md).
