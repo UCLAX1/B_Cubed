@@ -31,6 +31,7 @@ INPUT_ODOM_TOPIC="${INPUT_ODOM_TOPIC:-/zed/zed_node/odom}"
 INPUT_IMAGE_TOPIC="${INPUT_IMAGE_TOPIC:-/zed/zed_node/rgb/color/rect/image/compressed}"
 INPUT_IMAGE_IS_COMPRESSED="${INPUT_IMAGE_IS_COMPRESSED:-true}"
 CLOUD_TOPIC="${CLOUD_TOPIC:-/zed/zed_node/point_cloud/cloud_registered}"
+REQUIRE_POSE_COV_TOPIC="${REQUIRE_POSE_COV_TOPIC:-false}"
 
 ENABLE_TRACKING_VISUALIZATION="${ENABLE_TRACKING_VISUALIZATION:-true}"
 SHOW_TRACKING_WINDOW="${SHOW_TRACKING_WINDOW:-true}"
@@ -84,10 +85,12 @@ It assumes:
 
 Expected upstream wrapper topics:
   $INPUT_POSE_TOPIC
-  $INPUT_POSE_COV_TOPIC
   $INPUT_ODOM_TOPIC
-  $INPUT_IMAGE_TOPIC
   $CLOUD_TOPIC
+
+Optional upstream wrapper topics:
+  $INPUT_POSE_COV_TOPIC
+  $INPUT_IMAGE_TOPIC
 
 Save commands after the map looks good:
   ros2 service call /slam_toolbox/save_map slam_toolbox/srv/SaveMap "{name: {data: '$MAP_PREFIX'}}"
@@ -108,14 +111,18 @@ missing_topics() {
 
   for topic in \
     "$INPUT_POSE_TOPIC" \
-    "$INPUT_POSE_COV_TOPIC" \
     "$INPUT_ODOM_TOPIC" \
-    "$INPUT_IMAGE_TOPIC" \
     "$CLOUD_TOPIC"; do
     if ! grep -Fxq "$topic" <<<"$available_topics"; then
       missing+=("$topic")
     fi
   done
+
+  if bool_is_true "$REQUIRE_POSE_COV_TOPIC"; then
+    if ! grep -Fxq "$INPUT_POSE_COV_TOPIC" <<<"$available_topics"; then
+      missing+=("$INPUT_POSE_COV_TOPIC")
+    fi
+  fi
 
   printf '%s\n' "${missing[@]}"
 }

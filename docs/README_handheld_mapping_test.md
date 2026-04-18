@@ -52,10 +52,16 @@ That makes `base_link` effectively sit on the camera for the test.
 The helper script waits for these topics before launching mapping:
 
 - `/zed/zed_node/pose`
-- `/zed/zed_node/pose_with_covariance`
 - `/zed/zed_node/odom`
-- `/zed/zed_node/rgb/color/rect/image/compressed`
 - `/zed/zed_node/point_cloud/cloud_registered`
+
+It does not require `pose_with_covariance` by default, because
+`zed_tracking` can synthesize a covariance message from the plain pose stream
+when needed.
+
+The compressed image topic is also treated as optional for launch readiness.
+It is still useful for the localization overlay, but the mapping stack itself
+does not need it to start.
 
 If your wrapper uses different topic names, export overrides before running the
 script. Example:
@@ -75,6 +81,9 @@ export CLOUD_TOPIC="/my_zed/cloud"
   Use this if the wrapper is already running.
 - `TOPIC_WAIT_TIMEOUT_SEC=120`
   Increase this if your wrapper takes a while to come up.
+- `REQUIRE_POSE_COV_TOPIC=true`
+  Only use this if you specifically want the launcher to wait for a real
+  covariance topic instead of allowing `zed_tracking` to synthesize one.
 - `START_RVIZ=true`
   Opens a plain `rviz2` window in another terminal.
 - `RVIZ_COMMAND="rviz2"`
