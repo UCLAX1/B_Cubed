@@ -47,6 +47,15 @@ run_terminal() {
   "
 }
 
+source_setup_file() {
+  local setup_file="$1"
+
+  set +u
+  # shellcheck disable=SC1090
+  source "$setup_file"
+  set -u
+}
+
 bool_is_true() {
   case "${1,,}" in
     1|true|yes|on) return 0 ;;
@@ -121,7 +130,7 @@ trap 'echo; echo "Stopping mapping stack monitor."; stop_mapping_stack' INT TERM
 
 cd "$WS_DIR"
 colcon build --cmake-args=-DCMAKE_BUILD_TYPE=Release --parallel-workers "$NPROC_VALUE"
-source install/setup.bash
+source_setup_file install/setup.bash
 
 if [[ ! -f "$INSTALL_SETUP" ]]; then
   echo "Expected setup file not found: $INSTALL_SETUP" >&2
