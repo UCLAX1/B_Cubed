@@ -20,6 +20,7 @@ MAP_PREFIX="${MAP_PREFIX:-$MAP_OUTPUT_DIR/$MAP_SESSION_NAME}"
 
 BASE_TO_CAMERA_TRANSLATION="${BASE_TO_CAMERA_TRANSLATION:-0.0,0.0,0.0}"
 BASE_TO_CAMERA_RPY="${BASE_TO_CAMERA_RPY:-0.0,0.0,0.0}"
+BASE_FRAME="${BASE_FRAME:-zed_camera_link}"
 
 CAMERA_MODEL="${CAMERA_MODEL:-zedm}"
 START_WRAPPER="${START_WRAPPER:-true}"
@@ -80,6 +81,7 @@ Handheld mapping session prefix:
 This launcher is for camera-only mapping tests.
 
 It assumes:
+  base_frame=$BASE_FRAME
   base_to_camera_translation=$BASE_TO_CAMERA_TRANSLATION
   base_to_camera_rpy=$BASE_TO_CAMERA_RPY
 
@@ -177,6 +179,7 @@ run_terminal \
   "ros2 launch depth_processing zed_slam_nav.launch.py \
     slam_mode:='mapping' \
     enable_nav2:='false' \
+    base_frame:='${BASE_FRAME}' \
     base_to_camera_translation:='${BASE_TO_CAMERA_TRANSLATION}' \
     base_to_camera_rpy:='${BASE_TO_CAMERA_RPY}' \
     input_pose_topic:='${INPUT_POSE_TOPIC}' \

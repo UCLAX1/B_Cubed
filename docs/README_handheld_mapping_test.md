@@ -29,6 +29,7 @@ and it does four things:
 3. waits until the required wrapper topics appear
 4. launches `zed_slam_nav.launch.py` in `mapping` mode with:
    - `enable_nav2:=false`
+   - `base_frame:=zed_camera_link`
    - `base_to_camera_translation:=0.0,0.0,0.0`
    - `base_to_camera_rpy:=0.0,0.0,0.0`
 
@@ -46,6 +47,14 @@ moved, so the helper launcher overrides the stack back to:
 - `base_to_camera_translation=0.0,0.0,0.0`
 
 That makes `base_link` effectively sit on the camera for the test.
+
+The helper launcher also defaults `base_frame` to `zed_camera_link` for the
+handheld test.
+
+That matters because the ZED wrapper already publishes a TF tree rooted on the
+camera frames. Using `zed_camera_link` lets `pointcloud_to_laserscan` transform
+the registered point cloud into the scan target frame without needing an extra
+robot-body frame in the middle.
 
 ## Required upstream wrapper topics
 
@@ -79,6 +88,9 @@ export CLOUD_TOPIC="/my_zed/cloud"
 
 - `START_WRAPPER=false`
   Use this if the wrapper is already running.
+- `BASE_FRAME=zed_camera_link`
+  This is the default for the handheld helper and is usually the right choice
+  for a camera-only test.
 - `TOPIC_WAIT_TIMEOUT_SEC=120`
   Increase this if your wrapper takes a while to come up.
 - `REQUIRE_POSE_COV_TOPIC=true`
