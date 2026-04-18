@@ -124,7 +124,9 @@ missing_topics() {
     fi
   fi
 
-  printf '%s\n' "${missing[@]}"
+  if (( ${#missing[@]} > 0 )); then
+    printf '%s\n' "${missing[@]}"
+  fi
 }
 
 wait_for_wrapper_topics() {
