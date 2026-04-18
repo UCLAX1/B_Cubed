@@ -6,6 +6,9 @@ build/
 install/
 log/
 
+#macOS
+.DS_Store
+
 #Training Runs
 /runs
 
