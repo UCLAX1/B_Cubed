@@ -26,7 +26,7 @@ BASE_TO_CAMERA_RPY="${BASE_TO_CAMERA_RPY:-0.0,0.0,0.0}"
 BASE_FRAME="${BASE_FRAME:-base_link}"
 
 CAMERA_MODEL="${CAMERA_MODEL:-zedm}"
-WRAPPER_LAUNCH="${WRAPPER_LAUNCH:-ros2 launch zed_wrapper zed_camera.launch.py camera_model:=${CAMERA_MODEL}}"
+WRAPPER_LAUNCH="${WRAPPER_LAUNCH:-ros2 launch zed_wrapper zed_camera.launch.py camera_model:=${CAMERA_MODEL} publish_tf:=true publish_map_tf:=false param_overrides:='pos_tracking.two_d_mode:=true;debug.use_pub_timestamps:=true'}"
 NAVIGATION_AUTOSTART_COMMAND="${NAVIGATION_AUTOSTART_COMMAND:-}"
 
 START_HAND_TRACKING="${START_HAND_TRACKING:-true}"

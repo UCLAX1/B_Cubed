@@ -42,6 +42,7 @@ def generate_launch_description() -> LaunchDescription:
             DeclareLaunchArgument("slam_mode", default_value="mapping"),
             DeclareLaunchArgument("use_sim_time", default_value="false"),
             DeclareLaunchArgument("enable_nav2", default_value="true"),
+            DeclareLaunchArgument("enable_tracking_node", default_value="true"),
             DeclareLaunchArgument("autostart_nav2", default_value="true"),
             DeclareLaunchArgument("cloud_topic", default_value="/zed/zed_node/point_cloud/cloud_registered"),
             DeclareLaunchArgument("input_pose_topic", default_value="/zed/zed_node/pose"),
@@ -57,6 +58,7 @@ def generate_launch_description() -> LaunchDescription:
             DeclareLaunchArgument("input_image_is_compressed", default_value="true"),
             DeclareLaunchArgument("scan_topic", default_value="/scan"),
             DeclareLaunchArgument("base_frame", default_value="base_link"),
+            DeclareLaunchArgument("enable_base_adapter", default_value="true"),
             DeclareLaunchArgument(
                 "base_to_camera_translation",
                 default_value="0.0,0.0,0.381",
@@ -76,6 +78,7 @@ def generate_launch_description() -> LaunchDescription:
                 executable="zed_tracking",
                 name="zed_tracking",
                 output="screen",
+                condition=IfCondition(LaunchConfiguration("enable_tracking_node")),
                 parameters=[
                     {
                         "input_pose_topic": LaunchConfiguration("input_pose_topic"),
@@ -111,6 +114,7 @@ def generate_launch_description() -> LaunchDescription:
                     "cloud_topic": LaunchConfiguration("cloud_topic"),
                     "scan_topic": LaunchConfiguration("scan_topic"),
                     "base_frame": LaunchConfiguration("base_frame"),
+                    "enable_base_adapter": LaunchConfiguration("enable_base_adapter"),
                     "base_to_camera_translation": LaunchConfiguration(
                         "base_to_camera_translation"
                     ),
@@ -124,6 +128,7 @@ def generate_launch_description() -> LaunchDescription:
                     "cloud_topic": LaunchConfiguration("cloud_topic"),
                     "scan_topic": LaunchConfiguration("scan_topic"),
                     "base_frame": LaunchConfiguration("base_frame"),
+                    "enable_base_adapter": LaunchConfiguration("enable_base_adapter"),
                     "base_to_camera_translation": LaunchConfiguration(
                         "base_to_camera_translation"
                     ),

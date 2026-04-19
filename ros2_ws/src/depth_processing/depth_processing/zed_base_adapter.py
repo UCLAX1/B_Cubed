@@ -166,7 +166,9 @@ class ZedBaseAdapterNode(Node):
             reliability=ReliabilityPolicy.RELIABLE,
             durability=DurabilityPolicy.VOLATILE,
             history=HistoryPolicy.KEEP_LAST,
-            depth=10,
+            # Keep only the freshest wrapper pose/odom sample so TF does not
+            # trail the scan stream by a backlog of old messages.
+            depth=1,
         )
 
         self.pose_pub = self.create_publisher(PoseStamped, self.output_pose_topic, 10)

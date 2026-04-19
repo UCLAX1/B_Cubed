@@ -24,7 +24,7 @@ BASE_FRAME="${BASE_FRAME:-zed_camera_link}"
 
 CAMERA_MODEL="${CAMERA_MODEL:-zedm}"
 START_WRAPPER="${START_WRAPPER:-true}"
-WRAPPER_LAUNCH="${WRAPPER_LAUNCH:-ros2 launch zed_wrapper zed_camera.launch.py camera_model:=${CAMERA_MODEL}}"
+WRAPPER_LAUNCH="${WRAPPER_LAUNCH:-ros2 launch zed_wrapper zed_camera.launch.py camera_model:=${CAMERA_MODEL} publish_tf:=false publish_map_tf:=false param_overrides:='pos_tracking.two_d_mode:=true;debug.use_pub_timestamps:=true'}"
 
 INPUT_POSE_TOPIC="${INPUT_POSE_TOPIC:-/zed/zed_node/pose}"
 INPUT_POSE_COV_TOPIC="${INPUT_POSE_COV_TOPIC:-/zed/zed_node/pose_with_covariance}"
@@ -34,9 +34,9 @@ INPUT_IMAGE_IS_COMPRESSED="${INPUT_IMAGE_IS_COMPRESSED:-true}"
 CLOUD_TOPIC="${CLOUD_TOPIC:-/zed/zed_node/point_cloud/cloud_registered}"
 REQUIRE_POSE_COV_TOPIC="${REQUIRE_POSE_COV_TOPIC:-false}"
 
-ENABLE_TRACKING_VISUALIZATION="${ENABLE_TRACKING_VISUALIZATION:-true}"
-SHOW_TRACKING_WINDOW="${SHOW_TRACKING_WINDOW:-true}"
-PUBLISH_TRACKING_IMAGE="${PUBLISH_TRACKING_IMAGE:-true}"
+ENABLE_TRACKING_VISUALIZATION="${ENABLE_TRACKING_VISUALIZATION:-false}"
+SHOW_TRACKING_WINDOW="${SHOW_TRACKING_WINDOW:-false}"
+PUBLISH_TRACKING_IMAGE="${PUBLISH_TRACKING_IMAGE:-false}"
 
 START_RVIZ="${START_RVIZ:-false}"
 RVIZ_COMMAND="${RVIZ_COMMAND:-rviz2}"
@@ -179,7 +179,9 @@ run_terminal \
   "ros2 launch depth_processing zed_slam_nav.launch.py \
     slam_mode:='mapping' \
     enable_nav2:='false' \
+    enable_tracking_node:='false' \
     base_frame:='${BASE_FRAME}' \
+    enable_base_adapter:='true' \
     base_to_camera_translation:='${BASE_TO_CAMERA_TRANSLATION}' \
     base_to_camera_rpy:='${BASE_TO_CAMERA_RPY}' \
     input_pose_topic:='${INPUT_POSE_TOPIC}' \

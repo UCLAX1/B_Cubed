@@ -3,6 +3,7 @@
 
 from launch import LaunchDescription
 from launch.actions import DeclareLaunchArgument
+from launch.conditions import IfCondition
 from launch.substitutions import LaunchConfiguration, PathJoinSubstitution
 from launch_ros.actions import Node
 from launch_ros.parameter_descriptions import ParameterValue
@@ -18,12 +19,18 @@ def generate_launch_description() -> LaunchDescription:
 
     return LaunchDescription(
         [
-            DeclareLaunchArgument("pose_topic", default_value="zed/pose"),
+            DeclareLaunchArgument(
+                "pose_topic",
+                default_value="/zed/zed_node/pose",
+            ),
             DeclareLaunchArgument(
                 "pose_cov_topic",
-                default_value="zed/pose_with_covariance",
+                default_value="/zed/zed_node/pose_with_covariance",
             ),
-            DeclareLaunchArgument("odom_topic", default_value="zed/odom"),
+            DeclareLaunchArgument(
+                "odom_topic",
+                default_value="/zed/zed_node/odom",
+            ),
             DeclareLaunchArgument(
                 "cloud_topic",
                 default_value="/zed/zed_node/point_cloud/cloud_registered",
@@ -40,11 +47,13 @@ def generate_launch_description() -> LaunchDescription:
             ),
             DeclareLaunchArgument("publish_odom_tf", default_value="true"),
             DeclareLaunchArgument("publish_map_to_odom_tf", default_value="false"),
+            DeclareLaunchArgument("enable_base_adapter", default_value="true"),
             Node(
                 package="depth_processing",
                 executable="zed_base_adapter",
                 name="zed_base_adapter",
                 output="screen",
+                condition=IfCondition(LaunchConfiguration("enable_base_adapter")),
                 parameters=[
                     {
                         "input_pose_topic": LaunchConfiguration("pose_topic"),

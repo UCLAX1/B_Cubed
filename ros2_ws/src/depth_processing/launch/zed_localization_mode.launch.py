@@ -26,6 +26,7 @@ def generate_launch_description() -> LaunchDescription:
             DeclareLaunchArgument("base_frame", default_value="base_link"),
             DeclareLaunchArgument("base_to_camera_translation", default_value="0.0,0.0,0.381"),
             DeclareLaunchArgument("base_to_camera_rpy", default_value="0.0,0.0,0.0"),
+            DeclareLaunchArgument("enable_base_adapter", default_value="true"),
             DeclareLaunchArgument("localization_params_file", default_value=localization_params),
             DeclareLaunchArgument("map_file_name", default_value=""),
             IncludeLaunchDescription(
@@ -39,6 +40,7 @@ def generate_launch_description() -> LaunchDescription:
                     ),
                     "base_to_camera_rpy": LaunchConfiguration("base_to_camera_rpy"),
                     "publish_map_to_odom_tf": "false",
+                    "enable_base_adapter": LaunchConfiguration("enable_base_adapter"),
                 }.items(),
             ),
             Node(
