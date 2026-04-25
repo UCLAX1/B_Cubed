@@ -91,8 +91,6 @@ class App:
     TOP_RIGHT_VEC: np.ndarray = np.array([-0.5, np.sqrt(3) / 2])
     BOTTOM_VEC: np.ndarray = np.array([1, 0])
 
-    MAX_DURATION: float = 9999.0
-
     def __init__(self):
         # timer in seconds
         self.timer: float = 0.0
@@ -151,7 +149,7 @@ class App:
 
     def run(self):
         try:
-            while self.timer < self.MAX_DURATION:
+            while True:
                 self.current_time = time.time()
                 self.dt = self.current_time - self.previous_time
                 self.previous_time = self.current_time

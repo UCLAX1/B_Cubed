@@ -1,5 +1,17 @@
 # B_Cubed: Motors Testing
 
+## What the heck are the files in this branch
+- ServoEx is the class for the servos. It should have everything.
+- HardwareInterface is the class for the Motors. It uses can.
+
+robot.py and test.py are separate programs, and are a bit antequated.
+
+I fixed a lot of stupid stuff in the code to fit it to B-Cubed and to make it more usable
+
+
+HardwareInterface.py and motor_test.py are ripped from Akhilesh's code from the BruinBear github.\
+
+
 ## HOW TO TEST THE MOTORS:
 
 1. plug the jhoinrch CAN bus into the SPARK MAX (green to green).\
@@ -13,11 +25,6 @@ if these steps do not work, skip the CAN bus and plug your computer into the SPA
 
 use REV Hardware Client to see if the motors spin
 
-## what the heck are the files in this branch
-robot.py and test.py are separate programs, and are a bit antequated.
-
-HardwareInterface.py and motor_test.py are ripped from Akhilesh's code from the BruinBear github.\
-I fixed a lot of stupid stuff in the code to fit it to B-Cubed and to make it more usable  
 
 
 ## original readme description VVV
