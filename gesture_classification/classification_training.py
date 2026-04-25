@@ -6,9 +6,13 @@ import numpy as np
 from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import LabelEncoder
 import joblib
+import json
 
 DATA_PATH = "gesture_data_normalized.csv"
 GESTURES = np.array(["open_hand", "fist", "point", "thumbs_up"])
+MODEL_PATH = "gesture_classifier.pth"
+META_PATH = "gesture_classifier_meta.json"
+GESTURE_INPUT_MODE = "bbox"
 
 # Load data
 df = pd.read_csv(DATA_PATH)
@@ -73,4 +77,14 @@ for epoch in range(1000):
             acc = (outputs.argmax(1) == y_train).float().mean()
         print(f"Epoch {epoch}, Loss: {loss.item():.4f}, Train Acc: {acc.item():.3f}")
 
-torch.save(model.state_dict(), "gesture_classifier.pth")
+torch.save(model.state_dict(), MODEL_PATH)
+with open(META_PATH, "w") as f:
+    json.dump(
+        {
+            "input_mode": GESTURE_INPUT_MODE,
+            "data_path": DATA_PATH,
+            "gestures": GESTURES.tolist(),
+        },
+        f,
+        indent=2,
+    )

@@ -1,6 +1,8 @@
 from ultralytics import YOLO
 import torch
 import cv2
+import json
+import os
 
 class GestureNet(torch.nn.Module):
     def __init__(self, num_classes):
@@ -23,7 +25,13 @@ gesture_model.load_state_dict(torch.load("gesture_classifier.pth"))
 gesture_model.eval()
 
 GESTURES = ["open_hand", "fist", "point", "thumbs_up"]
+META_PATH = "gesture_classifier_meta.json"
+GESTURE_INPUT_MODE = "raw"
 cap = cv2.VideoCapture(0)
+
+if os.path.isfile(META_PATH):
+    with open(META_PATH) as f:
+        GESTURE_INPUT_MODE = json.load(f).get("input_mode", GESTURE_INPUT_MODE)
 
 def normalize_keypoints_to_bbox(keypoints, bbox):
     x1, y1, x2, y2 = bbox
@@ -36,6 +44,13 @@ def normalize_keypoints_to_bbox(keypoints, bbox):
     pts[:, 0] = (pts[:, 0] - cx) / bw
     pts[:, 1] = (pts[:, 1] - cy) / bh
     return pts.flatten()
+
+def prepare_gesture_input(keypoints, bbox):
+    if GESTURE_INPUT_MODE == "raw":
+        return keypoints.flatten()
+    if GESTURE_INPUT_MODE == "bbox":
+        return normalize_keypoints_to_bbox(keypoints, bbox)
+    raise ValueError(f"Unknown gesture input mode: {GESTURE_INPUT_MODE}")
 
 while True:
     ret, frame = cap.read()
@@ -50,7 +65,7 @@ while True:
         for (x_coord, y_coord) in keypoints:
             cv2.circle(frame, (int(x_coord), int(y_coord)), 3, (0, 255, 255), -1)
 
-        pts = normalize_keypoints_to_bbox(keypoints, boxes[0].cpu().numpy())
+        pts = prepare_gesture_input(keypoints, boxes[0].cpu().numpy())
         x = torch.tensor(pts, dtype=torch.float32).unsqueeze(0)
         with torch.no_grad():
             pred = gesture_model(x).argmax(1).item()

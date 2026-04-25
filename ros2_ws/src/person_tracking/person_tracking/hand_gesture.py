@@ -17,7 +17,7 @@ gesture_engine = TRTVectorModel(
     input_shape=(1, 42)  # only needed if the engine has dynamic dims
 )
 
-GESTURE_INPUT_MODE = "bbox"  # Classifier input is bbox-normalized keypoints.
+GESTURE_INPUT_MODE = "raw"  # Current deployed TensorRT gesture engine was trained on raw keypoints.
 DEBUG_GESTURE_LOGITS = False
 
 
@@ -116,6 +116,55 @@ def prepare_gesture_input(kpts, bbox, mode=GESTURE_INPUT_MODE):
 
     raise ValueError(f"Unknown gesture input mode: {mode}")
 
+def _pose_layout_score(kpts, bbox):
+    x1, y1, x2, y2 = bbox
+    xy = kpts[:, :2]
+    conf = kpts[:, 2]
+
+    finite_score = float(np.isfinite(kpts).all())
+    conf_score = float(np.mean((conf >= 0.0) & (conf <= 1.5)))
+    inside_x = (xy[:, 0] >= x1 - 10.0) & (xy[:, 0] <= x2 + 10.0)
+    inside_y = (xy[:, 1] >= y1 - 10.0) & (xy[:, 1] <= y2 + 10.0)
+    inside_score = float(np.mean(inside_x & inside_y))
+
+    limb_lengths = []
+    for a, b in HAND_EDGES:
+        limb_lengths.append(float(np.linalg.norm(xy[a] - xy[b])))
+    limb_lengths = np.asarray(limb_lengths, dtype=np.float32)
+    bbox_diag = max(1.0, float(np.hypot(x2 - x1, y2 - y1)))
+    limb_score = float(np.mean(limb_lengths < bbox_diag * 0.8))
+
+    return finite_score + conf_score + inside_score + limb_score
+
+def _scale_pose_keypoints(kpts, sx, sy, wi, hi, wf, hf):
+    kpts = np.asarray(kpts, dtype=np.float32).copy()
+    if np.max(kpts[:, :2]) <= 1.5:
+        kpts[:, 0] *= wi
+        kpts[:, 1] *= hi
+
+    kpts[:, 0] *= sx
+    kpts[:, 1] *= sy
+    kpts[:, 0] = np.clip(kpts[:, 0], 0.0, float(wf - 1))
+    kpts[:, 1] = np.clip(kpts[:, 1], 0.0, float(hf - 1))
+    return kpts
+
+def parse_pose_keypoints(kpts_flat, bbox, nk, dim, sx, sy, wi, hi, wf, hf):
+    kpts_flat = np.asarray(kpts_flat, dtype=np.float32)
+    candidates = []
+
+    interleaved = kpts_flat.reshape(nk, dim)[:, :3]
+    candidates.append(_scale_pose_keypoints(interleaved, sx, sy, wi, hi, wf, hf))
+
+    if dim == 3:
+        grouped = np.column_stack((
+            kpts_flat[:nk],
+            kpts_flat[nk:2 * nk],
+            kpts_flat[2 * nk:3 * nk],
+        ))
+        candidates.append(_scale_pose_keypoints(grouped, sx, sy, wi, hi, wf, hf))
+
+    return max(candidates, key=lambda candidate: _pose_layout_score(candidate, bbox))
+
 def detect_hands(frame, conf_thr=0.4, kpt_thr=0.25, nk=21, dim=3, hand_class=0):
     trt_output = model.infer(frame)
 
@@ -164,26 +213,12 @@ def detect_hands(frame, conf_thr=0.4, kpt_thr=0.25, nk=21, dim=3, hand_class=0):
         if x2 <= x1 or y2 <= y1:
             continue
 
-        kpts_raw = row[kpt_start:kpt_start + kpt_len].reshape(nk, dim)  # (21,3)
-
-        # If kpts look normalized, scale to model input pixels
-        if np.max(kpts_raw[:, :2]) <= 1.5:
-            kpts_raw[:, 0] *= Wi
-            kpts_raw[:, 1] *= Hi
-
-        # Scale to original frame
-        kpts = []
-        for i in range(nk):
-            xk = float(kpts_raw[i, 0] * sx)
-            yk = float(kpts_raw[i, 1] * sy)
-            ck = float(kpts_raw[i, 2]) if dim >= 3 else 1.0
-            xk = max(0.0, min(float(Wf - 1), xk))
-            yk = max(0.0, min(float(Hf - 1), yk))
-            kpts.append((xk, yk, ck))
+        kpts_flat = row[kpt_start:kpt_start + kpt_len]
+        kpts = parse_pose_keypoints(kpts_flat, (x1, y1, x2, y2), nk, dim, sx, sy, Wi, Hi, Wf, Hf)
 
         boxes.append([x1, y1, x2, y2])
         scores.append(conf)
-        all_kpts.append(kpts)
+        all_kpts.append([tuple(point) for point in kpts])
 
     keep = nms_xyxy(boxes, scores)
 
