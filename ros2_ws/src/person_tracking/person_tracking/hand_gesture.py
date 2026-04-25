@@ -17,6 +17,9 @@ gesture_engine = TRTVectorModel(
     input_shape=(1, 42)  # only needed if the engine has dynamic dims
 )
 
+GESTURE_INPUT_MODE = "raw"  # The current classifier was trained on raw keypoint pixels.
+DEBUG_GESTURE_LOGITS = False
+
 
 
 class RGBSubscriber(Node):
@@ -94,6 +97,24 @@ def nms_xyxy(boxes, scores, threshold = 0.45):
         order = rest[ious < threshold]
 
     return keep
+
+def prepare_gesture_input(kpts, bbox, mode=GESTURE_INPUT_MODE):
+    pts_xy = np.asarray(kpts, dtype=np.float32)[:, :2].reshape(1, 42)
+
+    if mode == "raw":
+        return np.ascontiguousarray(pts_xy, dtype=np.float32)
+
+    if mode == "bbox":
+        x1, y1, x2, y2 = bbox
+        bw = max(1.0, float(x2 - x1))
+        bh = max(1.0, float(y2 - y1))
+        cx = (x1 + x2) * 0.5
+        cy = (y1 + y2) * 0.5
+        pts_xy[:, 0::2] = (pts_xy[:, 0::2] - cx) / bw
+        pts_xy[:, 1::2] = (pts_xy[:, 1::2] - cy) / bh
+        return np.ascontiguousarray(pts_xy, dtype=np.float32)
+
+    raise ValueError(f"Unknown gesture input mode: {mode}")
 
 def detect_hands(frame, conf_thr=0.4, kpt_thr=0.25, nk=21, dim=3, hand_class=0):
     trt_output = model.infer(frame)
@@ -194,23 +215,15 @@ def detect_hands(frame, conf_thr=0.4, kpt_thr=0.25, nk=21, dim=3, hand_class=0):
                     cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0,255,0), 2)
     for det in detections:
         x1, y1, x2, y2 = det["bbox"]
-        kpts = np.array(det["kpts"], dtype=np.float32)  # (21,3)
-
-        pts_xy = kpts[:, :2].reshape(1, 42)  # (1,42)
-
-        # If you trained using raw pixel coords, use pts_xy as-is.
-        # If you trained normalized-to-bb   ox, do that same normalization here.
-        # (Only keep this if that matches training!)
-        bw = max(1.0, float(x2 - x1))
-        bh = max(1.0, float(y2 - y1))
-        cx = (x1 + x2) * 0.5
-        cy = (y1 + y2) * 0.5
-        pts_xy[:, 0::2] = (pts_xy[:, 0::2] - cx) / bw
-        pts_xy[:, 1::2] = (pts_xy[:, 1::2] - cy) / bh
+        pts_xy = prepare_gesture_input(det["kpts"], det["bbox"])
 
         logits = gesture_engine.infer(pts_xy)  # likely (1,4)
+        logits = np.asarray(logits).reshape(1, -1)
         pred = int(np.argmax(logits, axis=1)[0])
         gesture = GESTURES[pred]
+        if DEBUG_GESTURE_LOGITS:
+            print("gesture input range:", float(pts_xy.min()), float(pts_xy.max()),
+                  "logits:", logits[0].tolist(), "pred:", gesture)
 
         cv2.putText(frame, gesture, (x1, max(0, y1 - 15)),
                     cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 255, 0), 2)
