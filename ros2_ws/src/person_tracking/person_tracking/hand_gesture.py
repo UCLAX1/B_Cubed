@@ -17,7 +17,7 @@ gesture_engine = TRTVectorModel(
     input_shape=(1, 42)  # only needed if the engine has dynamic dims
 )
 
-GESTURE_INPUT_MODE = "raw"  # The current classifier was trained on raw keypoint pixels.
+GESTURE_INPUT_MODE = "bbox"  # Classifier input is bbox-normalized keypoints.
 DEBUG_GESTURE_LOGITS = False
 
 

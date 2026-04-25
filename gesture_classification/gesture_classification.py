@@ -25,16 +25,32 @@ gesture_model.eval()
 GESTURES = ["open_hand", "fist", "point", "thumbs_up"]
 cap = cv2.VideoCapture(0)
 
+def normalize_keypoints_to_bbox(keypoints, bbox):
+    x1, y1, x2, y2 = bbox
+    bw = max(1.0, float(x2 - x1))
+    bh = max(1.0, float(y2 - y1))
+    cx = (float(x1) + float(x2)) * 0.5
+    cy = (float(y1) + float(y2)) * 0.5
+
+    pts = keypoints.copy()
+    pts[:, 0] = (pts[:, 0] - cx) / bw
+    pts[:, 1] = (pts[:, 1] - cy) / bh
+    return pts.flatten()
+
 while True:
     ret, frame = cap.read()
     results = pose_model(frame, verbose=False)
-    kps = results[0].keypoints.xy
-    if kps is not None and len(kps) > 0:
+    result = results[0]
+    kps = result.keypoints.xy
+    boxes = result.boxes.xyxy
+    if kps is not None and boxes is not None and len(kps) > 0 and len(boxes) > 0:
+        keypoints = kps[0].cpu().numpy()
+
         # Draw keypoints on the frame
-        for (x_coord, y_coord) in kps[0].cpu().numpy():
+        for (x_coord, y_coord) in keypoints:
             cv2.circle(frame, (int(x_coord), int(y_coord)), 3, (0, 255, 255), -1)
 
-        pts = kps[0].cpu().numpy().flatten()
+        pts = normalize_keypoints_to_bbox(keypoints, boxes[0].cpu().numpy())
         x = torch.tensor(pts, dtype=torch.float32).unsqueeze(0)
         with torch.no_grad():
             pred = gesture_model(x).argmax(1).item()
