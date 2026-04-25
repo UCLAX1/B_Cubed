@@ -7,13 +7,30 @@ from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import LabelEncoder
 import joblib
 
+DATA_PATH = "gesture_data_normalized.csv"
+GESTURES = np.array(["open_hand", "fist", "point", "thumbs_up"])
+
 # Load data
-df = pd.read_csv("gesture_data.csv")
+df = pd.read_csv(DATA_PATH)
 df = df[df["gesture"] != "gesture"]
+unknown_gestures = sorted(set(df["gesture"]) - set(GESTURES))
+if unknown_gestures:
+    raise RuntimeError(f"{DATA_PATH} contains unknown gestures: {unknown_gestures}")
+
 X = df.drop(columns=["gesture"]).values.astype("float32")
+
+if X.shape[1] != 42:
+    raise RuntimeError(f"Expected 42 normalized keypoint features, got {X.shape[1]}.")
+if not np.isfinite(X).all():
+    raise RuntimeError(f"{DATA_PATH} contains non-finite values.")
+if np.abs(X).max() > 2.0:
+    raise RuntimeError(
+        f"{DATA_PATH} looks like it contains raw pixel coordinates. "
+        "Recollect data with classification_collection.py so every row is bbox-normalized."
+    )
+
 le = LabelEncoder()
-# This fixes the flipped gestures issue
-le.classes_ = np.array(["open_hand", "fist", "point", "thumbs_up"])
+le.classes_ = GESTURES
 y = le.transform(df["gesture"])
 joblib.dump(le, "gesture_labels.pkl")
 
@@ -39,7 +56,7 @@ class GestureNet(nn.Module):
     def forward(self, x):
         return self.fc(x)
 
-model = GestureNet(num_classes=len(set(y)))
+model = GestureNet(num_classes=len(GESTURES))
 criterion = nn.CrossEntropyLoss()
 optimizer = optim.Adam(model.parameters(), lr=1e-3)
 
