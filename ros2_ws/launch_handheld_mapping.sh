@@ -20,7 +20,7 @@ MAP_PREFIX="${MAP_PREFIX:-$MAP_OUTPUT_DIR/$MAP_SESSION_NAME}"
 
 BASE_TO_CAMERA_TRANSLATION="${BASE_TO_CAMERA_TRANSLATION:-0.0,0.0,0.0}"
 BASE_TO_CAMERA_RPY="${BASE_TO_CAMERA_RPY:-0.0,0.0,0.0}"
-BASE_FRAME="${BASE_FRAME:-base_link}"
+BASE_FRAME="${BASE_FRAME:-zed_camera_link}"
 
 CAMERA_MODEL="${CAMERA_MODEL:-zedm}"
 START_WRAPPER="${START_WRAPPER:-true}"
@@ -38,7 +38,7 @@ ENABLE_TRACKING_VISUALIZATION="${ENABLE_TRACKING_VISUALIZATION:-false}"
 SHOW_TRACKING_WINDOW="${SHOW_TRACKING_WINDOW:-false}"
 PUBLISH_TRACKING_IMAGE="${PUBLISH_TRACKING_IMAGE:-false}"
 
-ENABLE_NAV2="${ENABLE_NAV2:-true}"
+ENABLE_NAV2="${ENABLE_NAV2:-false}"
 ENABLE_PLANNING_CONSOLE="${ENABLE_PLANNING_CONSOLE:-true}"
 PLANNING_CONSOLE_HOST="${PLANNING_CONSOLE_HOST:-127.0.0.1}"
 PLANNING_CONSOLE_PORT="${PLANNING_CONSOLE_PORT:-8080}"
@@ -155,6 +155,7 @@ Optional upstream wrapper topics:
 Web planning console:
   http://$PLANNING_CONSOLE_URL_HOST:$PLANNING_CONSOLE_PORT/
   Nav2 planner enabled: $ENABLE_NAV2
+  Set ENABLE_NAV2=true after the handheld map/scan path is healthy.
 
 Save commands after the map looks good:
   ros2 service call /slam_toolbox/save_map slam_toolbox/srv/SaveMap "{name: {data: '$MAP_PREFIX'}}"
@@ -269,6 +270,7 @@ run_terminal \
    echo 'Web planning console:'; \
    echo '  http://$PLANNING_CONSOLE_URL_HOST:$PLANNING_CONSOLE_PORT/'; \
    echo '  Nav2 planner enabled: $ENABLE_NAV2'; \
+   echo '  Set ENABLE_NAV2=true after the handheld map/scan path is healthy.'; \
    echo; \
    echo 'Save commands:'; \
    echo \"ros2 service call /slam_toolbox/save_map slam_toolbox/srv/SaveMap \\\"{name: {data: '$MAP_PREFIX'}}\\\"\"; \
