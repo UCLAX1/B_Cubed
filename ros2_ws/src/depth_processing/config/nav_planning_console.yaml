@@ -1,0 +1,12 @@
+nav_planning_console:
+  ros__parameters:
+    web_host: 127.0.0.1
+    web_port: 8080
+    map_topic: /map
+    global_frame: map
+    base_frame: base_link
+    planner_action_name: compute_path_to_pose
+    planner_id: ""
+    planner_server_timeout_sec: 2.0
+    planning_timeout_sec: 10.0
+    pose_update_period_sec: 0.2

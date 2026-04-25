@@ -1,0 +1,85 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Nav2 Planning Console</title>
+    <link rel="stylesheet" href="/style.css">
+  </head>
+  <body>
+    <header class="topbar">
+      <div class="brand">
+        <span class="brand-mark"></span>
+        <span>Nav2 Planning Console</span>
+      </div>
+      <div class="status-strip">
+        <span class="status-chip" id="mapStatus">map waiting</span>
+        <span class="status-chip" id="poseStatus">pose waiting</span>
+        <span class="status-chip" id="planStatus">planner idle</span>
+      </div>
+      <div class="toolbar">
+        <button type="button" id="fitButton" title="Fit map">Fit</button>
+        <button type="button" id="clearButton" title="Clear path">Clear</button>
+      </div>
+    </header>
+
+    <main class="workspace">
+      <section class="map-surface">
+        <canvas id="mapCanvas"></canvas>
+        <div class="floating-readout" id="readout">x 0.00, y 0.00</div>
+      </section>
+
+      <aside class="side-panel">
+        <div class="panel-section">
+          <h2>Goal</h2>
+          <div class="field-row">
+            <label for="headingMode">Heading</label>
+            <select id="headingMode">
+              <option value="current">Current</option>
+              <option value="zero">Zero</option>
+              <option value="custom">Custom</option>
+            </select>
+          </div>
+          <div class="field-row">
+            <label for="headingInput">Degrees</label>
+            <input id="headingInput" type="number" value="0" step="5">
+          </div>
+          <dl class="metric-list">
+            <div>
+              <dt>X</dt>
+              <dd id="goalX">-</dd>
+            </div>
+            <div>
+              <dt>Y</dt>
+              <dd id="goalY">-</dd>
+            </div>
+            <div>
+              <dt>Path</dt>
+              <dd id="pathCount">0 poses</dd>
+            </div>
+          </dl>
+        </div>
+
+        <div class="panel-section">
+          <h2>Robot</h2>
+          <dl class="metric-list">
+            <div>
+              <dt>X</dt>
+              <dd id="robotX">-</dd>
+            </div>
+            <div>
+              <dt>Y</dt>
+              <dd id="robotY">-</dd>
+            </div>
+            <div>
+              <dt>Yaw</dt>
+              <dd id="robotYaw">-</dd>
+            </div>
+          </dl>
+        </div>
+      </aside>
+    </main>
+
+    <script src="/app.js"></script>
+  </body>
+</html>

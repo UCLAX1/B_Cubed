@@ -42,6 +42,9 @@ def generate_launch_description() -> LaunchDescription:
             DeclareLaunchArgument("slam_mode", default_value="mapping"),
             DeclareLaunchArgument("use_sim_time", default_value="false"),
             DeclareLaunchArgument("enable_nav2", default_value="true"),
+            DeclareLaunchArgument("enable_planning_console", default_value="false"),
+            DeclareLaunchArgument("planning_console_host", default_value="127.0.0.1"),
+            DeclareLaunchArgument("planning_console_port", default_value="8080"),
             DeclareLaunchArgument("enable_tracking_node", default_value="true"),
             DeclareLaunchArgument("autostart_nav2", default_value="true"),
             DeclareLaunchArgument("cloud_topic", default_value="/zed/zed_node/point_cloud/cloud_registered"),
@@ -147,6 +150,28 @@ def generate_launch_description() -> LaunchDescription:
                         "safety_gate_params_file"
                     ),
                 }.items(),
+            ),
+            Node(
+                package="depth_processing",
+                executable="nav_planning_console",
+                name="nav_planning_console",
+                output="screen",
+                condition=IfCondition(
+                    LaunchConfiguration("enable_planning_console")
+                ),
+                parameters=[
+                    {
+                        "web_host": LaunchConfiguration("planning_console_host"),
+                        "web_port": ParameterValue(
+                            LaunchConfiguration("planning_console_port"),
+                            value_type=int,
+                        ),
+                        "map_topic": "/map",
+                        "global_frame": "map",
+                        "base_frame": LaunchConfiguration("base_frame"),
+                        "planner_action_name": "compute_path_to_pose",
+                    }
+                ],
             ),
         ]
     )
