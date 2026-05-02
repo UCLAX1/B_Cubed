@@ -1,90 +1,121 @@
+import argparse
+import json
+import os
+
+import joblib
+import numpy as np
+import pandas as pd
 import torch
 import torch.nn as nn
 import torch.optim as optim
-import pandas as pd
-import numpy as np
 from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import LabelEncoder
-import joblib
-import json
 
-DATA_PATH = "gesture_data_normalized.csv"
+from gesture_model import GestureNet
+
+
 GESTURES = np.array(["open_hand", "fist", "point", "thumbs_up"])
-MODEL_PATH = "gesture_classifier.pth"
-META_PATH = "gesture_classifier_meta.json"
-GESTURE_INPUT_MODE = "bbox"
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 
-# Load data
-df = pd.read_csv(DATA_PATH)
-df = df[df["gesture"] != "gesture"]
-unknown_gestures = sorted(set(df["gesture"]) - set(GESTURES))
-if unknown_gestures:
-    raise RuntimeError(f"{DATA_PATH} contains unknown gestures: {unknown_gestures}")
 
-X = df.drop(columns=["gesture"]).values.astype("float32")
+def parse_args():
+    parser = argparse.ArgumentParser(description="Train a static hand gesture classifier.")
+    parser.add_argument("--data-path", default=os.path.join(BASE_DIR, "gesture_data_mediapipe.csv"))
+    parser.add_argument("--model-path", default=os.path.join(BASE_DIR, "gesture_classifier_mediapipe.pth"))
+    parser.add_argument("--labels-path", default=os.path.join(BASE_DIR, "gesture_labels_mediapipe.pkl"))
+    parser.add_argument("--meta-path", default=os.path.join(BASE_DIR, "gesture_classifier_mediapipe_meta.json"))
+    parser.add_argument("--detector", choices=["mediapipe", "yolo"], default="mediapipe")
+    parser.add_argument("--epochs", type=int, default=400)
+    parser.add_argument("--learning-rate", type=float, default=1e-3)
+    parser.add_argument("--test-size", type=float, default=0.2)
+    return parser.parse_args()
 
-if X.shape[1] != 42:
-    raise RuntimeError(f"Expected 42 normalized keypoint features, got {X.shape[1]}.")
-if not np.isfinite(X).all():
-    raise RuntimeError(f"{DATA_PATH} contains non-finite values.")
-if np.abs(X).max() > 2.0:
-    raise RuntimeError(
-        f"{DATA_PATH} looks like it contains raw pixel coordinates. "
-        "Recollect data with classification_collection.py so every row is bbox-normalized."
+
+def load_dataset(data_path, expected_features):
+    df = pd.read_csv(data_path)
+    df = df[df["gesture"] != "gesture"]
+
+    unknown_gestures = sorted(set(df["gesture"]) - set(GESTURES))
+    if unknown_gestures:
+        raise RuntimeError(f"{data_path} contains unknown gestures: {unknown_gestures}")
+
+    missing_gestures = sorted(set(GESTURES) - set(df["gesture"]))
+    if missing_gestures:
+        raise RuntimeError(f"{data_path} has no samples for: {missing_gestures}")
+
+    X = df.drop(columns=["gesture"]).values.astype("float32")
+    if X.shape[1] != expected_features:
+        raise RuntimeError(f"Expected {expected_features} landmark features, got {X.shape[1]}.")
+    if not np.isfinite(X).all():
+        raise RuntimeError(f"{data_path} contains non-finite values.")
+
+    le = LabelEncoder()
+    le.classes_ = GESTURES
+    y = le.transform(df["gesture"])
+    return X, y, le
+
+
+def main():
+    args = parse_args()
+    expected_features = 63 if args.detector == "mediapipe" else 42
+    X, y, label_encoder = load_dataset(args.data_path, expected_features)
+    joblib.dump(label_encoder, args.labels_path)
+
+    X_train, X_test, y_train, y_test = train_test_split(
+        X,
+        y,
+        test_size=args.test_size,
+        stratify=y,
+        random_state=42,
     )
 
-le = LabelEncoder()
-le.classes_ = GESTURES
-y = le.transform(df["gesture"])
-joblib.dump(le, "gesture_labels.pkl")
+    X_train = torch.tensor(X_train)
+    y_train = torch.tensor(y_train)
+    X_test = torch.tensor(X_test)
+    y_test = torch.tensor(y_test)
 
-X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2)
+    model = GestureNet(input_size=expected_features, num_classes=len(GESTURES))
+    criterion = nn.CrossEntropyLoss()
+    optimizer = optim.Adam(model.parameters(), lr=args.learning_rate)
 
-# Convert to torch tensors
-X_train = torch.tensor(X_train)
-y_train = torch.tensor(y_train)
-X_test = torch.tensor(X_test)
-y_test = torch.tensor(y_test)
+    for epoch in range(args.epochs):
+        model.train()
+        optimizer.zero_grad()
+        outputs = model(X_train)
+        loss = criterion(outputs, y_train)
+        loss.backward()
+        optimizer.step()
 
-class GestureNet(nn.Module):
-    def __init__(self, num_classes):
-        super().__init__()
-        self.fc = nn.Sequential(
-            nn.Linear(42, 128),
-            nn.ReLU(),
-            nn.Linear(128, 64),
-            nn.ReLU(),
-            nn.Linear(64, num_classes)
+        if epoch % 25 == 0 or epoch == args.epochs - 1:
+            model.eval()
+            with torch.no_grad():
+                train_acc = (outputs.argmax(1) == y_train).float().mean().item()
+                test_outputs = model(X_test)
+                test_acc = (test_outputs.argmax(1) == y_test).float().mean().item()
+            print(
+                f"Epoch {epoch:04d}, Loss: {loss.item():.4f}, "
+                f"Train Acc: {train_acc:.3f}, Test Acc: {test_acc:.3f}"
+            )
+
+    torch.save(model.state_dict(), args.model_path)
+    with open(args.meta_path, "w") as f:
+        json.dump(
+            {
+                "detector": args.detector,
+                "feature_count": expected_features,
+                "data_path": args.data_path,
+                "gestures": GESTURES.tolist(),
+                "model_class": "GestureNet",
+                "normalization": "wrist_centered_max_xy_scale" if args.detector == "mediapipe" else "bbox",
+            },
+            f,
+            indent=2,
         )
 
-    def forward(self, x):
-        return self.fc(x)
+    print(f"Saved model to {args.model_path}")
+    print(f"Saved labels to {args.labels_path}")
+    print(f"Saved metadata to {args.meta_path}")
 
-model = GestureNet(num_classes=len(GESTURES))
-criterion = nn.CrossEntropyLoss()
-optimizer = optim.Adam(model.parameters(), lr=1e-3)
 
-# Train loop
-for epoch in range(1000):
-    optimizer.zero_grad()
-    outputs = model(X_train)
-    loss = criterion(outputs, y_train)
-    loss.backward()
-    optimizer.step()
-
-    if epoch % 5 == 0:
-        with torch.no_grad():
-            acc = (outputs.argmax(1) == y_train).float().mean()
-        print(f"Epoch {epoch}, Loss: {loss.item():.4f}, Train Acc: {acc.item():.3f}")
-
-torch.save(model.state_dict(), MODEL_PATH)
-with open(META_PATH, "w") as f:
-    json.dump(
-        {
-            "input_mode": GESTURE_INPUT_MODE,
-            "data_path": DATA_PATH,
-            "gestures": GESTURES.tolist(),
-        },
-        f,
-        indent=2,
-    )
+if __name__ == "__main__":
+    main()

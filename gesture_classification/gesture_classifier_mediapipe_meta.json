@@ -1,0 +1,13 @@
+{
+  "detector": "mediapipe",
+  "feature_count": 63,
+  "data_path": "C:\\Users\\teren\\OneDrive\\Documentos\\GitHub\\B_Cubed\\gesture_classification\\gesture_data_mediapipe.csv",
+  "gestures": [
+    "open_hand",
+    "fist",
+    "point",
+    "thumbs_up"
+  ],
+  "model_class": "GestureNet",
+  "normalization": "wrist_centered_max_xy_scale"
+}

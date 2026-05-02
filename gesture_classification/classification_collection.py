@@ -1,37 +1,37 @@
-from ultralytics import YOLO
-import cv2
+import argparse
 import csv
 import os
 
-model = YOLO("../models/hand_keypoints_trained.pt")  # your trained model
-cap = cv2.VideoCapture(0)
+import cv2
 
+from mediapipe_static_hand import detect_first_hand, draw_hand, create_hands, landmarks_to_features
+
+
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 GESTURES = ["open_hand", "fist", "point", "thumbs_up"]
-SAVE_PATH = "gesture_data_normalized.csv"
-file_exists = os.path.isfile(SAVE_PATH)
 
-def validate_existing_normalized_data(path):
-    with open(path, newline="") as f:
-        reader = csv.reader(f)
-        header = next(reader, None)
-        if header is None:
-            return
-        if len(header) != 43:
-            raise RuntimeError(f"{path} must have 1 gesture column and 42 keypoint columns.")
 
-        for row_num, row in enumerate(reader, start=2):
-            if not row or row[0] == "gesture":
-                continue
-            values = [float(value) for value in row[1:]]
-            if len(values) != 42:
-                raise RuntimeError(f"{path}:{row_num} does not contain 42 keypoint values.")
-            if max(abs(value) for value in values) > 2.0:
-                raise RuntimeError(
-                    f"{path}:{row_num} looks like raw pixel data. "
-                    "Start a fresh normalized CSV before collecting more samples."
-                )
+def parse_args():
+    parser = argparse.ArgumentParser(description="Collect static hand gesture landmark samples.")
+    parser.add_argument("--camera", type=int, default=0)
+    parser.add_argument("--detector", choices=["mediapipe", "yolo"], default="mediapipe")
+    parser.add_argument("--save-path", default=os.path.join(BASE_DIR, "gesture_data_mediapipe.csv"))
+    parser.add_argument("--yolo-model", default=os.path.join(BASE_DIR, "..", "models", "hand_keypoints_trained.pt"))
+    return parser.parse_args()
 
-def normalize_keypoints_to_bbox(keypoints, bbox):
+
+def write_header_if_needed(writer, save_path, detector):
+    if os.path.isfile(save_path) and os.path.getsize(save_path) > 0:
+        return
+
+    if detector == "mediapipe":
+        columns = [coord for i in range(21) for coord in (f"x{i}", f"y{i}", f"z{i}")]
+    else:
+        columns = [coord for i in range(21) for coord in (f"x{i}", f"y{i}")]
+    writer.writerow(["gesture"] + columns)
+
+
+def normalize_yolo_keypoints_to_bbox(keypoints, bbox):
     x1, y1, x2, y2 = bbox
     bw = max(1.0, float(x2 - x1))
     bh = max(1.0, float(y2 - y1))
@@ -44,48 +44,106 @@ def normalize_keypoints_to_bbox(keypoints, bbox):
     return pts.flatten()
 
 
-current_label = 0  # index into GESTURES
-print(f"Recording gesture: {GESTURES[current_label]}")
-print(f"Saving normalized keypoints to: {SAVE_PATH}")
+def collect_with_mediapipe(args):
+    cap = cv2.VideoCapture(args.camera)
+    current_label = 0
+    print(f"Recording gesture: {GESTURES[current_label]}")
+    print(f"Saving MediaPipe landmarks to: {args.save_path}")
+    print("Hold a static gesture. Press n for next label, q to stop.")
 
-if file_exists:
-    validate_existing_normalized_data(SAVE_PATH)
+    with create_hands() as hands, open(args.save_path, "a", newline="") as f:
+        writer = csv.writer(f)
+        write_header_if_needed(writer, args.save_path, "mediapipe")
 
-with open(SAVE_PATH, "a", newline="") as f:
-    writer = csv.writer(f)
-    if not file_exists:
-        columns = [coord for i in range(21) for coord in (f"x{i}", f"y{i}")]
-        writer.writerow(["gesture"] + columns)
+        while True:
+            ret, frame = cap.read()
+            if not ret:
+                break
 
+            landmarks, handedness = detect_first_hand(frame, hands)
+            if landmarks is not None:
+                features = landmarks_to_features(landmarks)
+                writer.writerow([GESTURES[current_label]] + features.tolist())
+                draw_hand(frame, landmarks)
+                if handedness:
+                    cv2.putText(frame, handedness, (10, 75), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 255), 2)
 
-
-    while True:
-        ret, frame = cap.read()
-        if not ret:
-            break
-
-        results = model(frame, verbose=False)
-        result = results[0]
-        keypoints = result.keypoints.xy
-        boxes = result.boxes.xyxy
-
-        if keypoints is not None and boxes is not None and len(keypoints) > 0 and len(boxes) > 0:
-            pts = normalize_keypoints_to_bbox(
-                keypoints[0].cpu().numpy(),
-                boxes[0].cpu().numpy()
+            cv2.putText(
+                frame,
+                f"Gesture: {GESTURES[current_label]} | n next | q stop",
+                (10, 40),
+                cv2.FONT_HERSHEY_SIMPLEX,
+                0.8,
+                (0, 255, 0),
+                2,
             )
-            writer.writerow([GESTURES[current_label]] + pts.tolist())
+            cv2.imshow("Collecting MediaPipe Gestures", frame)
 
-        cv2.putText(frame, f"Gesture: {GESTURES[current_label]} (press n to next)(press q to stop)", (10, 40),
-                    cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2)
-        cv2.imshow("Collecting", frame)
+            key = cv2.waitKey(1) & 0xFF
+            if key == ord("n"):
+                current_label = (current_label + 1) % len(GESTURES)
+                print(f"Now recording: {GESTURES[current_label]}")
+            elif key == ord("q"):
+                break
 
-        key = cv2.waitKey(1)
-        if key == ord('n'):
-            current_label = (current_label + 1) % len(GESTURES)
-            print(f"Now recording: {GESTURES[current_label]}")
-        elif key == ord('q'):
-            break
+    cap.release()
+    cv2.destroyAllWindows()
 
-cap.release()
-cv2.destroyAllWindows()
+
+def collect_with_yolo(args):
+    from ultralytics import YOLO
+
+    model = YOLO(args.yolo_model)
+    cap = cv2.VideoCapture(args.camera)
+    current_label = 0
+    print(f"Recording gesture: {GESTURES[current_label]}")
+    print(f"Saving YOLO bbox-normalized keypoints to: {args.save_path}")
+
+    with open(args.save_path, "a", newline="") as f:
+        writer = csv.writer(f)
+        write_header_if_needed(writer, args.save_path, "yolo")
+
+        while True:
+            ret, frame = cap.read()
+            if not ret:
+                break
+
+            result = model(frame, verbose=False)[0]
+            keypoints = result.keypoints.xy
+            boxes = result.boxes.xyxy
+            if keypoints is not None and boxes is not None and len(keypoints) > 0 and len(boxes) > 0:
+                pts = normalize_yolo_keypoints_to_bbox(keypoints[0].cpu().numpy(), boxes[0].cpu().numpy())
+                writer.writerow([GESTURES[current_label]] + pts.tolist())
+
+            cv2.putText(
+                frame,
+                f"Gesture: {GESTURES[current_label]} | n next | q stop",
+                (10, 40),
+                cv2.FONT_HERSHEY_SIMPLEX,
+                0.8,
+                (0, 255, 0),
+                2,
+            )
+            cv2.imshow("Collecting YOLO Gestures", frame)
+
+            key = cv2.waitKey(1) & 0xFF
+            if key == ord("n"):
+                current_label = (current_label + 1) % len(GESTURES)
+                print(f"Now recording: {GESTURES[current_label]}")
+            elif key == ord("q"):
+                break
+
+    cap.release()
+    cv2.destroyAllWindows()
+
+
+def main():
+    args = parse_args()
+    if args.detector == "mediapipe":
+        collect_with_mediapipe(args)
+    else:
+        collect_with_yolo(args)
+
+
+if __name__ == "__main__":
+    main()
