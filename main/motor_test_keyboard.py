@@ -26,10 +26,24 @@ def exit_gracefully():
     print("exception occurred")
     exit(1)
 
+def cross2d(vec_a: np.ndarray, vec_b: np.ndarray) -> float:
+    return vec_a[0] * vec_b[1] - vec_a[1] * vec_b[0]
+
+def normal_intersection(vec_a: np.ndarray, vec_b: np.ndarray) -> np.ndarray:
+    # intersection_b_scalar = np.dot(vec_a, vec_b - vec_a) / cross(vec_a, vec_b)
+    ab_cross = cross2d(vec_a, vec_b)
+    if ab_cross == 0.0:
+        return vec_a
+
+    intersection_b_scalar = np.dot(vec_a, vec_b - vec_a) / ab_cross
+    intersection_b = vec_b + intersection_b_scalar * np.array([-vec_b[1], vec_b[0]])
+    return intersection_b
 
 class InputHandler:
 
     def __init__(self):
+        self.stop_pressed: bool = False
+
         self.up_pressed: bool = False
         self.down_pressed: bool = False
         self.left_pressed: bool = False
@@ -54,6 +68,8 @@ class InputHandler:
                 self.mouse_pressed = False
 
             if event.type == KEYDOWN:
+
+                if event.key == K_SPACE: self.stop_pressed = True
 
                 if event.key == K_RIGHT: self.cw_pressed = True
                 if event.key == K_LEFT: self.ccw_pressed = True
@@ -123,17 +139,19 @@ class App:
             self.top_left_motor.set_power(0)
             self.top_left_motor.reset_encoder()
 
-            self.top_right_motor: Motor = Motor(self.bus, 7)
+            self.top_right_motor: Motor = Motor(self.bus, 9)
             self.top_right_motor.set_power(0)
             self.top_right_motor.reset_encoder()
 
-            self.bottom_motor = Motor(self.bus, 9)
+            self.bottom_motor = Motor(self.bus, 7)
             self.bottom_motor.set_power(0)
             self.bottom_motor.reset_encoder()
 
         # https://stackoverflow.com/questions/13207678/whats-the-simplest-way-of-detecting-keyboard-input-in-a-script-from-the-termina
         # https://www.pygame.org/docs/tut/newbieguide.html
         pygame.init()
+        pygame.font.init()
+        self.FONT = pygame.font.SysFont('Arial', 15)
         self.screen = pygame.display.set_mode(self.WINDOW_SIZE)
         pygame.display.set_caption('Pygame Keyboard Test')
         pygame.mouse.set_visible(1)
@@ -147,9 +165,14 @@ class App:
     def flip_y(self, vec: np.ndarray) -> np.ndarray:
         return np.array([vec[0], 2 * self.MIDDLE_COORD[1] - vec[1]])
 
+
     def run(self):
         try:
             while True:
+
+                if self.input_handler.stop_pressed:
+                    exit(1)
+
                 self.current_time = time.time()
                 self.dt = self.current_time - self.previous_time
                 self.previous_time = self.current_time
@@ -175,6 +198,7 @@ class App:
 
         self.mouse_vec = (self.input_handler.mouse_pos - self.MIDDLE_COORD) / self.DRAW_SCALE
         self.mouse_vec = np.array([self.mouse_vec[0], -self.mouse_vec[1]])
+        # print(self.mouse_vec)
 
         if self.input_handler.mouse_pressed:
             speed = np.clip(0, 1, np.linalg.norm(self.mouse_vec))
@@ -207,9 +231,9 @@ class App:
     def draw(self):
         self.screen.fill((0, 0, 0))
 
-        intersection_a_scalar = np.dot(self.TOP_RIGHT_VEC, self.TOP_RIGHT_VEC - self.TOP_LEFT_VEC) / np.cross(self.TOP_RIGHT_VEC, self.TOP_LEFT_VEC)
-        intersection_a = self.TOP_LEFT_VEC + intersection_a_scalar * np.array(-self.TOP_LEFT_VEC[1], self.TOP_LEFT_VEC[0])
-        pygame.draw.circle(self.screen, (0, 255, 255), self.DRAW_SCALE * self.flip_y(intersection_a), 4, 2)
+        top_left_velocity = self.top_left_speed * self.TOP_LEFT_VEC
+        top_right_velocity = self.top_right_speed * self.TOP_RIGHT_VEC
+        bottom_velocity = self.bottom_speed * self.BOTTOM_VEC
 
 
         pygame.draw.circle(self.screen, (255, 255, 255), self.MIDDLE_COORD, self.DRAW_SCALE - 2, 2)
@@ -221,12 +245,36 @@ class App:
 
         pygame.draw.line(self.screen, (255, 0, 0), self.flip_y(self.MIDDLE_COORD), self.flip_y(self.MIDDLE_COORD + self.DRAW_SCALE * self.velocity), 5)
 
-        pygame.draw.line(self.screen, (0, 255, 0), self.flip_y(self.TOP_LEFT_WHEEL_COORD), self.flip_y(self.TOP_LEFT_WHEEL_COORD + self.DRAW_SCALE * self.top_left_speed * self.TOP_LEFT_VEC), 5)
-        pygame.draw.line(self.screen, (0, 255, 0), self.flip_y(self.TOP_RIGHT_WHEEL_COORD), self.flip_y(self.TOP_RIGHT_WHEEL_COORD + self.DRAW_SCALE * self.top_right_speed * self.TOP_RIGHT_VEC), 5)
-        pygame.draw.line(self.screen, (0, 255, 0), self.flip_y(self.BOTTOM_WHEEL_COORD), self.flip_y(self.BOTTOM_WHEEL_COORD + self.DRAW_SCALE * self.bottom_speed * self.BOTTOM_VEC), 5)
+        # green lines
+        pygame.draw.line(self.screen, (0, 255, 0), self.flip_y(self.TOP_LEFT_WHEEL_COORD), self.flip_y(self.TOP_LEFT_WHEEL_COORD + self.DRAW_SCALE * top_left_velocity), 5)
+        pygame.draw.line(self.screen, (0, 255, 0), self.flip_y(self.TOP_RIGHT_WHEEL_COORD), self.flip_y(self.TOP_RIGHT_WHEEL_COORD + self.DRAW_SCALE * top_right_velocity), 5)
+        pygame.draw.line(self.screen, (0, 255, 0), self.flip_y(self.BOTTOM_WHEEL_COORD), self.flip_y(self.BOTTOM_WHEEL_COORD + self.DRAW_SCALE * bottom_velocity), 5)
+
+        # green lines at center
+        pygame.draw.line(self.screen, (0, 255, 0), self.flip_y(self.MIDDLE_COORD), self.flip_y(self.MIDDLE_COORD + self.DRAW_SCALE * top_left_velocity), 5)
+        pygame.draw.line(self.screen, (0, 255, 0), self.flip_y(self.MIDDLE_COORD), self.flip_y(self.MIDDLE_COORD + self.DRAW_SCALE * top_right_velocity), 5)
+        pygame.draw.line(self.screen, (0, 255, 0), self.flip_y(self.MIDDLE_COORD), self.flip_y(self.MIDDLE_COORD + self.DRAW_SCALE * bottom_velocity), 5)
+
+        intersection_p1 = normal_intersection(bottom_velocity, top_left_velocity)
+        intersection_p2 = normal_intersection(top_left_velocity, top_right_velocity)
+        intersection_p3 = normal_intersection(bottom_velocity, top_right_velocity)
+
+        valid_intersection_points = np.array([arr for arr in [intersection_p1, intersection_p2, intersection_p3] if not np.any(np.isnan(arr))])
+        calculated_velocity = np.sum(valid_intersection_points, axis=0) / len(valid_intersection_points)
+
+        text_surface = self.FONT.render(": " + str(valid_intersection_points), False, (255, 255, 255))
+        self.screen.blit(text_surface, (0,60))
+
+        text_surface = self.FONT.render("velocity: " + str(self.velocity), False, (255, 255, 255))
+        self.screen.blit(text_surface, (0,0))
+        text_surface = self.FONT.render("calculated velocity: " + str(calculated_velocity), False, (255, 255, 255))
+        self.screen.blit(text_surface, (0,30))
+
+        pygame.draw.circle(self.screen, (0, 255, 255), self.flip_y(self.MIDDLE_COORD + self.DRAW_SCALE * intersection_p1), 2, 2)
+        pygame.draw.circle(self.screen, (0, 255, 255), self.flip_y(self.MIDDLE_COORD + self.DRAW_SCALE * intersection_p2), 2, 2)
+        pygame.draw.circle(self.screen, (0, 255, 255), self.flip_y(self.MIDDLE_COORD + self.DRAW_SCALE * intersection_p3), 2, 2)
 
         pygame.display.update()
-
 
 # print("SLEEPING 0.5 SEC...")
 # time.sleep(0.5)
