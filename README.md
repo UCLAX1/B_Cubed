@@ -1,5 +1,18 @@
 # B_Cubed: Motors Testing
 
+## how to use the motors
+- STEP 1: look at motors_test.py and run it for an example
+- STEP 2: make a can bus like this:
+`bus = CanBus(channel='COM5', interface='slcan', bitrate=1000000)`\
+(you'll have to figure out the channel, interface, and bitrate depending on your device)\
+(for example, if you're on windows, the channel can be found in Device Manager)\
+and call `bus.start()`
+- STEP 3: make your motor: `motor0 = Motor(bus, 0)`, `motor1 = Motor(bus, 1)`, etc.\
+(the ids are saved to a list)
+- STEP 4: in your while loop, repeatedly call `motor.send_heartbeat()` to make it not break and `motor.set_power(your_power)` to set the power
+ 
+
+
 ## What the heck are the files in this branch
 - ServoEx is the class for the servos. It should have everything.
 - HardwareInterface is the class for the Motors. It uses can.
