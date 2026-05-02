@@ -11,6 +11,7 @@ class Publisher(Node):
         self.timer = self.create_timer(timer_period, self.timer_callback)
         self.x_velocity = 0.0
         self.y_velocity = 0.0
+        self.angular_velocity = 0.0
         self.servo_angle_1 = 0.0
         self.servo_angle_2 = 0.0
         self.servo_angle_3 = 0.0
@@ -21,6 +22,7 @@ class Publisher(Node):
         msg.data = [
             float(self.x_velocity),
             float(self.y_velocity),
+            float(self.angular_velocity),
             float(self.servo_angle_1),
             float(self.servo_angle_2),
             float(self.servo_angle_3),
