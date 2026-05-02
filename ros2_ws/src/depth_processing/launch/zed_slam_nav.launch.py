@@ -23,7 +23,13 @@ def generate_launch_description() -> LaunchDescription:
     nav2_launch = PathJoinSubstitution(
         [package_share, "launch", "zed_nav2_bringup.launch.py"]
     )
+    planner_only_launch = PathJoinSubstitution(
+        [package_share, "launch", "zed_planner_only.launch.py"]
+    )
     nav2_params = PathJoinSubstitution([package_share, "config", "nav2_zed_slam.yaml"])
+    planner_only_params = PathJoinSubstitution(
+        [package_share, "config", "nav2_handheld_planner.yaml"]
+    )
     gate_params = PathJoinSubstitution(
         [package_share, "config", "twist_safety_gate.yaml"]
     )
@@ -42,12 +48,16 @@ def generate_launch_description() -> LaunchDescription:
             DeclareLaunchArgument("slam_mode", default_value="mapping"),
             DeclareLaunchArgument("use_sim_time", default_value="false"),
             DeclareLaunchArgument("enable_nav2", default_value="true"),
+            DeclareLaunchArgument("enable_planner_only", default_value="false"),
             DeclareLaunchArgument("enable_planning_console", default_value="false"),
             DeclareLaunchArgument("planning_console_host", default_value="127.0.0.1"),
             DeclareLaunchArgument("planning_console_port", default_value="8080"),
             DeclareLaunchArgument("enable_tracking_node", default_value="true"),
             DeclareLaunchArgument("autostart_nav2", default_value="true"),
-            DeclareLaunchArgument("cloud_topic", default_value="/zed/zed_node/point_cloud/cloud_registered"),
+            DeclareLaunchArgument(
+                "cloud_topic",
+                default_value="/zed/zed_node/point_cloud/cloud_registered",
+            ),
             DeclareLaunchArgument("input_pose_topic", default_value="/zed/zed_node/pose"),
             DeclareLaunchArgument(
                 "input_pose_cov_topic",
@@ -69,6 +79,10 @@ def generate_launch_description() -> LaunchDescription:
             DeclareLaunchArgument("base_to_camera_rpy", default_value="0.0,0.0,0.0"),
             DeclareLaunchArgument("map_file_name", default_value=""),
             DeclareLaunchArgument("nav2_params_file", default_value=nav2_params),
+            DeclareLaunchArgument(
+                "planner_only_params_file",
+                default_value=planner_only_params,
+            ),
             DeclareLaunchArgument(
                 "safety_gate_params_file",
                 default_value=gate_params,
@@ -148,6 +162,17 @@ def generate_launch_description() -> LaunchDescription:
                     "nav2_params_file": LaunchConfiguration("nav2_params_file"),
                     "safety_gate_params_file": LaunchConfiguration(
                         "safety_gate_params_file"
+                    ),
+                }.items(),
+            ),
+            IncludeLaunchDescription(
+                PythonLaunchDescriptionSource(planner_only_launch),
+                condition=IfCondition(LaunchConfiguration("enable_planner_only")),
+                launch_arguments={
+                    "use_sim_time": LaunchConfiguration("use_sim_time"),
+                    "autostart": "true",
+                    "planner_params_file": LaunchConfiguration(
+                        "planner_only_params_file"
                     ),
                 }.items(),
             ),

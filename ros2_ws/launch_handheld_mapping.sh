@@ -39,6 +39,7 @@ SHOW_TRACKING_WINDOW="${SHOW_TRACKING_WINDOW:-false}"
 PUBLISH_TRACKING_IMAGE="${PUBLISH_TRACKING_IMAGE:-false}"
 
 ENABLE_NAV2="${ENABLE_NAV2:-false}"
+ENABLE_PLANNER_ONLY="${ENABLE_PLANNER_ONLY:-true}"
 ENABLE_PLANNING_CONSOLE="${ENABLE_PLANNING_CONSOLE:-true}"
 PLANNING_CONSOLE_HOST="${PLANNING_CONSOLE_HOST:-127.0.0.1}"
 PLANNING_CONSOLE_PORT="${PLANNING_CONSOLE_PORT:-8080}"
@@ -130,6 +131,40 @@ configure_nav2_launch() {
   ENABLE_NAV2="false"
 }
 
+configure_planner_only_launch() {
+  if bool_is_true "$ENABLE_NAV2"; then
+    ENABLE_PLANNER_ONLY="false"
+    return 0
+  fi
+  if ! bool_is_true "$ENABLE_PLANNER_ONLY"; then
+    return 0
+  fi
+
+  local required_packages=(
+    nav2_planner
+    nav2_lifecycle_manager
+    nav2_navfn_planner
+    nav2_costmap_2d
+  )
+  local missing=()
+  mapfile -t missing < <(missing_ros_packages "${required_packages[@]}")
+
+  if (( ${#missing[@]} == 0 )); then
+    return 0
+  fi
+
+  echo "Nav2 planner-only packages are missing:" >&2
+  printf '  %s\n' "${missing[@]}" >&2
+  echo >&2
+  echo "Continuing with ENABLE_PLANNER_ONLY=false." >&2
+  echo "The web console will still show the map, but click-to-plan needs Navigation2:" >&2
+  echo "  sudo apt update" >&2
+  echo "  sudo apt install ros-humble-navigation2 ros-humble-nav2-bringup" >&2
+  echo >&2
+
+  ENABLE_PLANNER_ONLY="false"
+}
+
 print_instructions() {
   cat <<EOF
 
@@ -154,8 +189,9 @@ Optional upstream wrapper topics:
 
 Web planning console:
   http://$PLANNING_CONSOLE_URL_HOST:$PLANNING_CONSOLE_PORT/
-  Nav2 planner enabled: $ENABLE_NAV2
-  Set ENABLE_NAV2=true after the handheld map/scan path is healthy.
+  Nav2 planner-only enabled: $ENABLE_PLANNER_ONLY
+  Full Nav2 enabled: $ENABLE_NAV2
+  Full Nav2 can be tested later with ENABLE_NAV2=true.
 
 Save commands after the map looks good:
   ros2 service call /slam_toolbox/save_map slam_toolbox/srv/SaveMap "{name: {data: '$MAP_PREFIX'}}"
@@ -225,6 +261,7 @@ if [[ ! -f "$INSTALL_SETUP" ]]; then
 fi
 
 configure_nav2_launch
+configure_planner_only_launch
 
 if bool_is_true "$START_WRAPPER"; then
   run_terminal "zed wrapper" "$WRAPPER_LAUNCH"
@@ -244,6 +281,7 @@ run_terminal \
   "ros2 launch depth_processing zed_slam_nav.launch.py \
     slam_mode:='mapping' \
     enable_nav2:='${ENABLE_NAV2}' \
+    enable_planner_only:='${ENABLE_PLANNER_ONLY}' \
     enable_planning_console:='${ENABLE_PLANNING_CONSOLE}' \
     planning_console_host:='${PLANNING_CONSOLE_HOST}' \
     planning_console_port:='${PLANNING_CONSOLE_PORT}' \
@@ -269,8 +307,9 @@ run_terminal \
    echo; \
    echo 'Web planning console:'; \
    echo '  http://$PLANNING_CONSOLE_URL_HOST:$PLANNING_CONSOLE_PORT/'; \
-   echo '  Nav2 planner enabled: $ENABLE_NAV2'; \
-   echo '  Set ENABLE_NAV2=true after the handheld map/scan path is healthy.'; \
+   echo '  Nav2 planner-only enabled: $ENABLE_PLANNER_ONLY'; \
+   echo '  Full Nav2 enabled: $ENABLE_NAV2'; \
+   echo '  Full Nav2 can be tested later with ENABLE_NAV2=true.'; \
    echo; \
    echo 'Save commands:'; \
    echo \"ros2 service call /slam_toolbox/save_map slam_toolbox/srv/SaveMap \\\"{name: {data: '$MAP_PREFIX'}}\\\"\"; \

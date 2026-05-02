@@ -344,9 +344,7 @@ function updateMapImage(nextState) {
   mapReady = false;
   mapImage.onload = () => {
     mapReady = true;
-    if (needsFit) {
-      fitMap();
-    }
+    fitMap();
     draw();
   };
   mapImage.src = `/api/map.png?rev=${mapRevision}`;

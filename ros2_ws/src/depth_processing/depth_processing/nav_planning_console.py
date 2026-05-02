@@ -510,9 +510,10 @@ class NavPlanningConsoleNode(Node):
         x_value = float(payload["x"])
         y_value = float(payload["y"])
         yaw = payload.get("yaw")
+        with self._lock:
+            start_pose = dict(self._pose) if self._pose is not None else None
         if yaw is None:
-            with self._lock:
-                yaw = self._pose["yaw"] if self._pose is not None else 0.0
+            yaw = start_pose["yaw"] if start_pose is not None else 0.0
         yaw_value = float(yaw)
 
         with self._lock:
@@ -524,15 +525,18 @@ class NavPlanningConsoleNode(Node):
             timeout_sec=self.planner_server_timeout_sec
         ):
             self._set_planner_error(
-                f"Planner action '{self.planner_action_name}' is not available."
+                f"Planner action '{self.planner_action_name}' is not available. "
+                "Start the Nav2 planner server or the handheld planner-only launch."
             )
             raise PlanningConsoleError(
-                f"Planner action '{self.planner_action_name}' is not available."
+                f"Planner action '{self.planner_action_name}' is not available. "
+                "Start the Nav2 planner server or the handheld planner-only launch."
             )
 
         goal_msg = ComputePathToPose.Goal()
+        stamp = self.get_clock().now().to_msg()
         goal_msg.goal.header.frame_id = self.global_frame
-        goal_msg.goal.header.stamp = self.get_clock().now().to_msg()
+        goal_msg.goal.header.stamp = stamp
         goal_msg.goal.pose.position.x = x_value
         goal_msg.goal.pose.position.y = y_value
         goal_msg.goal.pose.position.z = 0.0
@@ -542,7 +546,18 @@ class NavPlanningConsoleNode(Node):
         goal_msg.goal.pose.orientation.z = quat_z
         goal_msg.goal.pose.orientation.w = quat_w
         goal_msg.planner_id = self.planner_id
-        goal_msg.use_start = False
+        goal_msg.use_start = start_pose is not None
+        if start_pose is not None:
+            start_quat = _quaternion_from_yaw(float(start_pose["yaw"]))
+            goal_msg.start.header.frame_id = self.global_frame
+            goal_msg.start.header.stamp = stamp
+            goal_msg.start.pose.position.x = float(start_pose["x"])
+            goal_msg.start.pose.position.y = float(start_pose["y"])
+            goal_msg.start.pose.position.z = 0.0
+            goal_msg.start.pose.orientation.x = start_quat[0]
+            goal_msg.start.pose.orientation.y = start_quat[1]
+            goal_msg.start.pose.orientation.z = start_quat[2]
+            goal_msg.start.pose.orientation.w = start_quat[3]
 
         send_future = self.planner_client.send_goal_async(goal_msg)
         goal_handle = self._wait_for_future(
