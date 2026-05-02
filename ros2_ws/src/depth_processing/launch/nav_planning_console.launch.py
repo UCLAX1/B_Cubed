@@ -23,6 +23,8 @@ def generate_launch_description() -> LaunchDescription:
     global_frame = LaunchConfiguration("global_frame")
     base_frame = LaunchConfiguration("base_frame")
     planner_action_name = LaunchConfiguration("planner_action_name")
+    navigator_action_name = LaunchConfiguration("navigator_action_name")
+    navigation_plane_z = LaunchConfiguration("navigation_plane_z")
 
     return LaunchDescription(
         [
@@ -36,6 +38,11 @@ def generate_launch_description() -> LaunchDescription:
                 "planner_action_name",
                 default_value="compute_path_to_pose",
             ),
+            DeclareLaunchArgument(
+                "navigator_action_name",
+                default_value="navigate_to_pose",
+            ),
+            DeclareLaunchArgument("navigation_plane_z", default_value="0.0"),
             Node(
                 package="depth_processing",
                 executable="nav_planning_console",
@@ -50,6 +57,11 @@ def generate_launch_description() -> LaunchDescription:
                         "global_frame": global_frame,
                         "base_frame": base_frame,
                         "planner_action_name": planner_action_name,
+                        "navigator_action_name": navigator_action_name,
+                        "navigation_plane_z": ParameterValue(
+                            navigation_plane_z,
+                            value_type=float,
+                        ),
                     },
                 ],
             ),

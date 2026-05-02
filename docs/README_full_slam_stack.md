@@ -30,10 +30,14 @@ That default is now baked into:
 - `zed_nav_bringup.launch.py`
 - `zed_mapping_pass.launch.py`
 - `zed_localization_mode.launch.py`
-- `ros2_ws/launch.sh`
+- `ros2_ws/launch_old.sh`
 
 If the real measured offset is slightly different, update
 `base_to_camera_translation`.
+
+The current handheld `ros2_ws/launch.sh` overrides this to
+`0.0,0.0,0.0`, because the camera is treated as the whole moving body during a
+handheld test.
 
 ## TF ownership rule
 
@@ -67,14 +71,14 @@ What it expects to already exist:
 - `map -> odom -> base_link`
 - `zed/is_localized`
 
-This is the best companion launch for `ros2_ws/launch.sh`, because that script
-already brings up mapping and localization mode.
+This is the best companion launch for `ros2_ws/launch_old.sh`, because that
+preserved launcher brings up mapping and localization mode.
 
-Recommended use after `launch.sh` switches into localization mode:
+Recommended use after `launch_old.sh` switches into localization mode:
 
 ```bash
 export NAVIGATION_AUTOSTART_COMMAND="ros2 launch depth_processing zed_nav2_bringup.launch.py"
-./launch.sh
+./launch_old.sh
 ```
 
 ## Launch 2: `zed_slam_nav.launch.py`
@@ -182,6 +186,6 @@ not, that final hardware interface still has to exist outside this repo.
 ## Camera-only testing
 
 For a handheld camera test before the full robot is ready, use
-[launch_handheld_mapping.sh](/Users/sara/Documents/My-Documents/X1 Robotics/B_Cubed/ros2_ws/launch_handheld_mapping.sh)
+`ros2_ws/launch.sh`
 and the companion notes in
 [README_handheld_mapping_test.md](/Users/sara/Documents/My-Documents/X1 Robotics/B_Cubed/docs/README_handheld_mapping_test.md).

@@ -17,17 +17,17 @@ Use:
 
 ```bash
 cd ~/Documents/B_Cubed/ros2_ws
-./launch_handheld_mapping.sh
+./launch.sh
 ```
 
 That script lives at
-[launch_handheld_mapping.sh](/Users/sara/Documents/My-Documents/X1 Robotics/B_Cubed/ros2_ws/launch_handheld_mapping.sh)
-and it does four things:
+`ros2_ws/launch.sh` and it does five things:
 
 1. builds the workspace
 2. starts the ZED wrapper in a new terminal by default
 3. waits until the required wrapper topics appear
-4. launches `zed_slam_nav.launch.py` in `mapping` mode with:
+4. starts MediaPipe gesture recognition on the ZED color feed
+5. launches `zed_slam_nav.launch.py` in `mapping` mode with:
    - `enable_nav2:=false`
    - `base_frame:=zed_camera_link`
    - `base_to_camera_translation:=0.0,0.0,0.0`
@@ -69,8 +69,8 @@ It does not require `pose_with_covariance` by default, because
 when needed.
 
 The compressed image topic is also treated as optional for launch readiness.
-It is still useful for the localization overlay, but the mapping stack itself
-does not need it to start.
+It becomes required when `START_GESTURE_RECOGNITION=true`, because MediaPipe
+needs the ZED color feed.
 
 If your wrapper uses different topic names, export overrides before running the
 script. Example:
@@ -81,7 +81,7 @@ export INPUT_POSE_COV_TOPIC="/my_zed/pose_with_covariance"
 export INPUT_ODOM_TOPIC="/my_zed/odom"
 export INPUT_IMAGE_TOPIC="/my_zed/image/compressed"
 export CLOUD_TOPIC="/my_zed/cloud"
-./launch_handheld_mapping.sh
+./launch.sh
 ```
 
 ## Optional environment overrides
@@ -96,6 +96,12 @@ export CLOUD_TOPIC="/my_zed/cloud"
 - `REQUIRE_POSE_COV_TOPIC=true`
   Only use this if you specifically want the launcher to wait for a real
   covariance topic instead of allowing `zed_tracking` to synthesize one.
+- `START_GESTURE_RECOGNITION=false`
+  Disables the MediaPipe gesture recognition terminal.
+- `GESTURE_IMAGE_TOPIC=/zed/zed_node/rgb/color/rect/image/compressed`
+  Overrides the image topic used by MediaPipe gesture recognition.
+- `GESTURE_TOPIC=/gesture_recognition/result`
+  Overrides the JSON gesture result topic.
 - `START_RVIZ=true`
   Opens a plain `rviz2` window in another terminal.
 - `RVIZ_COMMAND="rviz2"`

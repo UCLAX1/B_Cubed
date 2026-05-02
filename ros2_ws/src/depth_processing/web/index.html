@@ -16,8 +16,11 @@
         <span class="status-chip" id="mapStatus">map waiting</span>
         <span class="status-chip" id="poseStatus">pose waiting</span>
         <span class="status-chip" id="planStatus">planner idle</span>
+        <span class="status-chip" id="navStatus">nav idle</span>
       </div>
       <div class="toolbar">
+        <button type="button" id="navigateButton" class="primary" title="Navigate to the planned goal" disabled>Navigate</button>
+        <button type="button" id="stopButton" class="danger" title="Cancel navigation" disabled>Stop</button>
         <button type="button" id="fitButton" title="Fit map">Fit</button>
         <button type="button" id="clearButton" title="Clear path">Clear</button>
       </div>
@@ -57,6 +60,10 @@
               <dt>Path</dt>
               <dd id="pathCount">0 poses</dd>
             </div>
+            <div>
+              <dt>Z</dt>
+              <dd id="goalZ">-</dd>
+            </div>
           </dl>
         </div>
 
@@ -74,6 +81,28 @@
             <div>
               <dt>Yaw</dt>
               <dd id="robotYaw">-</dd>
+            </div>
+            <div>
+              <dt>Z</dt>
+              <dd id="robotZ">-</dd>
+            </div>
+          </dl>
+        </div>
+
+        <div class="panel-section">
+          <h2>Navigation</h2>
+          <dl class="metric-list">
+            <div>
+              <dt>Dist</dt>
+              <dd id="navDistance">-</dd>
+            </div>
+            <div>
+              <dt>Time</dt>
+              <dd id="navTime">-</dd>
+            </div>
+            <div>
+              <dt>Recover</dt>
+              <dd id="navRecoveries">-</dd>
             </div>
           </dl>
         </div>

@@ -5,17 +5,25 @@ const context = canvas.getContext("2d");
 const mapStatus = document.getElementById("mapStatus");
 const poseStatus = document.getElementById("poseStatus");
 const planStatus = document.getElementById("planStatus");
+const navStatus = document.getElementById("navStatus");
 const readout = document.getElementById("readout");
+const navigateButton = document.getElementById("navigateButton");
+const stopButton = document.getElementById("stopButton");
 const fitButton = document.getElementById("fitButton");
 const clearButton = document.getElementById("clearButton");
 const headingMode = document.getElementById("headingMode");
 const headingInput = document.getElementById("headingInput");
 const goalX = document.getElementById("goalX");
 const goalY = document.getElementById("goalY");
+const goalZ = document.getElementById("goalZ");
 const pathCount = document.getElementById("pathCount");
 const robotX = document.getElementById("robotX");
 const robotY = document.getElementById("robotY");
+const robotZ = document.getElementById("robotZ");
 const robotYaw = document.getElementById("robotYaw");
+const navDistance = document.getElementById("navDistance");
+const navTime = document.getElementById("navTime");
+const navRecoveries = document.getElementById("navRecoveries");
 
 const mapImage = new Image();
 
@@ -50,9 +58,20 @@ function degrees(rad) {
   return `${(rad * 180 / Math.PI).toFixed(1)} deg`;
 }
 
+function seconds(value) {
+  if (!Number.isFinite(value)) {
+    return "-";
+  }
+  return `${value.toFixed(1)} s`;
+}
+
 function setChip(element, text, className) {
   element.textContent = text;
   element.className = `status-chip ${className || ""}`.trim();
+}
+
+function isNavigationActive(status) {
+  return status === "sending" || status === "active" || status === "canceling";
 }
 
 function resizeCanvas() {
@@ -335,6 +354,48 @@ async function clearPath() {
   await refreshState();
 }
 
+async function requestNavigation() {
+  const goal = selectedGoal || (state ? state.goal : null);
+  if (!goal) {
+    setChip(navStatus, "no goal", "warn");
+    return;
+  }
+
+  setChip(navStatus, "starting", "warn");
+  try {
+    const response = await fetch("/api/navigate", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify(goal)
+    });
+    const payload = await response.json();
+    if (!response.ok || !payload.ok) {
+      throw new Error(payload.error || "Navigation failed to start.");
+    }
+    await refreshState();
+  } catch (error) {
+    setChip(navStatus, error.message, "bad");
+  }
+}
+
+async function cancelNavigation() {
+  setChip(navStatus, "canceling", "warn");
+  try {
+    const response = await fetch("/api/cancel_navigation", {
+      method: "POST"
+    });
+    const payload = await response.json();
+    if (!response.ok || !payload.ok) {
+      throw new Error(payload.error || "Cancel failed.");
+    }
+    await refreshState();
+  } catch (error) {
+    setChip(navStatus, error.message, "bad");
+  }
+}
+
 function updateMapImage(nextState) {
   if (!nextState.map || nextState.map_revision === mapRevision) {
     return;
@@ -366,11 +427,13 @@ function updateMetrics() {
     setChip(poseStatus, `pose ${meters(state.pose.x)}, ${meters(state.pose.y)}`, "good");
     robotX.textContent = meters(state.pose.x);
     robotY.textContent = meters(state.pose.y);
+    robotZ.textContent = meters(state.pose.z);
     robotYaw.textContent = degrees(state.pose.yaw);
   } else {
     setChip(poseStatus, "pose waiting", "warn");
     robotX.textContent = "-";
     robotY.textContent = "-";
+    robotZ.textContent = "-";
     robotYaw.textContent = "-";
   }
 
@@ -386,13 +449,44 @@ function updateMetrics() {
   if (goal) {
     goalX.textContent = meters(goal.x);
     goalY.textContent = meters(goal.y);
+    goalZ.textContent = meters(goal.z);
   } else {
     goalX.textContent = "-";
     goalY.textContent = "-";
+    goalZ.textContent = "-";
   }
 
   const points = state.path && state.path.points ? state.path.points.length : 0;
   pathCount.textContent = `${points} poses`;
+
+  const navigation = state.navigation || {};
+  const navFeedback = navigation.feedback || {};
+  const navState = navigation.status || "idle";
+  if (navigation.error) {
+    setChip(navStatus, navigation.error, "bad");
+  } else if (navState === "idle") {
+    setChip(navStatus, "nav idle", "");
+  } else if (navState === "active") {
+    setChip(navStatus, "nav active", "good");
+  } else if (navState === "succeeded") {
+    setChip(navStatus, "nav complete", "good");
+  } else if (navState === "canceled") {
+    setChip(navStatus, "nav canceled", "warn");
+  } else if (navState === "failed") {
+    setChip(navStatus, "nav failed", "bad");
+  } else {
+    setChip(navStatus, `nav ${navState}`, "warn");
+  }
+
+  navDistance.textContent = meters(navFeedback.distance_remaining);
+  navTime.textContent = seconds(navFeedback.navigation_time_sec);
+  navRecoveries.textContent = Number.isFinite(navFeedback.number_of_recoveries)
+    ? String(navFeedback.number_of_recoveries)
+    : "-";
+
+  const canNavigate = Boolean(goal) && points > 0 && !isNavigationActive(navState);
+  navigateButton.disabled = !canNavigate;
+  stopButton.disabled = !isNavigationActive(navState);
 }
 
 async function refreshState() {
@@ -492,6 +586,14 @@ fitButton.addEventListener("click", () => {
 
 clearButton.addEventListener("click", () => {
   clearPath();
+});
+
+navigateButton.addEventListener("click", () => {
+  requestNavigation();
+});
+
+stopButton.addEventListener("click", () => {
+  cancelNavigation();
 });
 
 headingMode.addEventListener("change", () => {

@@ -54,7 +54,10 @@ def _quaternion_inverse(quaternion: Sequence[float]) -> tuple[float, float, floa
     return (-x_value, -y_value, -z_value, w_value)
 
 
-def _rotate_vector(quaternion: Sequence[float], vector: Sequence[float]) -> tuple[float, float, float]:
+def _rotate_vector(
+    quaternion: Sequence[float],
+    vector: Sequence[float],
+) -> tuple[float, float, float]:
     """Rotate a 3D vector by a quaternion."""
     qx, qy, qz, qw = _normalize_quaternion(quaternion)
     vx, vy, vz = [float(component) for component in vector[:3]]
@@ -108,6 +111,20 @@ def _quaternion_from_rpy(
     )
 
 
+def _yaw_from_quaternion(quaternion: Sequence[float]) -> float:
+    """Return yaw from a quaternion in x/y/z/w order."""
+    x_value, y_value, z_value, w_value = _normalize_quaternion(quaternion)
+    siny_cosp = 2.0 * (w_value * z_value + x_value * y_value)
+    cosy_cosp = 1.0 - 2.0 * (y_value * y_value + z_value * z_value)
+    return math.atan2(siny_cosp, cosy_cosp)
+
+
+def _quaternion_from_yaw(yaw: float) -> tuple[float, float, float, float]:
+    """Return a planar yaw quaternion in x/y/z/w order."""
+    half_yaw = yaw * 0.5
+    return 0.0, 0.0, math.sin(half_yaw), math.cos(half_yaw)
+
+
 class ZedBaseAdapterNode(Node):
     """Convert ZED camera-centric localization into base_link-centric navigation topics."""
 
@@ -130,6 +147,12 @@ class ZedBaseAdapterNode(Node):
         self.publish_odom_tf = bool(self.get_parameter("publish_odom_tf").value)
         self.publish_map_to_odom_tf = bool(
             self.get_parameter("publish_map_to_odom_tf").value
+        )
+        self.flatten_navigation_to_2d = bool(
+            self.get_parameter("flatten_navigation_to_2d").value
+        )
+        self.navigation_plane_z = float(
+            self.get_parameter("navigation_plane_z").value
         )
         self.path_history_length = max(
             2,
@@ -222,6 +245,11 @@ class ZedBaseAdapterNode(Node):
             f"{self.output_pose_topic}, {self.output_pose_cov_topic}, "
             f"{self.output_odom_topic}, and {self.output_path_topic}."
         )
+        if self.flatten_navigation_to_2d:
+            self.get_logger().info(
+                "Flattening navigation pose and TF outputs to the 2D occupancy "
+                f"plane at z={self.navigation_plane_z:.3f} m."
+            )
 
     def _declare_parameters(self) -> None:
         """Declare runtime-configurable parameters."""
@@ -239,6 +267,8 @@ class ZedBaseAdapterNode(Node):
         self.declare_parameter("base_to_camera_rpy", "0.0,0.0,0.0")
         self.declare_parameter("publish_odom_tf", True)
         self.declare_parameter("publish_map_to_odom_tf", False)
+        self.declare_parameter("flatten_navigation_to_2d", True)
+        self.declare_parameter("navigation_plane_z", 0.0)
         self.declare_parameter("path_history_length", 400)
 
     def _read_vector_parameter(
@@ -327,6 +357,7 @@ class ZedBaseAdapterNode(Node):
         output.pose.orientation.y = world_to_base_rotation[1]
         output.pose.orientation.z = world_to_base_rotation[2]
         output.pose.orientation.w = world_to_base_rotation[3]
+        self._flatten_pose_to_navigation_plane(output)
         return output
 
     def _transform_pose_covariance(
@@ -391,7 +422,32 @@ class ZedBaseAdapterNode(Node):
         output.twist.twist.angular.x = angular_velocity_base[0]
         output.twist.twist.angular.y = angular_velocity_base[1]
         output.twist.twist.angular.z = angular_velocity_base[2]
+        if self.flatten_navigation_to_2d:
+            output.twist.twist.linear.z = 0.0
+            output.twist.twist.angular.x = 0.0
+            output.twist.twist.angular.y = 0.0
         return output
+
+    def _flatten_pose_to_navigation_plane(self, pose_msg: PoseStamped) -> None:
+        """Project a base pose onto the 2D plane used by Nav2 costmaps."""
+        if not self.flatten_navigation_to_2d:
+            return
+
+        orientation = pose_msg.pose.orientation
+        yaw = _yaw_from_quaternion(
+            (
+                orientation.x,
+                orientation.y,
+                orientation.z,
+                orientation.w,
+            )
+        )
+        quat_x, quat_y, quat_z, quat_w = _quaternion_from_yaw(yaw)
+        pose_msg.pose.position.z = self.navigation_plane_z
+        orientation.x = quat_x
+        orientation.y = quat_y
+        orientation.z = quat_z
+        orientation.w = quat_w
 
     def _record_path_pose(self, pose_msg: PoseStamped) -> None:
         """Append the newest base pose to the path history."""

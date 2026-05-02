@@ -13,13 +13,13 @@ import threading
 import time
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
-from typing import Any
+from typing import Any, Callable
 from urllib.parse import unquote, urlparse
 import zlib
 
 from action_msgs.msg import GoalStatus
 from ament_index_python.packages import PackageNotFoundError, get_package_share_directory
-from nav2_msgs.action import ComputePathToPose
+from nav2_msgs.action import ComputePathToPose, NavigateToPose
 from nav_msgs.msg import OccupancyGrid
 import rclpy
 from rclpy.action import ActionClient
@@ -47,9 +47,28 @@ def _quaternion_from_yaw(yaw: float) -> tuple[float, float, float, float]:
     return 0.0, 0.0, math.sin(half_yaw), math.cos(half_yaw)
 
 
+def _duration_to_float(duration_msg: Any) -> float:
+    """Convert a ROS duration message into seconds."""
+    return float(duration_msg.sec) + float(duration_msg.nanosec) * 1e-9
+
+
 def _time_to_float(stamp: Any) -> float:
     """Convert a ROS time message into seconds."""
     return float(stamp.sec) + float(stamp.nanosec) * 1e-9
+
+
+def _goal_status_text(status: int) -> str:
+    """Return a readable action goal status."""
+    names = {
+        GoalStatus.STATUS_UNKNOWN: "unknown",
+        GoalStatus.STATUS_ACCEPTED: "accepted",
+        GoalStatus.STATUS_EXECUTING: "active",
+        GoalStatus.STATUS_CANCELING: "canceling",
+        GoalStatus.STATUS_SUCCEEDED: "succeeded",
+        GoalStatus.STATUS_CANCELED: "canceled",
+        GoalStatus.STATUS_ABORTED: "failed",
+    }
+    return names.get(status, f"status {status}")
 
 
 def _png_chunk(chunk_type: bytes, payload: bytes) -> bytes:
@@ -125,10 +144,21 @@ def _path_to_points(path_msg: Any) -> list[dict[str, float]]:
             {
                 "x": pose.position.x,
                 "y": pose.position.y,
+                "z": pose.position.z,
                 "yaw": _yaw_from_quaternion(pose.orientation),
             }
         )
     return points
+
+
+def _pose_to_payload(pose_msg: Any) -> dict[str, float]:
+    """Convert a geometry_msgs/Pose into a planar payload."""
+    return {
+        "x": float(pose_msg.position.x),
+        "y": float(pose_msg.position.y),
+        "z": float(pose_msg.position.z),
+        "yaw": _yaw_from_quaternion(pose_msg.orientation),
+    }
 
 
 class PlanningConsoleError(RuntimeError):
@@ -186,6 +216,15 @@ class PlanningConsoleRequestHandler(BaseHTTPRequestHandler):
             if parsed_url.path == "/api/clear_path":
                 self.server.node.clear_path()
                 self._send_json({"ok": True})
+                return
+            if parsed_url.path == "/api/navigate":
+                payload = self._read_json_body()
+                result = self.server.node.navigate_to_goal(payload)
+                self._send_json({"ok": True, **result})
+                return
+            if parsed_url.path == "/api/cancel_navigation":
+                result = self.server.node.cancel_navigation()
+                self._send_json({"ok": True, **result})
                 return
         except PlanningConsoleError as error:
             self._send_json(
@@ -296,12 +335,21 @@ class NavPlanningConsoleNode(Node):
         self.planner_action_name = str(
             self.get_parameter("planner_action_name").value
         )
+        self.navigator_action_name = str(
+            self.get_parameter("navigator_action_name").value
+        )
         self.planner_id = str(self.get_parameter("planner_id").value)
         self.planner_server_timeout_sec = float(
             self.get_parameter("planner_server_timeout_sec").value
         )
+        self.navigator_server_timeout_sec = float(
+            self.get_parameter("navigator_server_timeout_sec").value
+        )
         self.planning_timeout_sec = float(
             self.get_parameter("planning_timeout_sec").value
+        )
+        self.navigation_plane_z = float(
+            self.get_parameter("navigation_plane_z").value
         )
         self.pose_update_period_sec = float(
             self.get_parameter("pose_update_period_sec").value
@@ -321,6 +369,12 @@ class NavPlanningConsoleNode(Node):
         self._goal: dict[str, float] | None = None
         self._planner_status = "idle"
         self._planner_error = ""
+        self._navigation_goal: dict[str, float] | None = None
+        self._navigation_status = "idle"
+        self._navigation_error = ""
+        self._navigation_feedback: dict[str, Any] = {}
+        self._navigation_goal_handle: Any | None = None
+        self._navigation_goal_token = 0
 
         map_qos = QoSProfile(
             reliability=ReliabilityPolicy.RELIABLE,
@@ -346,6 +400,11 @@ class NavPlanningConsoleNode(Node):
             ComputePathToPose,
             self.planner_action_name,
         )
+        self.navigator_client = ActionClient(
+            self,
+            NavigateToPose,
+            self.navigator_action_name,
+        )
 
         self.http_server = PlanningConsoleHttpServer(
             (self.web_host, self.web_port),
@@ -366,7 +425,9 @@ class NavPlanningConsoleNode(Node):
             "Using map_topic="
             f"{self.map_topic}, global_frame={self.global_frame}, "
             f"base_frame={self.base_frame}, planner_action="
-            f"{self.planner_action_name}."
+            f"{self.planner_action_name}, navigator_action="
+            f"{self.navigator_action_name}, navigation_plane_z="
+            f"{self.navigation_plane_z:.3f}."
         )
 
     def _declare_parameters(self) -> None:
@@ -376,9 +437,12 @@ class NavPlanningConsoleNode(Node):
         self.declare_parameter("global_frame", "map")
         self.declare_parameter("base_frame", "base_link")
         self.declare_parameter("planner_action_name", "compute_path_to_pose")
+        self.declare_parameter("navigator_action_name", "navigate_to_pose")
         self.declare_parameter("planner_id", "")
         self.declare_parameter("planner_server_timeout_sec", 2.0)
+        self.declare_parameter("navigator_server_timeout_sec", 2.0)
         self.declare_parameter("planning_timeout_sec", 10.0)
+        self.declare_parameter("navigation_plane_z", 0.0)
         self.declare_parameter("pose_update_period_sec", 0.2)
         self.declare_parameter("static_dir", "")
 
@@ -468,6 +532,14 @@ class NavPlanningConsoleNode(Node):
             goal = dict(self._goal) if self._goal is not None else None
             planner_status = self._planner_status
             planner_error = self._planner_error
+            navigation_goal = (
+                dict(self._navigation_goal)
+                if self._navigation_goal is not None
+                else None
+            )
+            navigation_status = self._navigation_status
+            navigation_error = self._navigation_error
+            navigation_feedback = dict(self._navigation_feedback)
 
         map_payload = None
         if map_msg is not None:
@@ -503,6 +575,13 @@ class NavPlanningConsoleNode(Node):
                 "status": planner_status,
                 "error": planner_error,
             },
+            "navigation": {
+                "action_name": self.navigator_action_name,
+                "status": navigation_status,
+                "error": navigation_error,
+                "goal": navigation_goal,
+                "feedback": navigation_feedback,
+            },
         }
 
     def plan_to_goal(self, payload: dict[str, Any]) -> dict[str, Any]:
@@ -517,7 +596,12 @@ class NavPlanningConsoleNode(Node):
         yaw_value = float(yaw)
 
         with self._lock:
-            self._goal = {"x": x_value, "y": y_value, "yaw": yaw_value}
+            self._goal = {
+                "x": x_value,
+                "y": y_value,
+                "z": self.navigation_plane_z,
+                "yaw": yaw_value,
+            }
             self._planner_status = "planning"
             self._planner_error = ""
 
@@ -539,7 +623,7 @@ class NavPlanningConsoleNode(Node):
         goal_msg.goal.header.stamp = stamp
         goal_msg.goal.pose.position.x = x_value
         goal_msg.goal.pose.position.y = y_value
-        goal_msg.goal.pose.position.z = 0.0
+        goal_msg.goal.pose.position.z = self.navigation_plane_z
         quat_x, quat_y, quat_z, quat_w = _quaternion_from_yaw(yaw_value)
         goal_msg.goal.pose.orientation.x = quat_x
         goal_msg.goal.pose.orientation.y = quat_y
@@ -553,7 +637,7 @@ class NavPlanningConsoleNode(Node):
             goal_msg.start.header.stamp = stamp
             goal_msg.start.pose.position.x = float(start_pose["x"])
             goal_msg.start.pose.position.y = float(start_pose["y"])
-            goal_msg.start.pose.position.z = 0.0
+            goal_msg.start.pose.position.z = self.navigation_plane_z
             goal_msg.start.pose.orientation.x = start_quat[0]
             goal_msg.start.pose.orientation.y = start_quat[1]
             goal_msg.start.pose.orientation.z = start_quat[2]
@@ -593,7 +677,12 @@ class NavPlanningConsoleNode(Node):
             self._planner_error = ""
 
         return {
-            "goal": {"x": x_value, "y": y_value, "yaw": yaw_value},
+            "goal": {
+                "x": x_value,
+                "y": y_value,
+                "z": self.navigation_plane_z,
+                "yaw": yaw_value,
+            },
             "path_revision": self._path_revision,
             "path": {
                 "frame_id": path_msg.header.frame_id,
@@ -611,16 +700,213 @@ class NavPlanningConsoleNode(Node):
             self._planner_status = "idle"
             self._planner_error = ""
 
+    def navigate_to_goal(self, payload: dict[str, Any]) -> dict[str, Any]:
+        """Send a NavigateToPose request to Nav2 using a planar goal."""
+        goal = self._navigation_goal_from_payload(payload)
+        x_value = float(goal["x"])
+        y_value = float(goal["y"])
+        yaw_value = float(goal["yaw"])
+
+        if not self.navigator_client.wait_for_server(
+            timeout_sec=self.navigator_server_timeout_sec
+        ):
+            message = (
+                f"Navigator action '{self.navigator_action_name}' is not available. "
+                "Start the Nav2 BT navigator launch before executing a path."
+            )
+            self._set_navigation_error(message)
+            raise PlanningConsoleError(message)
+
+        with self._lock:
+            self._navigation_goal_token += 1
+            token = self._navigation_goal_token
+            self._navigation_goal = {
+                "x": x_value,
+                "y": y_value,
+                "z": self.navigation_plane_z,
+                "yaw": yaw_value,
+            }
+            self._navigation_status = "sending"
+            self._navigation_error = ""
+            self._navigation_feedback = {}
+            self._navigation_goal_handle = None
+
+        nav_goal = NavigateToPose.Goal()
+        nav_goal.pose.header.frame_id = self.global_frame
+        nav_goal.pose.header.stamp = self.get_clock().now().to_msg()
+        nav_goal.pose.pose.position.x = x_value
+        nav_goal.pose.pose.position.y = y_value
+        nav_goal.pose.pose.position.z = self.navigation_plane_z
+        quat_x, quat_y, quat_z, quat_w = _quaternion_from_yaw(yaw_value)
+        nav_goal.pose.pose.orientation.x = quat_x
+        nav_goal.pose.pose.orientation.y = quat_y
+        nav_goal.pose.pose.orientation.z = quat_z
+        nav_goal.pose.pose.orientation.w = quat_w
+
+        send_future = self.navigator_client.send_goal_async(
+            nav_goal,
+            feedback_callback=lambda feedback_msg: self._handle_navigation_feedback(
+                feedback_msg.feedback,
+                token,
+            ),
+        )
+        goal_handle = self._wait_for_future(
+            send_future,
+            self.planning_timeout_sec,
+            "Timed out while sending the navigation goal.",
+            self._set_navigation_error,
+        )
+        if goal_handle is None or not goal_handle.accepted:
+            self._set_navigation_error("Navigation goal was rejected.")
+            raise PlanningConsoleError("Navigation goal was rejected.")
+
+        with self._lock:
+            if token == self._navigation_goal_token:
+                self._navigation_goal_handle = goal_handle
+                self._navigation_status = "active"
+
+        result_future = goal_handle.get_result_async()
+        result_future.add_done_callback(
+            lambda future: self._handle_navigation_result(future, token)
+        )
+
+        return {
+            "navigation": {
+                "status": "active",
+                "goal": {
+                    "x": x_value,
+                    "y": y_value,
+                    "z": self.navigation_plane_z,
+                    "yaw": yaw_value,
+                },
+            }
+        }
+
+    def cancel_navigation(self) -> dict[str, Any]:
+        """Cancel the currently active NavigateToPose goal."""
+        with self._lock:
+            goal_handle = self._navigation_goal_handle
+            token = self._navigation_goal_token
+
+        if goal_handle is None:
+            with self._lock:
+                self._navigation_status = "idle"
+                self._navigation_error = ""
+                self._navigation_feedback = {}
+            return {"navigation": {"status": "idle"}}
+
+        cancel_future = goal_handle.cancel_goal_async()
+        self._wait_for_future(
+            cancel_future,
+            self.navigator_server_timeout_sec,
+            "Timed out while canceling the navigation goal.",
+            self._set_navigation_error,
+        )
+
+        with self._lock:
+            if token == self._navigation_goal_token:
+                self._navigation_status = "canceling"
+                self._navigation_error = ""
+
+        return {"navigation": {"status": "canceling"}}
+
+    def _navigation_goal_from_payload(self, payload: dict[str, Any]) -> dict[str, float]:
+        """Return a navigation goal from the request body or cached plan goal."""
+        if "x" in payload and "y" in payload:
+            yaw = payload.get("yaw")
+            if yaw is None:
+                with self._lock:
+                    cached_goal = dict(self._goal) if self._goal is not None else None
+                yaw = cached_goal["yaw"] if cached_goal is not None else 0.0
+            return {
+                "x": float(payload["x"]),
+                "y": float(payload["y"]),
+                "yaw": float(yaw),
+            }
+
+        with self._lock:
+            cached_goal = dict(self._goal) if self._goal is not None else None
+        if cached_goal is None:
+            raise PlanningConsoleError("No planned goal is available to navigate to.")
+        return {
+            "x": float(cached_goal["x"]),
+            "y": float(cached_goal["y"]),
+            "yaw": float(cached_goal.get("yaw", 0.0)),
+        }
+
+    def _handle_navigation_feedback(self, feedback: Any, token: int) -> None:
+        """Cache NavigateToPose feedback for the browser."""
+        feedback_payload: dict[str, Any] = {}
+        if hasattr(feedback, "distance_remaining"):
+            feedback_payload["distance_remaining"] = float(feedback.distance_remaining)
+        if hasattr(feedback, "navigation_time"):
+            feedback_payload["navigation_time_sec"] = _duration_to_float(
+                feedback.navigation_time
+            )
+        if hasattr(feedback, "estimated_time_remaining"):
+            feedback_payload["estimated_time_remaining_sec"] = _duration_to_float(
+                feedback.estimated_time_remaining
+            )
+        if hasattr(feedback, "number_of_recoveries"):
+            feedback_payload["number_of_recoveries"] = int(
+                feedback.number_of_recoveries
+            )
+        if hasattr(feedback, "current_pose"):
+            feedback_payload["current_pose"] = _pose_to_payload(
+                feedback.current_pose.pose
+            )
+
+        with self._lock:
+            if token != self._navigation_goal_token:
+                return
+            self._navigation_feedback = feedback_payload
+            if self._navigation_status not in ("canceling", "canceled"):
+                self._navigation_status = "active"
+
+    def _handle_navigation_result(self, future: Any, token: int) -> None:
+        """Update navigation status when NavigateToPose finishes."""
+        try:
+            action_result = future.result()
+            status = int(action_result.status)
+        except Exception as error:  # noqa: BLE001 - surface action failure to UI.
+            with self._lock:
+                if token == self._navigation_goal_token:
+                    self._navigation_status = "failed"
+                    self._navigation_error = str(error)
+                    self._navigation_goal_handle = None
+            return
+
+        status_text = _goal_status_text(status)
+        error_message = ""
+        if status == GoalStatus.STATUS_ABORTED:
+            error_message = "Navigator aborted the goal."
+        elif status not in (
+            GoalStatus.STATUS_SUCCEEDED,
+            GoalStatus.STATUS_CANCELED,
+        ):
+            error_message = f"Navigator returned {status_text}."
+
+        with self._lock:
+            if token != self._navigation_goal_token:
+                return
+            self._navigation_status = status_text
+            self._navigation_error = error_message
+            self._navigation_goal_handle = None
+
     def _wait_for_future(
         self,
         future: Any,
         timeout_sec: float,
         timeout_message: str,
+        timeout_handler: Callable[[str], None] | None = None,
     ) -> Any:
         event = threading.Event()
         future.add_done_callback(lambda _: event.set())
         if not event.wait(timeout_sec):
-            self._set_planner_error(timeout_message)
+            if timeout_handler is None:
+                self._set_planner_error(timeout_message)
+            else:
+                timeout_handler(timeout_message)
             raise PlanningConsoleError(timeout_message)
         return future.result()
 
@@ -628,6 +914,11 @@ class NavPlanningConsoleNode(Node):
         with self._lock:
             self._planner_status = "error"
             self._planner_error = message
+
+    def _set_navigation_error(self, message: str) -> None:
+        with self._lock:
+            self._navigation_status = "failed"
+            self._navigation_error = message
 
 
 def main(args: list[str] | None = None) -> None:

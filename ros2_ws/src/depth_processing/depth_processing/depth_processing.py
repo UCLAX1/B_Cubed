@@ -73,7 +73,8 @@ class ZedDepthViewer(Node):
         cv2.setMouseCallback(self.window_name, self.on_mouse)
 
         self.get_logger().info(
-            f"Depth view: clip [{self.min_depth}m, {self.max_depth}m], colormap={self.colormap_name}. "
+            f"Depth view: clip [{self.min_depth}m, {self.max_depth}m], "
+            f"colormap={self.colormap_name}. "
             "Press 'q' or ESC to quit."
         )
 
@@ -274,7 +275,7 @@ class ZedDepthViewer(Node):
             row_bytes = w * 4
             out = np.empty((h, w), dtype=np.float32)
             for r in range(h):
-                row = data_u8[r * step : r * step + row_bytes]
+                row = data_u8[r * step: r * step + row_bytes]
                 out[r, :] = np.frombuffer(row.tobytes(), dtype=np.float32, count=w)
             return out
 
@@ -282,14 +283,16 @@ class ZedDepthViewer(Node):
             row_bytes = w * 2
             out16 = np.empty((h, w), dtype=np.uint16)
             for r in range(h):
-                row = data_u8[r * step : r * step + row_bytes]
+                row = data_u8[r * step: r * step + row_bytes]
                 out16[r, :] = np.frombuffer(row.tobytes(), dtype=np.uint16, count=w)
             out = out16.astype(np.float32)
             if self.assume_16u_mm:
                 out *= 1e-3
             return out
 
-        self.get_logger().warning_once(f"Unknown encoding '{msg.encoding}', interpreting as float32.")
+        self.get_logger().warning_once(
+            f"Unknown encoding '{msg.encoding}', interpreting as float32."
+        )
         # This may be wrong, but gives something
         return np.frombuffer(msg.data, dtype=np.float32).reshape(h, -1)
 

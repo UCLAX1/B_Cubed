@@ -96,6 +96,17 @@ What is now wired:
 - Nav2 planner, controller, behavior server, and BT navigator
 - a `cmd_vel` safety gate that blocks motion when localization or `/scan` goes stale
 - one-command bringup for continuous mapping plus navigation in the same run
+- the web console can now promote a displayed plan into a `NavigateToPose`
+  request, cancel the active navigation goal, and show live navigation feedback
+
+Z-axis handling:
+
+- `zed_base_adapter` now defaults to `flatten_navigation_to_2d:=true`, which
+  projects base pose, odometry, and TF outputs onto `navigation_plane_z`.
+- This keeps Nav2 aligned with the 2D occupancy map instead of letting
+  camera-estimated Z, roll, or pitch move the robot frame out of the map plane.
+- Override with `flatten_navigation_to_2d:=false` only when a downstream stack is
+  explicitly consuming the full 6DOF base pose instead of the 2D Nav2 frame.
 
 What still needs field validation:
 

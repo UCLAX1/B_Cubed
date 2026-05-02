@@ -21,11 +21,16 @@ def generate_launch_description() -> LaunchDescription:
 
     return LaunchDescription(
         [
-            DeclareLaunchArgument("cloud_topic", default_value="/zed/zed_node/point_cloud/cloud_registered"),
+            DeclareLaunchArgument(
+                "cloud_topic",
+                default_value="/zed/zed_node/point_cloud/cloud_registered",
+            ),
             DeclareLaunchArgument("scan_topic", default_value="/scan"),
             DeclareLaunchArgument("base_frame", default_value="base_link"),
             DeclareLaunchArgument("base_to_camera_translation", default_value="0.0,0.0,0.381"),
             DeclareLaunchArgument("base_to_camera_rpy", default_value="0.0,0.0,0.0"),
+            DeclareLaunchArgument("flatten_navigation_to_2d", default_value="true"),
+            DeclareLaunchArgument("navigation_plane_z", default_value="0.0"),
             DeclareLaunchArgument("enable_base_adapter", default_value="true"),
             DeclareLaunchArgument("localization_params_file", default_value=localization_params),
             DeclareLaunchArgument("map_file_name", default_value=""),
@@ -39,6 +44,10 @@ def generate_launch_description() -> LaunchDescription:
                         "base_to_camera_translation"
                     ),
                     "base_to_camera_rpy": LaunchConfiguration("base_to_camera_rpy"),
+                    "flatten_navigation_to_2d": LaunchConfiguration(
+                        "flatten_navigation_to_2d"
+                    ),
+                    "navigation_plane_z": LaunchConfiguration("navigation_plane_z"),
                     "publish_map_to_odom_tf": "false",
                     "enable_base_adapter": LaunchConfiguration("enable_base_adapter"),
                 }.items(),

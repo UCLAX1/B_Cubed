@@ -15,24 +15,52 @@ NPROC_VALUE="$(command -v nproc >/dev/null 2>&1 && nproc || echo 4)"
 SESSION_STAMP="$(date +%Y%m%d_%H%M%S)"
 
 MAP_OUTPUT_DIR="${MAP_OUTPUT_DIR:-$WS_DIR/maps}"
-MAP_SESSION_NAME="${MAP_SESSION_NAME:-mapping_${SESSION_STAMP}}"
+MAP_SESSION_NAME="${MAP_SESSION_NAME:-handheld_${SESSION_STAMP}}"
 MAP_PREFIX="${MAP_PREFIX:-$MAP_OUTPUT_DIR/$MAP_SESSION_NAME}"
-MAP_YAML_FILE="${MAP_PREFIX}.yaml"
-MAP_POSEGRAPH_FILE="${MAP_PREFIX}.posegraph"
-MAP_DATA_FILE="${MAP_PREFIX}.data"
 
-BASE_TO_CAMERA_TRANSLATION="${BASE_TO_CAMERA_TRANSLATION:-0.0,0.0,0.381}"
+BASE_TO_CAMERA_TRANSLATION="${BASE_TO_CAMERA_TRANSLATION:-0.0,0.0,0.0}"
 BASE_TO_CAMERA_RPY="${BASE_TO_CAMERA_RPY:-0.0,0.0,0.0}"
-BASE_FRAME="${BASE_FRAME:-base_link}"
+BASE_FRAME="${BASE_FRAME:-zed_camera_link}"
 
 CAMERA_MODEL="${CAMERA_MODEL:-zedm}"
-WRAPPER_LAUNCH="${WRAPPER_LAUNCH:-ros2 launch zed_wrapper zed_camera.launch.py camera_model:=${CAMERA_MODEL} publish_tf:=true publish_map_tf:=false param_overrides:='pos_tracking.two_d_mode:=true;debug.use_pub_timestamps:=true'}"
-NAVIGATION_AUTOSTART_COMMAND="${NAVIGATION_AUTOSTART_COMMAND:-}"
+START_WRAPPER="${START_WRAPPER:-true}"
+WRAPPER_LAUNCH="${WRAPPER_LAUNCH:-ros2 launch zed_wrapper zed_camera.launch.py camera_model:=${CAMERA_MODEL} publish_tf:=false publish_map_tf:=false param_overrides:='pos_tracking.two_d_mode:=true;debug.use_pub_timestamps:=true'}"
 
-START_HAND_TRACKING="${START_HAND_TRACKING:-true}"
-START_PERSON_TRACKING="${START_PERSON_TRACKING:-true}"
-START_DEPTH_VIEWER="${START_DEPTH_VIEWER:-false}"
-START_ZED_TRACKING_VIEWER="${START_ZED_TRACKING_VIEWER:-true}"
+INPUT_POSE_TOPIC="${INPUT_POSE_TOPIC:-/zed/zed_node/pose}"
+INPUT_POSE_COV_TOPIC="${INPUT_POSE_COV_TOPIC:-/zed/zed_node/pose_with_covariance}"
+INPUT_ODOM_TOPIC="${INPUT_ODOM_TOPIC:-/zed/zed_node/odom}"
+INPUT_IMAGE_TOPIC="${INPUT_IMAGE_TOPIC:-/zed/zed_node/rgb/color/rect/image/compressed}"
+INPUT_IMAGE_IS_COMPRESSED="${INPUT_IMAGE_IS_COMPRESSED:-true}"
+CLOUD_TOPIC="${CLOUD_TOPIC:-/zed/zed_node/point_cloud/cloud_registered}"
+REQUIRE_POSE_COV_TOPIC="${REQUIRE_POSE_COV_TOPIC:-false}"
+
+START_GESTURE_RECOGNITION="${START_GESTURE_RECOGNITION:-true}"
+GESTURE_IMAGE_TOPIC="${GESTURE_IMAGE_TOPIC:-$INPUT_IMAGE_TOPIC}"
+GESTURE_IMAGE_IS_COMPRESSED="${GESTURE_IMAGE_IS_COMPRESSED:-$INPUT_IMAGE_IS_COMPRESSED}"
+GESTURE_MODEL_PATH="${GESTURE_MODEL_PATH:-}"
+SHOW_GESTURE_WINDOW="${SHOW_GESTURE_WINDOW:-false}"
+PUBLISH_GESTURE_ANNOTATED_IMAGE="${PUBLISH_GESTURE_ANNOTATED_IMAGE:-true}"
+GESTURE_TOPIC="${GESTURE_TOPIC:-/gesture_recognition/result}"
+GESTURE_ANNOTATED_IMAGE_TOPIC="${GESTURE_ANNOTATED_IMAGE_TOPIC:-/gesture_recognition/annotated_image/compressed}"
+
+ENABLE_TRACKING_VISUALIZATION="${ENABLE_TRACKING_VISUALIZATION:-false}"
+SHOW_TRACKING_WINDOW="${SHOW_TRACKING_WINDOW:-false}"
+PUBLISH_TRACKING_IMAGE="${PUBLISH_TRACKING_IMAGE:-false}"
+
+ENABLE_NAV2="${ENABLE_NAV2:-false}"
+ENABLE_PLANNER_ONLY="${ENABLE_PLANNER_ONLY:-true}"
+ENABLE_PLANNING_CONSOLE="${ENABLE_PLANNING_CONSOLE:-true}"
+PLANNING_CONSOLE_HOST="${PLANNING_CONSOLE_HOST:-127.0.0.1}"
+PLANNING_CONSOLE_PORT="${PLANNING_CONSOLE_PORT:-8080}"
+PLANNING_CONSOLE_URL_HOST="$PLANNING_CONSOLE_HOST"
+if [[ "$PLANNING_CONSOLE_URL_HOST" == "0.0.0.0" ]]; then
+  PLANNING_CONSOLE_URL_HOST="127.0.0.1"
+fi
+
+START_RVIZ="${START_RVIZ:-false}"
+RVIZ_COMMAND="${RVIZ_COMMAND:-rviz2}"
+
+TOPIC_WAIT_TIMEOUT_SEC="${TOPIC_WAIT_TIMEOUT_SEC:-60}"
 
 mkdir -p "$MAP_OUTPUT_DIR"
 
@@ -63,70 +91,186 @@ bool_is_true() {
   esac
 }
 
-file_is_fresh() {
-  local file_path="$1"
-  [[ -f "$file_path" ]] && [[ "$(stat -c %Y "$file_path")" -ge "$LAUNCH_EPOCH" ]]
+missing_ros_packages() {
+  local missing=()
+  local package_name
+
+  for package_name in "$@"; do
+    if ! ros2 pkg prefix "$package_name" >/dev/null 2>&1; then
+      missing+=("$package_name")
+    fi
+  done
+
+  if (( ${#missing[@]} > 0 )); then
+    printf '%s\n' "${missing[@]}"
+  fi
 }
 
-stop_mapping_stack() {
-  pkill -f "zed_mapping_pass.launch.py" >/dev/null 2>&1 || true
-  pkill -f "async_slam_toolbox_node" >/dev/null 2>&1 || true
-}
-
-launch_navigation_mode() {
-  echo
-  echo "Mapping artifacts detected for $MAP_PREFIX"
-  echo "Stopping mapping pass and switching into post-mapping mode..."
-
-  stop_mapping_stack
-  sleep 3
-
-  run_terminal \
-    "localization mode" \
-    "ros2 launch depth_processing zed_localization_mode.launch.py \
-      map_file_name:='$MAP_PREFIX' \
-      base_frame:='${BASE_FRAME}' \
-      base_to_camera_translation:='${BASE_TO_CAMERA_TRANSLATION}' \
-      base_to_camera_rpy:='${BASE_TO_CAMERA_RPY}'"
-
-  if [[ -n "$NAVIGATION_AUTOSTART_COMMAND" ]]; then
-    run_terminal "navigation stack" "$NAVIGATION_AUTOSTART_COMMAND"
-  else
-    run_terminal \
-      "navigation handoff" \
-      "echo 'Localization mode is running with serialized map prefix:'; \
-       echo '  $MAP_PREFIX'; \
-       echo; \
-       echo 'Set NAVIGATION_AUTOSTART_COMMAND to:'; \
-       echo '  ros2 launch depth_processing zed_nav2_bringup.launch.py'; \
-       echo; \
-       echo 'Then rerun ros2_ws/launch.sh to auto-run the full navigation stack here.'"
+configure_nav2_launch() {
+  if ! bool_is_true "$ENABLE_NAV2"; then
+    return 0
   fi
 
-  echo "Post-mapping mode launched."
+  local required_packages=(
+    nav2_planner
+    nav2_controller
+    nav2_behaviors
+    nav2_bt_navigator
+    nav2_lifecycle_manager
+    nav2_navfn_planner
+    nav2_regulated_pure_pursuit_controller
+    nav2_costmap_2d
+  )
+  local missing=()
+  mapfile -t missing < <(missing_ros_packages "${required_packages[@]}")
+
+  if (( ${#missing[@]} == 0 )); then
+    return 0
+  fi
+
+  echo "Nav2 planning packages are missing:" >&2
+  printf '  %s\n' "${missing[@]}" >&2
+  echo >&2
+  echo "Continuing with ENABLE_NAV2=false so mapping and the web console can still start." >&2
+  echo "Click-to-plan will work after Navigation2 is installed:" >&2
+  echo "  sudo apt update" >&2
+  echo "  sudo apt install ros-humble-navigation2 ros-humble-nav2-bringup" >&2
+  echo >&2
+
+  ENABLE_NAV2="false"
 }
 
-print_mapping_instructions() {
+configure_planner_only_launch() {
+  if bool_is_true "$ENABLE_NAV2"; then
+    ENABLE_PLANNER_ONLY="false"
+    return 0
+  fi
+  if ! bool_is_true "$ENABLE_PLANNER_ONLY"; then
+    return 0
+  fi
+
+  local required_packages=(
+    nav2_planner
+    nav2_lifecycle_manager
+    nav2_navfn_planner
+    nav2_costmap_2d
+  )
+  local missing=()
+  mapfile -t missing < <(missing_ros_packages "${required_packages[@]}")
+
+  if (( ${#missing[@]} == 0 )); then
+    return 0
+  fi
+
+  echo "Nav2 planner-only packages are missing:" >&2
+  printf '  %s\n' "${missing[@]}" >&2
+  echo >&2
+  echo "Continuing with ENABLE_PLANNER_ONLY=false." >&2
+  echo "The web console will still show the map, but click-to-plan needs Navigation2:" >&2
+  echo "  sudo apt update" >&2
+  echo "  sudo apt install ros-humble-navigation2 ros-humble-nav2-bringup" >&2
+  echo >&2
+
+  ENABLE_PLANNER_ONLY="false"
+}
+
+print_instructions() {
   cat <<EOF
 
-Mapping session prefix:
+Handheld mapping session prefix:
   $MAP_PREFIX
 
-This launcher will automatically switch to post-mapping mode when both of these files
-from the current run exist:
-  $MAP_POSEGRAPH_FILE
-  $MAP_DATA_FILE
+This launcher is for camera-only mapping tests.
 
-Recommended save commands after the square mapping pass is complete:
+It assumes:
+  base_frame=$BASE_FRAME
+  base_to_camera_translation=$BASE_TO_CAMERA_TRANSLATION
+  base_to_camera_rpy=$BASE_TO_CAMERA_RPY
+
+Expected upstream wrapper topics:
+  $INPUT_POSE_TOPIC
+  $INPUT_ODOM_TOPIC
+  $CLOUD_TOPIC
+
+Optional upstream wrapper topics:
+  $INPUT_POSE_COV_TOPIC
+  $INPUT_IMAGE_TOPIC
+
+MediaPipe gesture recognition:
+  enabled=$START_GESTURE_RECOGNITION
+  image_topic=$GESTURE_IMAGE_TOPIC
+  result_topic=$GESTURE_TOPIC
+  annotated_image_topic=$GESTURE_ANNOTATED_IMAGE_TOPIC
+
+Web planning console:
+  http://$PLANNING_CONSOLE_URL_HOST:$PLANNING_CONSOLE_PORT/
+  Nav2 planner-only enabled: $ENABLE_PLANNER_ONLY
+  Full Nav2 enabled: $ENABLE_NAV2
+  Full Nav2 can be tested later with ENABLE_NAV2=true.
+
+Save commands after the map looks good:
   ros2 service call /slam_toolbox/save_map slam_toolbox/srv/SaveMap "{name: {data: '$MAP_PREFIX'}}"
   ros2 service call /slam_toolbox/serialize_map slam_toolbox/srv/SerializePoseGraph "{filename: '$MAP_PREFIX'}"
 
-The saved occupancy map (.yaml/.pgm) is useful for inspection.
-The serialized slam session (.posegraph/.data) is what the localization mode reloads.
+Helpful RViz displays:
+  Map -> /map
+  LaserScan -> /scan
+  TF
+  Path -> /zed/base_path or /zed/path
 EOF
 }
 
-trap 'echo; echo "Stopping mapping stack monitor."; stop_mapping_stack' INT TERM
+missing_topics() {
+  local available_topics="$1"
+  local missing=()
+  local topic
+
+  for topic in \
+    "$INPUT_POSE_TOPIC" \
+    "$INPUT_ODOM_TOPIC" \
+    "$CLOUD_TOPIC"; do
+    if ! grep -Fxq "$topic" <<<"$available_topics"; then
+      missing+=("$topic")
+    fi
+  done
+
+  if bool_is_true "$REQUIRE_POSE_COV_TOPIC"; then
+    if ! grep -Fxq "$INPUT_POSE_COV_TOPIC" <<<"$available_topics"; then
+      missing+=("$INPUT_POSE_COV_TOPIC")
+    fi
+  fi
+
+  if bool_is_true "$START_GESTURE_RECOGNITION"; then
+    if ! grep -Fxq "$GESTURE_IMAGE_TOPIC" <<<"$available_topics"; then
+      missing+=("$GESTURE_IMAGE_TOPIC")
+    fi
+  fi
+
+  if (( ${#missing[@]} > 0 )); then
+    printf '%s\n' "${missing[@]}"
+  fi
+}
+
+wait_for_wrapper_topics() {
+  local deadline=$((SECONDS + TOPIC_WAIT_TIMEOUT_SEC))
+  local available_topics=""
+
+  while (( SECONDS < deadline )); do
+    available_topics="$(ros2 topic list 2>/dev/null || true)"
+    mapfile -t missing < <(missing_topics "$available_topics")
+
+    if (( ${#missing[@]} == 0 )); then
+      return 0
+    fi
+
+    sleep 2
+  done
+
+  echo "Timed out waiting for required ZED wrapper topics." >&2
+  echo "Still missing:" >&2
+  printf '  %s\n' "${missing[@]}" >&2
+  return 1
+}
 
 cd "$WS_DIR"
 colcon build --cmake-args=-DCMAKE_BUILD_TYPE=Release --parallel-workers "$NPROC_VALUE"
@@ -137,51 +281,82 @@ if [[ ! -f "$INSTALL_SETUP" ]]; then
   exit 1
 fi
 
-LAUNCH_EPOCH="$(date +%s)"
+configure_nav2_launch
+configure_planner_only_launch
 
-run_terminal "zed wrapper" "$WRAPPER_LAUNCH"
-sleep 5
-
-if bool_is_true "$START_ZED_TRACKING_VIEWER"; then
-  run_terminal "zed tracking" "ros2 run depth_processing zed_tracking"
+if bool_is_true "$START_WRAPPER"; then
+  run_terminal "zed wrapper" "$WRAPPER_LAUNCH"
+  sleep 5
 fi
 
-if bool_is_true "$START_DEPTH_VIEWER"; then
-  run_terminal "depth processing" "ros2 run depth_processing depth"
+echo "Waiting for ZED wrapper topics..."
+wait_for_wrapper_topics
+echo "Wrapper topics are available."
+
+if bool_is_true "$START_GESTURE_RECOGNITION"; then
+  run_terminal \
+    "mediapipe gesture" \
+    "ros2 launch gesture_recognition gesture_recognition.launch.py \
+      image_topic:='${GESTURE_IMAGE_TOPIC}' \
+      image_is_compressed:='${GESTURE_IMAGE_IS_COMPRESSED}' \
+      model_path:='${GESTURE_MODEL_PATH}' \
+      show_window:='${SHOW_GESTURE_WINDOW}' \
+      publish_annotated_image:='${PUBLISH_GESTURE_ANNOTATED_IMAGE}' \
+      gesture_topic:='${GESTURE_TOPIC}' \
+      annotated_image_topic:='${GESTURE_ANNOTATED_IMAGE_TOPIC}'"
 fi
 
-if bool_is_true "$START_HAND_TRACKING"; then
-  run_terminal "hand tracking" "ros2 run person_tracking hands"
-fi
-
-if bool_is_true "$START_PERSON_TRACKING"; then
-  run_terminal "person tracking" "ros2 run person_tracking person"
+if bool_is_true "$START_RVIZ"; then
+  run_terminal "rviz2" "$RVIZ_COMMAND"
 fi
 
 run_terminal \
-  "mapping pass" \
-  "ros2 launch depth_processing zed_mapping_pass.launch.py \
+  "handheld mapping" \
+  "ros2 launch depth_processing zed_slam_nav.launch.py \
+    slam_mode:='mapping' \
+    enable_nav2:='${ENABLE_NAV2}' \
+    enable_planner_only:='${ENABLE_PLANNER_ONLY}' \
+    enable_planning_console:='${ENABLE_PLANNING_CONSOLE}' \
+    planning_console_host:='${PLANNING_CONSOLE_HOST}' \
+    planning_console_port:='${PLANNING_CONSOLE_PORT}' \
+    enable_tracking_node:='false' \
     base_frame:='${BASE_FRAME}' \
+    enable_base_adapter:='true' \
     base_to_camera_translation:='${BASE_TO_CAMERA_TRANSLATION}' \
-    base_to_camera_rpy:='${BASE_TO_CAMERA_RPY}'"
+    base_to_camera_rpy:='${BASE_TO_CAMERA_RPY}' \
+    input_pose_topic:='${INPUT_POSE_TOPIC}' \
+    input_pose_cov_topic:='${INPUT_POSE_COV_TOPIC}' \
+    input_odom_topic:='${INPUT_ODOM_TOPIC}' \
+    input_image_topic:='${INPUT_IMAGE_TOPIC}' \
+    input_image_is_compressed:='${INPUT_IMAGE_IS_COMPRESSED}' \
+    cloud_topic:='${CLOUD_TOPIC}' \
+    enable_tracking_visualization:='${ENABLE_TRACKING_VISUALIZATION}' \
+    show_tracking_window:='${SHOW_TRACKING_WINDOW}' \
+    publish_tracking_image:='${PUBLISH_TRACKING_IMAGE}'"
 
 run_terminal \
-  "mapping instructions" \
-  "echo 'Save map prefix:'; \
+  "handheld mapping instructions" \
+  "echo 'Handheld mapping session prefix:'; \
    echo '  $MAP_PREFIX'; \
    echo; \
-   echo 'Run these after the mapping pass:'; \
+   echo 'Web planning console:'; \
+   echo '  http://$PLANNING_CONSOLE_URL_HOST:$PLANNING_CONSOLE_PORT/'; \
+   echo '  Nav2 planner-only enabled: $ENABLE_PLANNER_ONLY'; \
+   echo '  Full Nav2 enabled: $ENABLE_NAV2'; \
+   echo '  Full Nav2 can be tested later with ENABLE_NAV2=true.'; \
+   echo; \
+   echo 'MediaPipe gesture recognition:'; \
+   echo '  Result topic: $GESTURE_TOPIC'; \
+   echo '  Annotated image topic: $GESTURE_ANNOTATED_IMAGE_TOPIC'; \
+   echo; \
+   echo 'Save commands:'; \
    echo \"ros2 service call /slam_toolbox/save_map slam_toolbox/srv/SaveMap \\\"{name: {data: '$MAP_PREFIX'}}\\\"\"; \
-   echo \"ros2 service call /slam_toolbox/serialize_map slam_toolbox/srv/SerializePoseGraph \\\"{filename: '$MAP_PREFIX'}\\\"\""
+   echo \"ros2 service call /slam_toolbox/serialize_map slam_toolbox/srv/SerializePoseGraph \\\"{filename: '$MAP_PREFIX'}\\\"\"; \
+   echo; \
+   echo 'RViz displays to add:'; \
+   echo '  Map -> /map'; \
+   echo '  LaserScan -> /scan'; \
+   echo '  TF'; \
+   echo '  Path -> /zed/base_path or /zed/path'"
 
-print_mapping_instructions
-echo
-echo "Waiting for mapping artifacts from this run..."
-
-while true; do
-  if file_is_fresh "$MAP_POSEGRAPH_FILE" && file_is_fresh "$MAP_DATA_FILE"; then
-    launch_navigation_mode
-    break
-  fi
-  sleep 2
-done
+print_instructions

@@ -72,6 +72,8 @@ def generate_launch_description() -> LaunchDescription:
             DeclareLaunchArgument("scan_topic", default_value="/scan"),
             DeclareLaunchArgument("base_frame", default_value="base_link"),
             DeclareLaunchArgument("enable_base_adapter", default_value="true"),
+            DeclareLaunchArgument("flatten_navigation_to_2d", default_value="true"),
+            DeclareLaunchArgument("navigation_plane_z", default_value="0.0"),
             DeclareLaunchArgument(
                 "base_to_camera_translation",
                 default_value="0.0,0.0,0.381",
@@ -136,6 +138,10 @@ def generate_launch_description() -> LaunchDescription:
                         "base_to_camera_translation"
                     ),
                     "base_to_camera_rpy": LaunchConfiguration("base_to_camera_rpy"),
+                    "flatten_navigation_to_2d": LaunchConfiguration(
+                        "flatten_navigation_to_2d"
+                    ),
+                    "navigation_plane_z": LaunchConfiguration("navigation_plane_z"),
                 }.items(),
             ),
             IncludeLaunchDescription(
@@ -150,6 +156,10 @@ def generate_launch_description() -> LaunchDescription:
                         "base_to_camera_translation"
                     ),
                     "base_to_camera_rpy": LaunchConfiguration("base_to_camera_rpy"),
+                    "flatten_navigation_to_2d": LaunchConfiguration(
+                        "flatten_navigation_to_2d"
+                    ),
+                    "navigation_plane_z": LaunchConfiguration("navigation_plane_z"),
                     "map_file_name": LaunchConfiguration("map_file_name"),
                 }.items(),
             ),
@@ -195,6 +205,11 @@ def generate_launch_description() -> LaunchDescription:
                         "global_frame": "map",
                         "base_frame": LaunchConfiguration("base_frame"),
                         "planner_action_name": "compute_path_to_pose",
+                        "navigator_action_name": "navigate_to_pose",
+                        "navigation_plane_z": ParameterValue(
+                            LaunchConfiguration("navigation_plane_z"),
+                            value_type=float,
+                        ),
                     }
                 ],
             ),

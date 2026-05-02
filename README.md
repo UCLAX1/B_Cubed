@@ -116,16 +116,16 @@ See these docs for more detail:
 
 7. One-stop Jetson launcher
 
-`ros2_ws/launch.sh` now treats each run as a fresh mapping session:
-- launches the ZED wrapper and the existing viewer / tracking nodes
-- starts `zed_mapping_pass.launch.py`
-- prints the per-run map prefix to save against
-- waits for the current run's serialized slam files (`.posegraph` and `.data`)
-- automatically stops the mapping pass and launches `zed_localization_mode.launch.py`
+`ros2_ws/launch.sh` now runs the handheld ZED mapping workflow:
+- launches the ZED wrapper
+- waits for the ZED pose, odom, cloud, and gesture image topics
+- starts MediaPipe gesture recognition
+- starts `zed_slam_nav.launch.py` in mapping mode
+- opens the web planning console and prints the save commands
 
 Useful environment overrides before running `launch.sh`:
 - `MAP_SESSION_NAME=my_env`
 - `MAP_OUTPUT_DIR=/home/jetson-nano-x1/Documents/B_Cubed/maps`
 - `BASE_TO_CAMERA_TRANSLATION=x,y,z`
 - `BASE_TO_CAMERA_RPY=roll,pitch,yaw`
-- `NAVIGATION_AUTOSTART_COMMAND='ros2 launch depth_processing zed_nav2_bringup.launch.py'`
+- `START_GESTURE_RECOGNITION=false`

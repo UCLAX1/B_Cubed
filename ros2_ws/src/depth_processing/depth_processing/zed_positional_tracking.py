@@ -607,7 +607,7 @@ class ZedPositionalTrackingNode(Node):
         inset_h, inset_w = trajectory_inset.shape[:2]
         top = 12
         left = max(12, frame.shape[1] - inset_w - 12)
-        frame[top : top + inset_h, left : left + inset_w] = trajectory_inset
+        frame[top: top + inset_h, left: left + inset_w] = trajectory_inset
 
         cv2.putText(
             frame,

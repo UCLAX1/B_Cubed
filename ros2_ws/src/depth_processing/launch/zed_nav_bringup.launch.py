@@ -47,6 +47,8 @@ def generate_launch_description() -> LaunchDescription:
             ),
             DeclareLaunchArgument("publish_odom_tf", default_value="true"),
             DeclareLaunchArgument("publish_map_to_odom_tf", default_value="false"),
+            DeclareLaunchArgument("flatten_navigation_to_2d", default_value="true"),
+            DeclareLaunchArgument("navigation_plane_z", default_value="0.0"),
             DeclareLaunchArgument("enable_base_adapter", default_value="true"),
             Node(
                 package="depth_processing",
@@ -71,6 +73,14 @@ def generate_launch_description() -> LaunchDescription:
                         "publish_map_to_odom_tf": ParameterValue(
                             LaunchConfiguration("publish_map_to_odom_tf"),
                             value_type=bool,
+                        ),
+                        "flatten_navigation_to_2d": ParameterValue(
+                            LaunchConfiguration("flatten_navigation_to_2d"),
+                            value_type=bool,
+                        ),
+                        "navigation_plane_z": ParameterValue(
+                            LaunchConfiguration("navigation_plane_z"),
+                            value_type=float,
                         ),
                     }
                 ],
