@@ -91,6 +91,13 @@ bool_is_true() {
   esac
 }
 
+launch_arg() {
+  local name="$1"
+  local value="$2"
+
+  printf '%q' "${name}:=${value}"
+}
+
 missing_ros_packages() {
   local missing=()
   local package_name
@@ -294,16 +301,20 @@ wait_for_wrapper_topics
 echo "Wrapper topics are available."
 
 if bool_is_true "$START_GESTURE_RECOGNITION"; then
+  gesture_launch_command="ros2 launch gesture_recognition gesture_recognition.launch.py"
+  gesture_launch_command+=" $(launch_arg image_topic "$GESTURE_IMAGE_TOPIC")"
+  gesture_launch_command+=" $(launch_arg image_is_compressed "$GESTURE_IMAGE_IS_COMPRESSED")"
+  if [[ -n "${GESTURE_MODEL_PATH//[[:space:]]/}" ]]; then
+    gesture_launch_command+=" $(launch_arg model_path "$GESTURE_MODEL_PATH")"
+  fi
+  gesture_launch_command+=" $(launch_arg show_window "$SHOW_GESTURE_WINDOW")"
+  gesture_launch_command+=" $(launch_arg publish_annotated_image "$PUBLISH_GESTURE_ANNOTATED_IMAGE")"
+  gesture_launch_command+=" $(launch_arg gesture_topic "$GESTURE_TOPIC")"
+  gesture_launch_command+=" $(launch_arg annotated_image_topic "$GESTURE_ANNOTATED_IMAGE_TOPIC")"
+
   run_terminal \
     "mediapipe gesture" \
-    "ros2 launch gesture_recognition gesture_recognition.launch.py \
-      image_topic:='${GESTURE_IMAGE_TOPIC}' \
-      image_is_compressed:='${GESTURE_IMAGE_IS_COMPRESSED}' \
-      model_path:='${GESTURE_MODEL_PATH}' \
-      show_window:='${SHOW_GESTURE_WINDOW}' \
-      publish_annotated_image:='${PUBLISH_GESTURE_ANNOTATED_IMAGE}' \
-      gesture_topic:='${GESTURE_TOPIC}' \
-      annotated_image_topic:='${GESTURE_ANNOTATED_IMAGE_TOPIC}'"
+    "$gesture_launch_command"
 fi
 
 if bool_is_true "$START_RVIZ"; then

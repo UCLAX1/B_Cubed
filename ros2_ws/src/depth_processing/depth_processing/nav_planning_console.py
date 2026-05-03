@@ -161,6 +161,36 @@ def _pose_to_payload(pose_msg: Any) -> dict[str, float]:
     }
 
 
+def _world_to_map_grid(
+    map_msg: OccupancyGrid,
+    x_value: float,
+    y_value: float,
+) -> tuple[float, float]:
+    """Convert world coordinates into map grid coordinates."""
+    origin = map_msg.info.origin
+    yaw = _yaw_from_quaternion(origin.orientation)
+    dx = x_value - float(origin.position.x)
+    dy = y_value - float(origin.position.y)
+    cos_yaw = math.cos(yaw)
+    sin_yaw = math.sin(yaw)
+    resolution = float(map_msg.info.resolution)
+    return (
+        (cos_yaw * dx + sin_yaw * dy) / resolution,
+        (-sin_yaw * dx + cos_yaw * dy) / resolution,
+    )
+
+
+def _point_in_map_bounds(map_msg: OccupancyGrid, x_value: float, y_value: float) -> bool:
+    """Return whether a world point is inside the current OccupancyGrid bounds."""
+    if map_msg.info.resolution <= 0.0:
+        return False
+    grid_x, grid_y = _world_to_map_grid(map_msg, x_value, y_value)
+    return (
+        0.0 <= grid_x < float(map_msg.info.width)
+        and 0.0 <= grid_y < float(map_msg.info.height)
+    )
+
+
 class PlanningConsoleError(RuntimeError):
     """Raised when the web console cannot complete a planning request."""
 
@@ -590,10 +620,28 @@ class NavPlanningConsoleNode(Node):
         y_value = float(payload["y"])
         yaw = payload.get("yaw")
         with self._lock:
+            map_msg = self._map_msg
             start_pose = dict(self._pose) if self._pose is not None else None
         if yaw is None:
             yaw = start_pose["yaw"] if start_pose is not None else 0.0
         yaw_value = float(yaw)
+
+        if map_msg is None:
+            message = "No map has been received yet."
+            self._set_planner_error(message)
+            raise PlanningConsoleError(message)
+        if not _point_in_map_bounds(map_msg, x_value, y_value):
+            message = "Goal is outside the current map bounds."
+            self._set_planner_error(message)
+            raise PlanningConsoleError(message)
+        if start_pose is not None and not _point_in_map_bounds(
+            map_msg,
+            float(start_pose["x"]),
+            float(start_pose["y"]),
+        ):
+            message = "Robot pose is outside the current map bounds."
+            self._set_planner_error(message)
+            raise PlanningConsoleError(message)
 
         with self._lock:
             self._goal = {
@@ -663,7 +711,8 @@ class NavPlanningConsoleNode(Node):
         path_msg = action_result.result.path
         path_points = _path_to_points(path_msg)
         if action_result.status != GoalStatus.STATUS_SUCCEEDED:
-            message = f"Planner returned status {action_result.status}."
+            status_text = _goal_status_text(action_result.status)
+            message = f"Planner {status_text} (status {action_result.status})."
             self._set_planner_error(message)
             raise PlanningConsoleError(message)
 

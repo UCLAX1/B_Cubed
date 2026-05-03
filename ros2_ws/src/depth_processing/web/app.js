@@ -133,6 +133,17 @@ function mapMeta() {
   return state && state.map ? state.map : null;
 }
 
+function imagePointInMap(point) {
+  const meta = mapMeta();
+  return Boolean(
+    meta &&
+    point.x >= 0 &&
+    point.x < meta.width &&
+    point.y >= 0 &&
+    point.y < meta.height
+  );
+}
+
 function worldToImage(point) {
   const meta = mapMeta();
   if (!meta) {
@@ -517,8 +528,10 @@ canvas.addEventListener("pointerdown", (event) => {
 canvas.addEventListener("pointermove", (event) => {
   const imagePoint = screenToImage(event.clientX, event.clientY);
   const worldPoint = imageToWorld(imagePoint);
-  if (worldPoint) {
+  if (worldPoint && imagePointInMap(imagePoint)) {
     readout.textContent = `x ${worldPoint.x.toFixed(2)}, y ${worldPoint.y.toFixed(2)}`;
+  } else if (mapReady) {
+    readout.textContent = "outside map";
   }
 
   if (!dragStart) {
@@ -544,7 +557,7 @@ canvas.addEventListener("pointerup", (event) => {
 
   if (dragStart && !dragStart.moved && state && state.map) {
     const imagePoint = screenToImage(event.clientX, event.clientY);
-    const worldPoint = imageToWorld(imagePoint);
+    const worldPoint = imagePointInMap(imagePoint) ? imageToWorld(imagePoint) : null;
     if (worldPoint) {
       selectedGoal = {
         x: worldPoint.x,
@@ -553,6 +566,8 @@ canvas.addEventListener("pointerup", (event) => {
       };
       draw();
       requestPlan(selectedGoal);
+    } else {
+      setChip(planStatus, "goal outside map", "warn");
     }
   }
   dragStart = null;
