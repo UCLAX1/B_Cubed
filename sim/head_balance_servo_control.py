@@ -54,9 +54,9 @@ except Exception as e:
 MOSFET = DigitalOutputDevice(16)  # MOSFET control (Physical Pin 36)
 
 # inital variables
-MAX_VELOCITY_LAZY_SUSAN = 15.0  # deg/sec - rotation servo (slow to avoid slip)
-MAX_VELOCITY_ARM = 20.0          # deg/sec - arm servo
-MAX_VELOCITY_HEAD = 25.0         # deg/sec - head servo (fastest, least likely to damage)
+MAX_VELOCITY_LAZY_SUSAN = 2.0   # deg/sec - SLOWEST (was 15.0)
+MAX_VELOCITY_ARM = 2.0          # deg/sec - SLOWEST (was 20.0)
+MAX_VELOCITY_HEAD = 2.0         # deg/sec - SLOWEST (was 25.0)
 
 # Angle limits (degrees) to prevent mechanical damage
 LAZY_SUSAN_MIN = -90
@@ -67,7 +67,7 @@ ARM_MAX = 120
 # HEAD_MAX = 180
 
 # Control loop timing
-CONTROL_LOOP_HZ = 20  # 50ms update rate
+CONTROL_LOOP_HZ = 5   # 200ms update rate - SLOWEST (was 20Hz)
 CONTROL_LOOP_DT = 1.0 / CONTROL_LOOP_HZ
 
 
@@ -91,8 +91,6 @@ def angle_to_servo_value(angle_deg, max_velocity):
     angle_deg = max(min(angle_deg, 90), -90)
     servo_value = angle_deg / 90.0
     return servo_value
-
-
 
 
 # HEAD BALANCE CONTROLLER WITH ENCODER FEEDBACK
@@ -132,7 +130,20 @@ class HeadBalanceController:
             roll = math.degrees(fusionPose[0])
             pitch = math.degrees(fusionPose[1])
             yaw = math.degrees(fusionPose[2])
+            
+            # DEBUG: Print raw IMU data on first successful read
+            if not hasattr(self, '_imu_debug_printed'):
+                print(f"[DEBUG] Raw fusionPose (radians): {fusionPose}")
+                print(f"[DEBUG] Converted to degrees - R:{roll:.2f}° P:{pitch:.2f}° Y:{yaw:.2f}°")
+                self._imu_debug_printed = True
+            
             return pitch, roll, yaw
+        
+        # Debug: Print if IMURead fails
+        if not hasattr(self, '_imu_read_fail_printed'):
+            print("[DEBUG] imu.IMURead() returned False - no data available")
+            self._imu_read_fail_printed = True
+        
         return 0.0, 0.0, 0.0  # Fallback if no data
     
     def clamp_angle(self, angle, min_angle, max_angle):
