@@ -40,10 +40,3 @@ def find_motor_angles(pitch, roll, desired_angle):
 
     return(Arm, Lazy_Susan, head)
 
-
-a = int(input('Enter pitch number: '))
-b = int(input('Enter roll number: '))
-c = int(input('Enter desired head angle: '))
-
-print(f'motor angles are {find_motor_angles(a, b, c)}')
-
