@@ -67,6 +67,7 @@ class ServoEx(Servo):
     # center position every x seconds
     POSITION_CENTERING_DELAY: float = 0.25
 
+    # check the one google sheet for what "servo_pin", "encoder_pin_a", etc. are
     def __init__(self, servo_pin: int, encoder_pin_a: int, encoder_pin_b: int, absolute_encoder_pin: int):
         try:
             super().__init__(servo_pin)

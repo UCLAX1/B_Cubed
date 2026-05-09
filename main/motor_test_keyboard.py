@@ -87,27 +87,42 @@ class InputHandler:
 
 
 class App:
+    # --- DRAWING AND INPUTS AND STUFF ---
     WINDOW_SIZE: np.ndarray = np.array([640, 480])
     MIDDLE_COORD: np.ndarray = WINDOW_SIZE / 2
-    DRAW_SCALE: float = 100.0
+    DRAW_SCALE: float = 170.0
 
     TARGET_UPDATES_PER_SECOND: float = 240.0
     TARGET_SECONDS_PER_UPDATE: float = 1.0 / TARGET_UPDATES_PER_SECOND
 
     # units per second
-    SPEED_CHANGE_RATE: float = 0.5
+    ANGULAR_VELOCITY_INPUT_CHANGE_RATE: float = 0.5
 
     TOP_LEFT_WHEEL_COORD: np.ndarray = MIDDLE_COORD + DRAW_SCALE * np.array([-np.sqrt(3) / 2, 0.5])
     TOP_RIGHT_WHEEL_COORD: np.ndarray = MIDDLE_COORD + DRAW_SCALE * np.array([np.sqrt(3) / 2, 0.5])
     BOTTOM_WHEEL_COORD: np.ndarray = MIDDLE_COORD + DRAW_SCALE * np.array([0, -1])
 
+    # --- WHEEL MATH STUFF ---
+
+    WHEEL_VELOCITY_MULTIPLIER = 0.25
+
+    # bot radius in meters
+    BOT_RADIUS = 0.5
+
     # vectors perpendicular to the wheels
     # the axes that the wheels are lying on
-    TOP_LEFT_VEC: np.ndarray = np.array([-0.5, -np.sqrt(3) / 2])
-    TOP_RIGHT_VEC: np.ndarray = np.array([-0.5, np.sqrt(3) / 2])
-    BOTTOM_VEC: np.ndarray = np.array([1, 0])
+    TOP_LEFT_WHEEL_DIRECTION_VEC: np.ndarray = np.array([-0.5, -np.sqrt(3) / 2])
+    TOP_RIGHT_WHEEL_DIRECTION_VEC: np.ndarray = np.array([-0.5, np.sqrt(3) / 2])
+    BOTTOM_WHEEL_DIRECTION_VEC: np.ndarray = np.array([1, 0])
+
+    # extra
+    TOP_LEFT_WHEEL_ANGLE: float = np.deg2rad(30)
+    TOP_RIGHT_WHEEL_ANGLE: float = np.deg2rad(150)
+    BOTTOM_WHEEL_ANGLE: float = np.deg2rad(270)
 
     def __init__(self):
+        # --- DRAWING AND INPUTS AND STUFF ---
+
         # timer in seconds
         self.timer: float = 0.0
         self.start: float = time.time()
@@ -119,14 +134,16 @@ class App:
         self.input_handler = InputHandler()
         self.mouse_vec: np.ndarray = np.array([0.0, 0.0])
 
-        self.velocity: np.ndarray = np.array([0.0, 0.0])
-        self.speed: float = 1.0
-        # speed: float = 0.01
-        self.angular_velocity: float = 0
+        # --- WHEEL MATH STUFF ---
 
-        self.top_left_speed: float = 0.0
-        self.top_right_speed: float = 0.0
-        self.bottom_speed: float = 0.0
+        self.bot_velocity: np.ndarray = np.array([0.0, 0.0])
+        self.bot_speed_percent: float = 0.0
+        # speed: float = 0.01
+        self.bot_angular_velocity: float = 0
+
+        self.top_left_wheel_velocity: float = 0.0
+        self.top_right_wheel_velocity: float = 0.0
+        self.bottom_wheel_velocity: float = 0.0
 
         self.bus: CanBus = CanBus(channel='COM5', interface='slcan', bitrate=1000000)
         self.bus.start()
@@ -156,15 +173,30 @@ class App:
         pygame.display.set_caption('Pygame Keyboard Test')
         pygame.mouse.set_visible(1)
 
-        # 0: top left wheel
-        # 1: top right wheel
-        # 2: bottom wheel
-        # TODO: make this work
-        # self.wheel_velocities: np.ndarray = np.array([0.0, 0.0, 0.0])
+    def is_bad_vec(self, vec: np.ndarray):
+        return np.any(np.isnan(vec)) or np.linalg.norm(vec) < 0.0001
 
     def flip_y(self, vec: np.ndarray) -> np.ndarray:
         return np.array([vec[0], 2 * self.MIDDLE_COORD[1] - vec[1]])
 
+    def set_motors(self, velocity: np.ndarray, angular_velocity: float):
+
+
+        self.top_left_wheel_velocity = np.dot(velocity, self.TOP_LEFT_WHEEL_DIRECTION_VEC) + angular_velocity
+        self.top_right_wheel_velocity = np.dot(velocity, self.TOP_RIGHT_WHEEL_DIRECTION_VEC) + angular_velocity
+        self.bottom_wheel_velocity = np.dot(velocity, self.BOTTOM_WHEEL_DIRECTION_VEC) + angular_velocity
+
+
+        if self.bus.started_successfully():
+            # MAKE MOTORS NOT BREAK
+            self.top_left_motor.send_heartbeat()
+            self.top_right_motor.send_heartbeat()
+            self.bottom_motor.send_heartbeat()
+
+            # SET MOTOR SPEEDS
+            self.top_left_motor.set_power(self.top_left_wheel_velocity)
+            self.top_right_motor.set_power(self.top_right_wheel_velocity)
+            self.bottom_motor.set_power(self.bottom_wheel_velocity)
 
     def run(self):
         try:
@@ -201,49 +233,33 @@ class App:
         # print(self.mouse_vec)
 
         if self.input_handler.mouse_pressed:
-            speed = np.clip(0, 1, np.linalg.norm(self.mouse_vec))
-            if speed != 0.0:
-                self.velocity = (self.mouse_vec / np.linalg.norm(self.mouse_vec)) * speed
+            self.bot_speed_percent = np.clip(0.0, 1.0, np.linalg.norm(self.mouse_vec))
+            if self.bot_speed_percent != 0.0:
+                self.bot_velocity = (self.mouse_vec / np.linalg.norm(self.mouse_vec)) * self.bot_speed_percent * self.WHEEL_VELOCITY_MULTIPLIER
             else:
-                self.velocity = np.array([0.0, 0.0])
+                self.bot_velocity = np.array([0.0, 0.0])
 
 
-        self.angular_velocity += self.SPEED_CHANGE_RATE * dt * (self.input_handler.ccw_pressed - self.input_handler.cw_pressed)
-        # angular_velocity *= RADIUS
+        self.bot_angular_velocity += self.ANGULAR_VELOCITY_INPUT_CHANGE_RATE * dt * (self.input_handler.ccw_pressed - self.input_handler.cw_pressed)
 
-        self.top_left_speed: float = np.dot(self.velocity, self.TOP_LEFT_VEC) + self.angular_velocity
-        self.top_right_speed: float = np.dot(self.velocity, self.TOP_RIGHT_VEC) + self.angular_velocity
-        self.bottom_speed: float = np.dot(self.velocity, self.BOTTOM_VEC) + self.angular_velocity
-
-        if self.bus.started_successfully():
-            # MAKE MOTORS NOT BREAK
-
-            self.top_left_motor.send_heartbeat()
-            self.top_right_motor.send_heartbeat()
-            self.bottom_motor.send_heartbeat()
-
-            # SET MOTOR SPEEDS
-
-            self.top_left_motor.set_power(self.top_left_speed)
-            self.top_right_motor.set_power(self.top_right_speed)
-            self.bottom_motor.set_power(self.bottom_speed)
+        self.set_motors(self.bot_velocity, self.bot_angular_velocity)
 
     def draw(self):
         self.screen.fill((0, 0, 0))
 
-        top_left_velocity = self.top_left_speed * self.TOP_LEFT_VEC
-        top_right_velocity = self.top_right_speed * self.TOP_RIGHT_VEC
-        bottom_velocity = self.bottom_speed * self.BOTTOM_VEC
+        top_left_velocity = self.top_left_wheel_velocity * self.TOP_LEFT_WHEEL_DIRECTION_VEC
+        top_right_velocity = self.top_right_wheel_velocity * self.TOP_RIGHT_WHEEL_DIRECTION_VEC
+        bottom_velocity = self.bottom_wheel_velocity * self.BOTTOM_WHEEL_DIRECTION_VEC
 
 
         pygame.draw.circle(self.screen, (255, 255, 255), self.MIDDLE_COORD, self.DRAW_SCALE - 2, 2)
 
-        pygame.draw.line(self.screen, (0, 0, 255), self.flip_y(self.TOP_LEFT_WHEEL_COORD - self.DRAW_SCALE * self.TOP_LEFT_VEC), self.flip_y(self.TOP_LEFT_WHEEL_COORD + self.DRAW_SCALE * self.TOP_LEFT_VEC), 1)
-        pygame.draw.line(self.screen, (0, 0, 255), self.flip_y(self.TOP_RIGHT_WHEEL_COORD - self.DRAW_SCALE * self.TOP_RIGHT_VEC), self.flip_y(self.TOP_RIGHT_WHEEL_COORD + self.DRAW_SCALE * self.TOP_RIGHT_VEC), 1)
-        pygame.draw.line(self.screen, (0, 0, 255), self.flip_y(self.BOTTOM_WHEEL_COORD - self.DRAW_SCALE * self.BOTTOM_VEC), self.flip_y(self.BOTTOM_WHEEL_COORD + self.DRAW_SCALE * self.BOTTOM_VEC), 1)
+        pygame.draw.line(self.screen, (0, 0, 255), self.flip_y(self.TOP_LEFT_WHEEL_COORD - self.DRAW_SCALE * self.TOP_LEFT_WHEEL_DIRECTION_VEC), self.flip_y(self.TOP_LEFT_WHEEL_COORD + self.DRAW_SCALE * self.TOP_LEFT_WHEEL_DIRECTION_VEC), 1)
+        pygame.draw.line(self.screen, (0, 0, 255), self.flip_y(self.TOP_RIGHT_WHEEL_COORD - self.DRAW_SCALE * self.TOP_RIGHT_WHEEL_DIRECTION_VEC), self.flip_y(self.TOP_RIGHT_WHEEL_COORD + self.DRAW_SCALE * self.TOP_RIGHT_WHEEL_DIRECTION_VEC), 1)
+        pygame.draw.line(self.screen, (0, 0, 255), self.flip_y(self.BOTTOM_WHEEL_COORD - self.DRAW_SCALE * self.BOTTOM_WHEEL_DIRECTION_VEC), self.flip_y(self.BOTTOM_WHEEL_COORD + self.DRAW_SCALE * self.BOTTOM_WHEEL_DIRECTION_VEC), 1)
 
 
-        pygame.draw.line(self.screen, (255, 0, 0), self.flip_y(self.MIDDLE_COORD), self.flip_y(self.MIDDLE_COORD + self.DRAW_SCALE * self.velocity), 5)
+        pygame.draw.line(self.screen, (255, 0, 0), self.flip_y(self.MIDDLE_COORD), self.flip_y(self.MIDDLE_COORD + self.DRAW_SCALE * self.bot_velocity), 5)
 
         # green lines
         pygame.draw.line(self.screen, (0, 255, 0), self.flip_y(self.TOP_LEFT_WHEEL_COORD), self.flip_y(self.TOP_LEFT_WHEEL_COORD + self.DRAW_SCALE * top_left_velocity), 5)
@@ -259,16 +275,21 @@ class App:
         intersection_p2 = normal_intersection(top_left_velocity, top_right_velocity)
         intersection_p3 = normal_intersection(bottom_velocity, top_right_velocity)
 
-        valid_intersection_points = np.array([arr for arr in [intersection_p1, intersection_p2, intersection_p3] if not np.any(np.isnan(arr))])
-        calculated_velocity = np.sum(valid_intersection_points, axis=0) / len(valid_intersection_points)
+        valid_intersection_points = np.array([vec for vec in [intersection_p1, intersection_p2, intersection_p3] if not self.is_bad_vec(vec)])
+        if len(valid_intersection_points) == 0:
+            calculated_velocity = np.array([0, 0])
+        else:
+            calculated_velocity: np.ndarray = np.sum(valid_intersection_points, axis=0) / len(valid_intersection_points)
 
-        text_surface = self.FONT.render(": " + str(valid_intersection_points), False, (255, 255, 255))
-        self.screen.blit(text_surface, (0,60))
-
-        text_surface = self.FONT.render("velocity: " + str(self.velocity), False, (255, 255, 255))
-        self.screen.blit(text_surface, (0,0))
-        text_surface = self.FONT.render("calculated velocity: " + str(calculated_velocity), False, (255, 255, 255))
-        self.screen.blit(text_surface, (0,30))
+        # text_surface = self.FONT.render("valid intersections: " + str(valid_intersection_points), False, (255, 255, 255))
+        # self.screen.blit(text_surface, (0,60))
+        # text_surface = self.FONT.render("intersection_p2: " + str(intersection_p2), False, (255, 255, 255))
+        # self.screen.blit(text_surface, (0,90))
+        #
+        # text_surface = self.FONT.render("velocity: " + str(self.velocity), False, (255, 255, 255))
+        # self.screen.blit(text_surface, (0,0))
+        # text_surface = self.FONT.render("calculated velocity: " + str(calculated_velocity), False, (255, 255, 255))
+        # self.screen.blit(text_surface, (0,30))
 
         pygame.draw.circle(self.screen, (0, 255, 255), self.flip_y(self.MIDDLE_COORD + self.DRAW_SCALE * intersection_p1), 2, 2)
         pygame.draw.circle(self.screen, (0, 255, 255), self.flip_y(self.MIDDLE_COORD + self.DRAW_SCALE * intersection_p2), 2, 2)
