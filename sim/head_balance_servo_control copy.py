@@ -1,11 +1,13 @@
 """
-Minimal IMU data reader - just get IMU angles and print them.
-No servo control, no complexity.
+IMU Reader with Servo Control
+Reads IMU data, calculates target motor angles, and moves servos to balance.
+Uses gpiozero Servo for direct control (matches servo_sample.py).
 """
 
 import sys
 import time
 import math
+from gpiozero import Servo, DigitalOutputDevice
 from head_balance_math import find_motor_angles
 
 # ============================================================================
@@ -31,6 +33,44 @@ imu_poll_interval = imu.IMUGetPollInterval() / 1000.0
 
 print(f"IMU initialized. Poll interval: {imu_poll_interval*1000:.1f}ms\n")
 
+# ============================================================================
+# SERVO INITIALIZATION (match servo_sample.py)
+# ============================================================================
+arm_servo = Servo(13, initial_value=None)           # annimos_150kg (Standard, Physical Pin 33)
+lazy_susan_servo = Servo(12, initial_value=None)   # diymall_70kg (Continuous, Physical Pin 32)
+head_servo = Servo(18, initial_value=None)         # garosa_5kg (Continuous, Physical Pin 12)
+MOSFET = DigitalOutputDevice(16)                   # MOSFET control (Physical Pin 36)
+
+# Angle limits (degrees) to prevent mechanical damage
+ARM_MIN = -120
+ARM_MAX = 120
+LAZY_SUSAN_MIN = -90
+LAZY_SUSAN_MAX = 90
+
+def angle_to_servo_value(angle_deg, servo_type='standard'):
+    """
+    Convert target angle (degrees) to servo control value (-1 to 1).
+    
+    For standard servos (arm): -1 = full left, 0 = center, 1 = full right
+    For continuous servos (lazy susan, head): -1 = full reverse, 0 = stop, 1 = full forward
+    
+    Args:
+        angle_deg: Target angle in degrees
+        servo_type: 'standard' or 'continuous'
+    
+    Returns:
+        Servo value between -1 and 1
+    """
+    if servo_type == 'standard':
+        # Standard servo: assume ±90° maps to ±1.0
+        return max(min(angle_deg / 90.0, 1.0), -1.0)
+    else:  # continuous
+        # For continuous servos, we use the angle to determine speed/direction
+        # Proportionally map angle to velocity
+        # Assuming max comfortable speed is 45°/sec
+        max_angle_speed = 45.0
+        return max(min(angle_deg / max_angle_speed, 1.0), -1.0)
+
 
 # ============================================================================
 # MAIN LOOP
@@ -38,23 +78,32 @@ print(f"IMU initialized. Poll interval: {imu_poll_interval*1000:.1f}ms\n")
 
 def main():
     try:
-        print("Reading IMU data. Press Ctrl+C to stop.\n")
+        print("Turning MOSFET ON...")
+        MOSFET.on()
+        time.sleep(0.5)
+        
+        print("Centering all servos...")
+        arm_servo.value = 0
+        lazy_susan_servo.value = 0
+        head_servo.value = 0
+        time.sleep(1)
+        
+        print("Reading IMU data and moving servos. Press Ctrl+C to stop.\n")
         
         last_print = time.time()
-        print_interval = 0.2  # Print every 200ms
+        last_servo_update = time.time()
+        print_interval = 0.5     # Print every 500ms
+        servo_update_interval = 0.1  # Update servos every 100ms
         
         while True:
             # Read IMU at its natural poll interval
             if imu.IMURead():
                 current_time = time.time()
                 
-                # Print every 200ms to see real-time changes
+                # Print IMU and target data periodically
                 if current_time - last_print >= print_interval:
                     data = imu.getIMUData()
                     fusionPose = data["fusionPose"]
-                    accel = data["accel"]
-                    gyro = data["gyro"]
-                    compass = data["compass"]
                     
                     # Convert to degrees
                     roll = math.degrees(fusionPose[0])
@@ -64,16 +113,50 @@ def main():
                     # Calculate target motor angles
                     arm_target, lazy_susan_target, head_target = find_motor_angles(pitch, roll, 0.0)
                     
-                    print(f"Orientation: Roll={roll:7.2f}°  Pitch={pitch:7.2f}°  Yaw={yaw:7.2f}°")
-                    print(f"Target Angles: Arm={arm_target:7.2f}°  Lazy Susan={lazy_susan_target:7.2f}°  Head={head_target:7.2f}°")
+                    print(f"IMU: Roll={roll:7.2f}°  Pitch={pitch:7.2f}°  Yaw={yaw:7.2f}°")
+                    print(f"Targets: Arm={arm_target:7.2f}°  Lazy Susan={lazy_susan_target:7.2f}°  Head={head_target:7.2f}°")
+                    print("-" * 80)
                     
                     last_print = current_time
+                
+                # Update servo positions at controlled rate
+                if current_time - last_servo_update >= servo_update_interval:
+                    data = imu.getIMUData()
+                    fusionPose = data["fusionPose"]
+                    
+                    roll = math.degrees(fusionPose[0])
+                    pitch = math.degrees(fusionPose[1])
+                    
+                    # Calculate target angles
+                    arm_target, lazy_susan_target, head_target = find_motor_angles(pitch, roll, 0.0)
+                    
+                    # Clamp to safe limits
+                    arm_target = max(min(arm_target, ARM_MAX), ARM_MIN)
+                    lazy_susan_target = max(min(lazy_susan_target, LAZY_SUSAN_MAX), LAZY_SUSAN_MIN)
+                    
+                    # Convert angles to servo values and move
+                    arm_servo.value = angle_to_servo_value(arm_target, 'standard')
+                    lazy_susan_servo.value = angle_to_servo_value(lazy_susan_target, 'continuous')
+                    head_servo.value = angle_to_servo_value(head_target, 'continuous')
+                    
+                    last_servo_update = current_time
             
             # Sleep for RTIMU's recommended poll interval
             time.sleep(imu_poll_interval)
     
     except KeyboardInterrupt:
-        print("\n\nStopped!")
+        print("\n\nStopping...")
+    
+    finally:
+        print("Centering servos...")
+        arm_servo.value = 0
+        lazy_susan_servo.value = 0
+        head_servo.value = 0
+        time.sleep(0.5)
+        
+        print("Turning MOSFET OFF...")
+        MOSFET.off()
+        print("Done!")
 
 
 if __name__ == "__main__":
