@@ -251,6 +251,7 @@ class BB8BalanceEnv(gym.Env):
             self.config.damping_scale_min, self.config.damping_scale_max
         )
         self.model.dof_damping[self._pendulum_dofs] *= damping_scale
+        mujoco.mj_setConst(self.model, self.data)
         self._nominal_system_mass = float(np.sum(self.model.body_mass))
         self.actuator_scale = float(
             self.np_random.uniform(
