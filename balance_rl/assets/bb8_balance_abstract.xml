@@ -1,0 +1,62 @@
+<mujoco model="bb8_balance_abstract">
+  <compiler angle="radian"/>
+  <option timestep="0.002" integrator="RK4" gravity="0 0 -9.81"/>
+
+  <default>
+    <joint damping="0.02" armature="0.002"/>
+    <geom friction="1.0 0.005 0.0001"/>
+  </default>
+
+  <asset>
+    <texture name="grid" type="2d" builtin="checker" width="256" height="256"
+             rgb1="0.12 0.13 0.14" rgb2="0.18 0.20 0.22"/>
+    <material name="grid" texture="grid" texrepeat="6 6" reflectance="0.05"/>
+  </asset>
+
+  <worldbody>
+    <light name="top" pos="0 0 3"/>
+    <geom name="floor" type="plane" pos="0 0 0" size="8 8 0.02" material="grid"/>
+
+    <body name="shell" pos="0 0 0.28">
+      <joint name="shell_x" type="slide" axis="1 0 0" damping="0.35"/>
+      <joint name="shell_y" type="slide" axis="0 1 0" damping="0.35"/>
+      <geom name="shell_visual" type="sphere" size="0.28" mass="1.1"
+            rgba="0.95 0.45 0.12 0.22" contype="0" conaffinity="0"/>
+
+      <body name="pitch_frame" pos="0 0 0">
+        <inertial pos="0 0 0" mass="0.001" diaginertia="0.000001 0.000001 0.000001"/>
+        <joint name="pitch" type="hinge" axis="0 1 0" damping="0.035"
+               limited="true" range="-1.2 1.2"/>
+        <body name="roll_frame" pos="0 0 0">
+          <inertial pos="0 0 0" mass="0.001" diaginertia="0.000001 0.000001 0.000001"/>
+          <joint name="roll" type="hinge" axis="1 0 0" damping="0.035"
+                 limited="true" range="-1.2 1.2"/>
+          <geom name="chassis_stem" type="capsule" fromto="0 0 0 0 0 -0.18"
+                size="0.025" mass="0.25" rgba="0.18 0.2 0.22 1"/>
+          <body name="chassis_mass" pos="0 0 -0.24">
+            <geom name="battery_block" type="box" size="0.13 0.09 0.045"
+                  mass="3.2" rgba="0.08 0.1 0.12 1"/>
+          </body>
+          <body name="head_disturbance_mass" pos="0.02 0 0.26">
+            <geom name="head_disturbance" type="sphere" size="0.055"
+                  mass="0.25" rgba="0.9 0.9 0.86 0.55" contype="0" conaffinity="0"/>
+          </body>
+        </body>
+      </body>
+    </body>
+  </worldbody>
+
+  <actuator>
+    <motor name="x_force" joint="shell_x" gear="1" ctrllimited="true" ctrlrange="-600 600"/>
+    <motor name="y_force" joint="shell_y" gear="1" ctrllimited="true" ctrlrange="-600 600"/>
+  </actuator>
+
+  <sensor>
+    <jointpos name="roll_pos" joint="roll"/>
+    <jointpos name="pitch_pos" joint="pitch"/>
+    <jointvel name="roll_vel" joint="roll"/>
+    <jointvel name="pitch_vel" joint="pitch"/>
+    <jointvel name="shell_x_vel" joint="shell_x"/>
+    <jointvel name="shell_y_vel" joint="shell_y"/>
+  </sensor>
+</mujoco>

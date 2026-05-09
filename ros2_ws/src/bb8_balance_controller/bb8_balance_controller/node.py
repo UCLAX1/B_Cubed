@@ -1,0 +1,390 @@
+"""ROS 2 residual balance controller for B_Cubed."""
+
+from __future__ import annotations
+
+import math
+from typing import Optional
+
+import numpy as np
+import rclpy
+from geometry_msgs.msg import Twist
+from nav_msgs.msg import Odometry
+from rclpy.duration import Duration
+from rclpy.node import Node
+from sensor_msgs.msg import Imu
+from std_msgs.msg import Float32MultiArray, String
+
+from bb8_balance_controller.math_utils import clip_norm, quat_to_roll_pitch
+from bb8_balance_controller.policy import load_policy_or_pd
+
+
+def _zero_twist() -> Twist:
+    return Twist()
+
+
+class BalanceControllerNode(Node):
+    """Combine Nav2 velocity with a bounded learned balance residual."""
+
+    def __init__(self) -> None:
+        super().__init__("bb8_balance_controller")
+        self._declare_parameters()
+        self._read_parameters()
+
+        self.policy, self.policy_backend = load_policy_or_pd(
+            self.policy_path,
+            self.prefer_cuda,
+            self.pd_kp,
+            self.pd_kd,
+            self.max_balance_accel,
+            self.roll_correction_sign,
+            self.pitch_correction_sign,
+        )
+
+        self.roll = 0.0
+        self.pitch = 0.0
+        self.roll_rate = 0.0
+        self.pitch_rate = 0.0
+        self.last_attitude_rx = None
+        self.previous_tilt_stamp = None
+        self.previous_tilt = None
+
+        self.nav_command = np.zeros(3, dtype=np.float32)
+        self.previous_nav_xy = np.zeros(2, dtype=np.float32)
+        self.nav_accel = np.zeros(2, dtype=np.float32)
+        self.last_nav_rx = None
+
+        self.odom_velocity = np.zeros(2, dtype=np.float32)
+        self.last_odom_rx = None
+
+        self.previous_action = np.zeros(2, dtype=np.float32)
+        self.filtered_action = np.zeros(2, dtype=np.float32)
+        self.balance_velocity = np.zeros(2, dtype=np.float32)
+        self.output_velocity = np.zeros(2, dtype=np.float32)
+        self.last_control_time = self.get_clock().now()
+        self.last_status_summary = ""
+
+        self.cmd_pub = self.create_publisher(Twist, self.output_twist_topic, 10)
+        self.jet_cmd_pub = self.create_publisher(Float32MultiArray, self.jet_cmd_topic, 10)
+        self.status_pub = self.create_publisher(String, self.status_topic, 10)
+
+        self.create_subscription(Twist, self.nav_cmd_topic, self._nav_callback, 10)
+        if self.imu_topic:
+            self.create_subscription(Imu, self.imu_topic, self._imu_callback, 10)
+        if self.tilt_topic:
+            self.create_subscription(
+                Float32MultiArray, self.tilt_topic, self._tilt_callback, 10
+            )
+        if self.odom_topic:
+            self.create_subscription(Odometry, self.odom_topic, self._odom_callback, 10)
+
+        self.create_timer(1.0 / self.control_rate_hz, self._control_loop)
+        self.create_timer(1.0 / self.status_rate_hz, self._publish_status)
+
+        self.get_logger().info(
+            "Balance controller ready: "
+            f"policy_backend={self.policy_backend}, "
+            f"nav_cmd_topic={self.nav_cmd_topic}, "
+            f"jet_cmd_topic={self.jet_cmd_topic}."
+        )
+
+    def _declare_parameters(self) -> None:
+        self.declare_parameter("nav_cmd_topic", "cmd_vel")
+        self.declare_parameter("output_twist_topic", "cmd_vel_balanced")
+        self.declare_parameter("jet_cmd_topic", "jet_cmd")
+        self.declare_parameter("status_topic", "balance/status")
+        self.declare_parameter("imu_topic", "imu/data")
+        self.declare_parameter("tilt_topic", "sense_hat/raw")
+        self.declare_parameter("tilt_topic_degrees", True)
+        self.declare_parameter("odom_topic", "")
+
+        self.declare_parameter("policy_path", "")
+        self.declare_parameter("prefer_cuda", False)
+        self.declare_parameter("control_rate_hz", 50.0)
+        self.declare_parameter("status_rate_hz", 2.0)
+        self.declare_parameter("require_attitude", True)
+        self.declare_parameter("zero_on_stale_nav", True)
+        self.declare_parameter("attitude_timeout_sec", 0.25)
+        self.declare_parameter("nav_timeout_sec", 0.5)
+        self.declare_parameter("odom_timeout_sec", 0.5)
+
+        self.declare_parameter("roll_offset_rad", 0.0)
+        self.declare_parameter("pitch_offset_rad", 0.0)
+        self.declare_parameter("roll_correction_sign", -1.0)
+        self.declare_parameter("pitch_correction_sign", 1.0)
+        self.declare_parameter("pd_kp", 3.0)
+        self.declare_parameter("pd_kd", 0.45)
+
+        self.declare_parameter("max_nav_speed_m_s", 1.0)
+        self.declare_parameter("max_balance_accel_m_s2", 0.8)
+        self.declare_parameter("max_correction_speed_m_s", 0.18)
+        self.declare_parameter("max_output_accel_m_s2", 1.8)
+        self.declare_parameter("balance_velocity_leak_per_s", 1.2)
+        self.declare_parameter("action_filter_alpha", 0.65)
+        self.declare_parameter("tilt_cutoff_rad", 0.65)
+        self.declare_parameter("servo_neutral", [0.0, 0.0, 0.0])
+        self.declare_parameter("active_state_value", 1.0)
+        self.declare_parameter("stopped_state_value", 0.0)
+
+    def _read_parameters(self) -> None:
+        self.nav_cmd_topic = str(self.get_parameter("nav_cmd_topic").value)
+        self.output_twist_topic = str(self.get_parameter("output_twist_topic").value)
+        self.jet_cmd_topic = str(self.get_parameter("jet_cmd_topic").value)
+        self.status_topic = str(self.get_parameter("status_topic").value)
+        self.imu_topic = str(self.get_parameter("imu_topic").value)
+        self.tilt_topic = str(self.get_parameter("tilt_topic").value)
+        self.tilt_topic_degrees = bool(self.get_parameter("tilt_topic_degrees").value)
+        self.odom_topic = str(self.get_parameter("odom_topic").value)
+
+        self.policy_path = str(self.get_parameter("policy_path").value)
+        self.prefer_cuda = bool(self.get_parameter("prefer_cuda").value)
+        self.control_rate_hz = max(1.0, float(self.get_parameter("control_rate_hz").value))
+        self.status_rate_hz = max(0.5, float(self.get_parameter("status_rate_hz").value))
+        self.require_attitude = bool(self.get_parameter("require_attitude").value)
+        self.zero_on_stale_nav = bool(self.get_parameter("zero_on_stale_nav").value)
+        self.attitude_timeout = Duration(
+            seconds=float(self.get_parameter("attitude_timeout_sec").value)
+        )
+        self.nav_timeout = Duration(
+            seconds=float(self.get_parameter("nav_timeout_sec").value)
+        )
+        self.odom_timeout = Duration(
+            seconds=float(self.get_parameter("odom_timeout_sec").value)
+        )
+
+        self.roll_offset = float(self.get_parameter("roll_offset_rad").value)
+        self.pitch_offset = float(self.get_parameter("pitch_offset_rad").value)
+        self.roll_correction_sign = float(
+            self.get_parameter("roll_correction_sign").value
+        )
+        self.pitch_correction_sign = float(
+            self.get_parameter("pitch_correction_sign").value
+        )
+        self.pd_kp = float(self.get_parameter("pd_kp").value)
+        self.pd_kd = float(self.get_parameter("pd_kd").value)
+
+        self.max_nav_speed = float(self.get_parameter("max_nav_speed_m_s").value)
+        self.max_balance_accel = float(
+            self.get_parameter("max_balance_accel_m_s2").value
+        )
+        self.max_correction_speed = float(
+            self.get_parameter("max_correction_speed_m_s").value
+        )
+        self.max_output_accel = float(
+            self.get_parameter("max_output_accel_m_s2").value
+        )
+        self.balance_velocity_leak = float(
+            self.get_parameter("balance_velocity_leak_per_s").value
+        )
+        self.action_filter_alpha = float(self.get_parameter("action_filter_alpha").value)
+        self.tilt_cutoff = float(self.get_parameter("tilt_cutoff_rad").value)
+        servo_neutral = list(self.get_parameter("servo_neutral").value)
+        self.servo_neutral = [float(value) for value in servo_neutral[:3]]
+        while len(self.servo_neutral) < 3:
+            self.servo_neutral.append(0.0)
+        self.active_state_value = float(self.get_parameter("active_state_value").value)
+        self.stopped_state_value = float(self.get_parameter("stopped_state_value").value)
+
+    def _nav_callback(self, msg: Twist) -> None:
+        now = self.get_clock().now()
+        nav_xy = np.array([msg.linear.x, msg.linear.y], dtype=np.float32)
+        nav_xy = clip_norm(nav_xy, self.max_nav_speed)
+
+        dt = self._seconds_since(self.last_nav_rx, now)
+        if dt > 1e-4:
+            self.nav_accel = (nav_xy - self.previous_nav_xy) / dt
+        self.previous_nav_xy = nav_xy.copy()
+        self.nav_command = np.array(
+            [nav_xy[0], nav_xy[1], msg.angular.z],
+            dtype=np.float32,
+        )
+        self.last_nav_rx = now
+
+    def _imu_callback(self, msg: Imu) -> None:
+        if msg.orientation_covariance[0] == -1.0:
+            self.get_logger().warn(
+                "IMU orientation covariance marks orientation unavailable.",
+                throttle_duration_sec=2.0,
+            )
+            return
+        roll, pitch = quat_to_roll_pitch(
+            msg.orientation.x,
+            msg.orientation.y,
+            msg.orientation.z,
+            msg.orientation.w,
+        )
+        self.roll = roll - self.roll_offset
+        self.pitch = pitch - self.pitch_offset
+        self.roll_rate = float(msg.angular_velocity.x)
+        self.pitch_rate = float(msg.angular_velocity.y)
+        self.last_attitude_rx = self.get_clock().now()
+
+    def _tilt_callback(self, msg: Float32MultiArray) -> None:
+        if len(msg.data) < 2:
+            return
+        now = self.get_clock().now()
+        scale = math.pi / 180.0 if self.tilt_topic_degrees else 1.0
+        roll = float(msg.data[0]) * scale - self.roll_offset
+        pitch = float(msg.data[1]) * scale - self.pitch_offset
+        if self.previous_tilt is not None and self.previous_tilt_stamp is not None:
+            dt = self._seconds_since(self.previous_tilt_stamp, now)
+            if dt > 1e-4:
+                self.roll_rate = (roll - self.previous_tilt[0]) / dt
+                self.pitch_rate = (pitch - self.previous_tilt[1]) / dt
+        self.roll = roll
+        self.pitch = pitch
+        self.previous_tilt = (roll, pitch)
+        self.previous_tilt_stamp = now
+        self.last_attitude_rx = now
+
+    def _odom_callback(self, msg: Odometry) -> None:
+        self.odom_velocity = np.array(
+            [msg.twist.twist.linear.x, msg.twist.twist.linear.y],
+            dtype=np.float32,
+        )
+        self.last_odom_rx = self.get_clock().now()
+
+    def _control_loop(self) -> None:
+        now = self.get_clock().now()
+        dt = max(1e-3, self._seconds_since(self.last_control_time, now))
+        self.last_control_time = now
+
+        safe, reason = self._safety_state(now)
+        if not safe:
+            self._publish_stop(reason)
+            return
+
+        nav_xy = self.nav_command[:2]
+        measured_velocity = self._measured_body_velocity(now)
+        obs = np.array(
+            [
+                self.roll,
+                self.pitch,
+                self.roll_rate,
+                self.pitch_rate,
+                measured_velocity[0],
+                measured_velocity[1],
+                nav_xy[0],
+                nav_xy[1],
+                self.nav_accel[0],
+                self.nav_accel[1],
+                self.previous_action[0],
+                self.previous_action[1],
+            ],
+            dtype=np.float32,
+        )
+
+        action = np.asarray(self.policy(obs), dtype=np.float32)
+        action = np.clip(action, -1.0, 1.0)
+        alpha = min(0.98, max(0.0, self.action_filter_alpha))
+        self.filtered_action = alpha * self.filtered_action + (1.0 - alpha) * action
+        self.previous_action = action
+
+        balance_accel = self.filtered_action * self.max_balance_accel
+        self.balance_velocity += balance_accel * dt
+        leak = max(0.0, 1.0 - self.balance_velocity_leak * dt)
+        self.balance_velocity *= leak
+        self.balance_velocity = clip_norm(self.balance_velocity, self.max_correction_speed)
+
+        target_velocity = clip_norm(
+            nav_xy + self.balance_velocity,
+            self.max_nav_speed + self.max_correction_speed,
+        )
+        max_delta = self.max_output_accel * dt
+        delta = clip_norm(target_velocity - self.output_velocity, max_delta)
+        self.output_velocity += delta
+
+        self._publish_command(
+            self.output_velocity,
+            float(self.nav_command[2]),
+            self.active_state_value,
+        )
+
+    def _safety_state(self, now) -> tuple[bool, str]:
+        if self.require_attitude and not self._fresh(
+            self.last_attitude_rx, self.attitude_timeout, now
+        ):
+            return False, "stale_attitude"
+        if self.zero_on_stale_nav and not self._fresh(
+            self.last_nav_rx, self.nav_timeout, now
+        ):
+            return False, "stale_nav"
+        if np.linalg.norm([self.roll, self.pitch]) > self.tilt_cutoff:
+            return False, "tilt_cutoff"
+        return True, "ready"
+
+    def _measured_body_velocity(self, now) -> np.ndarray:
+        if self._fresh(self.last_odom_rx, self.odom_timeout, now):
+            return self.odom_velocity
+        return self.output_velocity
+
+    def _publish_stop(self, reason: str) -> None:
+        self.filtered_action[:] = 0.0
+        self.previous_action[:] = 0.0
+        self.balance_velocity[:] = 0.0
+        self.output_velocity[:] = 0.0
+        self._publish_command(np.zeros(2, dtype=np.float32), 0.0, self.stopped_state_value)
+        self.last_status_summary = reason
+
+    def _publish_command(
+        self,
+        velocity_xy: np.ndarray,
+        yaw_rate: float,
+        state_value: float,
+    ) -> None:
+        twist = _zero_twist()
+        twist.linear.x = float(velocity_xy[0])
+        twist.linear.y = float(velocity_xy[1])
+        twist.angular.z = float(yaw_rate)
+        self.cmd_pub.publish(twist)
+
+        jet_cmd = Float32MultiArray()
+        jet_cmd.data = [
+            float(velocity_xy[0]),
+            float(velocity_xy[1]),
+            float(yaw_rate),
+            self.servo_neutral[0],
+            self.servo_neutral[1],
+            self.servo_neutral[2],
+            float(state_value),
+        ]
+        self.jet_cmd_pub.publish(jet_cmd)
+
+    def _publish_status(self) -> None:
+        now = self.get_clock().now()
+        safe, reason = self._safety_state(now)
+        status = (
+            f"safe={safe}, reason={reason}, backend={self.policy_backend}, "
+            f"roll={self.roll:.3f}, pitch={self.pitch:.3f}, "
+            f"balance_v=({self.balance_velocity[0]:.3f},{self.balance_velocity[1]:.3f}), "
+            f"out_v=({self.output_velocity[0]:.3f},{self.output_velocity[1]:.3f})"
+        )
+        self.status_pub.publish(String(data=status))
+        summary = f"{safe}:{reason}:{self.policy_backend}"
+        if summary != self.last_status_summary:
+            self.get_logger().info(status)
+            self.last_status_summary = summary
+
+    def _fresh(self, stamp: Optional[object], timeout: Duration, now) -> bool:
+        if stamp is None:
+            return False
+        return now - stamp <= timeout
+
+    @staticmethod
+    def _seconds_since(previous, now) -> float:
+        if previous is None:
+            return 0.0
+        return float((now - previous).nanoseconds) / 1e9
+
+
+def main(args=None) -> None:
+    rclpy.init(args=args)
+    node = BalanceControllerNode()
+    try:
+        rclpy.spin(node)
+    finally:
+        node.destroy_node()
+        rclpy.shutdown()
+
+
+if __name__ == "__main__":
+    main()
