@@ -1,8 +1,0 @@
-mediapipe
-mediapipe-model-maker
-opencv-python
-numpy
-pandas
-scikit-learn
-joblib
-torch
