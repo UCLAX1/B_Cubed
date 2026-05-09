@@ -84,6 +84,20 @@ python -m balance_rl.scripts.view_balance_sim
 
 The viewer controls are printed in the terminal and handled by a custom GLFW key callback. The visible model is an abstract balance model: the transparent sphere is the shell, the dark lower block is the bottom-heavy internal chassis, and the two slide-joint actuators represent the net x/y force that the real kiwi drive can apply to the shell.
 
+The default key presses apply gentle visible position/angle kicks in addition to force-like inputs. `1` means idle/no drive force, `H` means hold zero shell velocity, and `F` toggles the camera between fixed-world and follow-shell modes. The camera follows the robot by default; pass `--no-follow-camera` for a fixed world view.
+
+The viewer starts with a small pitch displacement so the internal mass visibly swings. Use `--initial-pitch 0` to start upright, or a larger value such as `--initial-pitch 0.45` for a more obvious pendulum demo.
+
+If the perturbations still look too subtle, run:
+
+```bash
+python -m balance_rl.scripts.view_balance_sim \
+  --shell-kick-distance 0.12 \
+  --tilt-kick-angle 0.18 \
+  --shell-kick-speed 0.8 \
+  --tilt-kick-rate 1.8
+```
+
 ## Jetson/ROS 2 Setup
 
 Install the ROS package in the existing workspace:
