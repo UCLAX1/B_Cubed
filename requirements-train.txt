@@ -2,7 +2,9 @@ mujoco>=3.2
 gymnasium>=0.29
 stable-baselines3>=2.3
 torch>=2.2
+tensorboard>=2.15
+tqdm>=4.66
+rich>=13.7
 onnx>=1.16
 onnxruntime>=1.17
 numpy>=1.24
-
