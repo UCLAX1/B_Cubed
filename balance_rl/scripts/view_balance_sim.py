@@ -21,6 +21,35 @@ from balance_rl.utils.math_utils import clip_norm
 KEY_SPACE = glfw.KEY_SPACE
 
 
+class NumpyMLPPolicy:
+    """Run an exported SB3 actor stored in a NumPy archive."""
+
+    def __init__(self, model_path: Path):
+        data = np.load(str(model_path))
+        self.obs_mean = data["obs_mean"].astype(np.float32)
+        self.obs_var = data["obs_var"].astype(np.float32)
+        self.clip_obs = float(data["clip_obs"][0])
+        self.epsilon = float(data["epsilon"][0])
+        layer_count = int(data["layer_count"][0])
+        self.weights = [data[f"w_{index}"].astype(np.float32) for index in range(layer_count)]
+        self.biases = [data[f"b_{index}"].astype(np.float32) for index in range(layer_count)]
+        self.activations = [str(value) for value in data["activations"]]
+
+    def __call__(self, obs: np.ndarray) -> np.ndarray:
+        x = obs.astype(np.float32, copy=False)
+        x = (x - self.obs_mean) / np.sqrt(self.obs_var + self.epsilon)
+        x = np.clip(x, -self.clip_obs, self.clip_obs)
+        for index, (weight, bias) in enumerate(zip(self.weights, self.biases)):
+            x = weight @ x + bias
+            if index < len(self.activations):
+                activation = self.activations[index]
+                if activation == "tanh":
+                    x = np.tanh(x)
+                elif activation == "relu":
+                    x = np.maximum(x, 0.0)
+        return np.clip(x.astype(np.float32), -1.0, 1.0)
+
+
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser()
     parser.add_argument(
@@ -32,9 +61,33 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument(
         "--controller",
-        choices=("none", "pd"),
-        default="pd",
-        help="Use no balance controller or a simple PD controller.",
+        choices=("none", "pd", "policy"),
+        default="policy",
+        help="Use no controller, a simple PD controller, or the trained policy.",
+    )
+    parser.add_argument(
+        "--policy-path",
+        type=Path,
+        default=Path(__file__).resolve().parents[2] / "policies" / "bb8_balance.npz",
+        help="Path to the exported trained policy (.npz).",
+    )
+    parser.add_argument(
+        "--policy-max-balance-accel",
+        type=float,
+        default=6.0,
+        help="Max learned balance acceleration from the trained policy in m/s^2.",
+    )
+    parser.add_argument(
+        "--policy-max-command-accel",
+        type=float,
+        default=1.8,
+        help="Max command acceleration used for policy observation state in m/s^2.",
+    )
+    parser.add_argument(
+        "--policy-tracker-kp",
+        type=float,
+        default=16.0,
+        help="Velocity tracker gain used with the learned policy.",
     )
     parser.add_argument(
         "--command",
@@ -111,6 +164,14 @@ class ViewerController:
         self.tilt_rate_kick = np.zeros(2, dtype=np.float32)
         self.follow_camera = bool(args.follow_camera)
 
+        self.command_velocity = np.zeros(2, dtype=np.float32)
+        self.command_accel_state = np.zeros(2, dtype=np.float32)
+        self.previous_policy_action = np.zeros(2, dtype=np.float32)
+        self.policy: NumpyMLPPolicy | None = None
+        if self.args.controller == "policy":
+            self.policy = NumpyMLPPolicy(self.args.policy_path)
+            self.command_target = self._policy_command_target(0.0)
+
     def key_callback(self, key: int) -> None:
         self._handle_toggle_key(key)
 
@@ -146,6 +207,9 @@ class ViewerController:
         elif key == glfw.KEY_P:
             self.args.controller = "pd"
             print("controller=pd")
+        elif key == glfw.KEY_3:
+            self.args.controller = "policy"
+            print(f"controller=policy, policy_path={self.args.policy_path}")
         elif key == glfw.KEY_F:
             self.follow_camera = not self.follow_camera
             print(f"follow_camera={self.follow_camera}")
@@ -237,6 +301,8 @@ class ViewerController:
         return torque
 
     def command_accel(self, sim_time: float, base_velocity: np.ndarray) -> np.ndarray:
+        if self.args.controller == "policy":
+            return self._policy_tracker_accel(base_velocity)
         if self.args.command == "idle":
             return np.zeros(2, dtype=np.float32)
         if self.args.command == "hold":
@@ -250,6 +316,75 @@ class ViewerController:
         else:
             target_velocity = np.zeros(2, dtype=np.float32)
         return 10.0 * (target_velocity - base_velocity)
+
+    def _policy_command_target(self, sim_time: float) -> np.ndarray:
+        if self.args.command in ("idle", "hold"):
+            return np.zeros(2, dtype=np.float32)
+        if self.args.command == "sweep":
+            phase = 2.0 * math.pi * sim_time / self.args.sweep_period
+            return self.args.sweep_speed * np.array(
+                [math.sin(phase), 0.55 * math.sin(0.5 * phase + 0.7)],
+                dtype=np.float32,
+            )
+        return np.zeros(2, dtype=np.float32)
+
+    def _update_policy_command_state(self, sim_time: float, sim_dt: float) -> None:
+        self.command_target = self._policy_command_target(sim_time)
+        previous = self.command_velocity.copy()
+        delta = self.command_target - self.command_velocity
+        max_delta = self.args.policy_max_command_accel * sim_dt
+        self.command_velocity += clip_norm(delta, max_delta)
+        self.command_accel_state = (self.command_velocity - previous) / sim_dt
+
+    def _policy_tracker_accel(self, base_velocity: np.ndarray) -> np.ndarray:
+        return self.args.policy_tracker_kp * (self.command_velocity - base_velocity)
+
+    def _policy_observation(
+        self,
+        roll: float,
+        pitch: float,
+        roll_rate: float,
+        pitch_rate: float,
+        base_velocity: np.ndarray,
+    ) -> np.ndarray:
+        return np.array(
+            [
+                roll,
+                pitch,
+                roll_rate,
+                pitch_rate,
+                base_velocity[0],
+                base_velocity[1],
+                self.command_velocity[0],
+                self.command_velocity[1],
+                self.command_accel_state[0],
+                self.command_accel_state[1],
+                self.previous_policy_action[0],
+                self.previous_policy_action[1],
+            ],
+            dtype=np.float32,
+        )
+
+    def _policy_balance_accel(
+        self,
+        roll: float,
+        pitch: float,
+        roll_rate: float,
+        pitch_rate: float,
+        base_velocity: np.ndarray,
+    ) -> np.ndarray:
+        if self.policy is None:
+            self.policy = NumpyMLPPolicy(self.args.policy_path)
+        obs = self._policy_observation(
+            roll,
+            pitch,
+            roll_rate,
+            pitch_rate,
+            base_velocity,
+        )
+        action = self.policy(obs)
+        self.previous_policy_action = action
+        return action * self.args.policy_max_balance_accel
 
     def balance_accel(self, roll: float, pitch: float, roll_rate: float, pitch_rate: float) -> np.ndarray:
         if self.args.controller == "none":
@@ -294,7 +429,7 @@ def main() -> None:
     step_count = 0
 
     print(
-        "Controls: 1 idle, 2 sweep, 0 no controller, P PD controller, "
+        "Controls: 1 idle, 2 sweep, 3 policy, 0 no controller, P PD controller, "
         "WASD shell kicks, IJKL pendulum kicks, H hold, F follow camera, R reset, Space pause."
     )
     print(
@@ -385,6 +520,12 @@ def main() -> None:
                         mujoco.mj_forward(model, data)
 
                     if step_count % control_steps == 0:
+                        if controller.args.controller == "policy":
+                            controller._update_policy_command_state(
+                                data.time,
+                                control_steps * sim_dt,
+                            )
+
                         base_velocity = np.array(
                             [data.qvel[qvel["shell_x"]], data.qvel[qvel["shell_y"]]],
                             dtype=np.float32,
@@ -394,9 +535,25 @@ def main() -> None:
                         roll_rate = float(data.qvel[qvel["roll"]])
                         pitch_rate = float(data.qvel[qvel["pitch"]])
 
+                        if controller.args.controller == "policy":
+                            balance_accel = controller._policy_balance_accel(
+                                roll,
+                                pitch,
+                                roll_rate,
+                                pitch_rate,
+                                base_velocity,
+                            )
+                        else:
+                            balance_accel = controller.balance_accel(
+                                roll,
+                                pitch,
+                                roll_rate,
+                                pitch_rate,
+                            )
+
                         accel = (
                             controller.command_accel(data.time, base_velocity)
-                            + controller.balance_accel(roll, pitch, roll_rate, pitch_rate)
+                            + balance_accel
                             + controller.manual_accel()
                         )
                         accel = clip_norm(accel, args.max_accel)
