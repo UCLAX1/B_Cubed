@@ -11,6 +11,11 @@ from gpiozero import Servo, DigitalOutputDevice
 from head_balance_math import find_motor_angles
 
 # ============================================================================
+# DEBUG FLAG - Set to True to see print output, False to suppress
+# ============================================================================
+DEBUG = True  # Change to False to silence all output
+
+# ============================================================================
 # IMU INITIALIZATION (egg.py style)
 # ============================================================================
 SETTINGS_FILE = "RTIMULib"
@@ -21,7 +26,8 @@ settings = RTIMU.Settings(SETTINGS_FILE)
 imu = RTIMU.RTIMU(settings)
 
 if not imu.IMUInit():
-    print("IMU init failed")
+    if DEBUG:
+        print("IMU init failed")
     sys.exit(1)
 
 imu.setSlerpPower(0.02)
@@ -31,7 +37,8 @@ imu.setCompassEnable(True)
 
 imu_poll_interval = imu.IMUGetPollInterval() / 1000.0
 
-print(f"IMU initialized. Poll interval: {imu_poll_interval*1000:.1f}ms\n")
+if DEBUG:
+    print(f"IMU initialized. Poll interval: {imu_poll_interval*1000:.1f}ms\n")
 
 # ============================================================================
 # SERVO INITIALIZATION (match servo_sample.py)
@@ -78,17 +85,20 @@ def angle_to_servo_value(angle_deg, servo_type='standard'):
 
 def main():
     try:
-        print("Turning MOSFET ON...")
+        if DEBUG:
+            print("Turning MOSFET ON...")
         MOSFET.on()
         time.sleep(0.5)
         
-        print("Centering all servos...")
+        if DEBUG:
+            print("Centering all servos...")
         arm_servo.value = 0
         lazy_susan_servo.value = 0
         head_servo.value = 0
         time.sleep(1)
         
-        print("Reading IMU data and moving servos. Press Ctrl+C to stop.\n")
+        if DEBUG:
+            print("Reading IMU data and moving servos. Press Ctrl+C to stop.\n")
         
         last_print = time.time()
         last_servo_update = time.time()
@@ -113,9 +123,10 @@ def main():
                     # Calculate target motor angles
                     arm_target, lazy_susan_target, head_target = find_motor_angles(pitch, roll, 0.0)
                     
-                    print(f"IMU: Roll={roll:7.2f}°  Pitch={pitch:7.2f}°  Yaw={yaw:7.2f}°")
-                    print(f"Targets: Arm={arm_target:7.2f}°  Lazy Susan={lazy_susan_target:7.2f}°  Head={head_target:7.2f}°")
-                    print("-" * 80)
+                    if DEBUG:
+                        print(f"IMU: Roll={roll:7.2f}°  Pitch={pitch:7.2f}°  Yaw={yaw:7.2f}°")
+                        print(f"Targets: Arm={arm_target:7.2f}°  Lazy Susan={lazy_susan_target:7.2f}°  Head={head_target:7.2f}°")
+                        print("-" * 80)
                     
                     last_print = current_time
                 
@@ -145,18 +156,22 @@ def main():
             time.sleep(imu_poll_interval)
     
     except KeyboardInterrupt:
-        print("\n\nStopping...")
+        if DEBUG:
+            print("\n\nStopping...")
     
     finally:
-        print("Centering servos...")
+        if DEBUG:
+            print("Centering servos...")
         arm_servo.value = 0
         lazy_susan_servo.value = 0
         head_servo.value = 0
         time.sleep(0.5)
         
-        print("Turning MOSFET OFF...")
+        if DEBUG:
+            print("Turning MOSFET OFF...")
         MOSFET.off()
-        print("Done!")
+        if DEBUG:
+            print("Done!")
 
 
 if __name__ == "__main__":
