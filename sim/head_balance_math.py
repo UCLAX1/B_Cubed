@@ -33,5 +33,7 @@ def find_motor_angles(pitch, roll, desired_angle):
 
     head = desired_angle - Lazy_Susan
 
+    print("Motor Angles:" , Arm, Lazy_Susan, head)
+
     return(Arm, Lazy_Susan, head)
 
