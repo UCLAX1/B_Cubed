@@ -89,6 +89,9 @@ def parse_args() -> argparse.Namespace:
         default=16.0,
         help="Velocity tracker gain used with the learned policy.",
     )
+    parser.add_argument("--policy-idle-command-deadband", type=float, default=0.03)
+    parser.add_argument("--policy-idle-tilt-deadband", type=float, default=0.035)
+    parser.add_argument("--policy-idle-rate-deadband", type=float, default=0.2)
     parser.add_argument(
         "--command",
         choices=("idle", "hold", "sweep"),
@@ -373,6 +376,9 @@ class ViewerController:
         pitch_rate: float,
         base_velocity: np.ndarray,
     ) -> np.ndarray:
+        if self._stable_policy_idle(roll, pitch, roll_rate, pitch_rate):
+            self.previous_policy_action[:] = 0.0
+            return np.zeros(2, dtype=np.float32)
         if self.policy is None:
             self.policy = NumpyMLPPolicy(self.args.policy_path)
         obs = self._policy_observation(
@@ -385,6 +391,21 @@ class ViewerController:
         action = self.policy(obs)
         self.previous_policy_action = action
         return action * self.args.policy_max_balance_accel
+
+    def _stable_policy_idle(
+        self,
+        roll: float,
+        pitch: float,
+        roll_rate: float,
+        pitch_rate: float,
+    ) -> bool:
+        return (
+            float(np.linalg.norm(self.command_velocity))
+            < self.args.policy_idle_command_deadband
+            and float(np.linalg.norm([roll, pitch])) < self.args.policy_idle_tilt_deadband
+            and float(np.linalg.norm([roll_rate, pitch_rate]))
+            < self.args.policy_idle_rate_deadband
+        )
 
     def balance_accel(self, roll: float, pitch: float, roll_rate: float, pitch_rate: float) -> np.ndarray:
         if self.args.controller == "none":

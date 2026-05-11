@@ -39,6 +39,9 @@ bb8_balance_controller:
     max_output_accel_m_s2: 1.8
     balance_velocity_leak_per_s: 1.2
     action_filter_alpha: 0.65
+    idle_action_nav_deadband_m_s: 0.03
+    idle_action_tilt_deadband_rad: 0.035
+    idle_action_rate_deadband_rad_s: 0.2
     tilt_cutoff_rad: 0.65
 
     servo_neutral: [0.0, 0.0, 0.0]

@@ -44,7 +44,7 @@
                   mass="3.2" rgba="0.08 0.1 0.12 1"
                   contype="0" conaffinity="0"/>
           </body>
-          <body name="head_disturbance_mass" pos="0.02 0 0.26">
+          <body name="head_disturbance_mass" pos="0 0 0.26">
             <geom name="head_disturbance" type="sphere" size="0.055"
                   mass="0.25" rgba="0.9 0.9 0.86 0.55" contype="0" conaffinity="0"/>
           </body>

@@ -23,26 +23,26 @@ The RL package intentionally trains a residual stabilizer instead of replacing N
 python3 -m venv .venv-balance
 source .venv-balance/bin/activate
 pip install -r requirements-train.txt
-python -m balance_rl.scripts.train_ppo \
-  --timesteps 2000000 \
-  --num-envs 8 \
-  --n-steps 1024 \
-  --batch-size 512 \
-  --n-epochs 5 \
-  --device auto \
-  --torch-threads 4 \
-  --tensorboard \
-  --progress-bar
+python -m balance_rl.scripts.train_ppo
 python -m balance_rl.scripts.export_policy \
   --model runs/bb8_balance_ppo/final_model.zip \
   --vec-normalize runs/bb8_balance_ppo/vec_normalize.pkl \
-  --npz-out policies/bb8_balance.npz
+  --npz-out policies/bb8_balance.npz \
+  --zero-idle-action
 ```
 
-If your desktop has plenty of CPU cores, increase `--num-envs` first. Keep
-`--batch-size <= --num-envs * --n-steps`.
+The training script defaults to the tuned offboard setup: 1.2M steps, 8
+subprocess environments, 1024 rollout steps, 512 batch size, 5 PPO epochs,
+TensorBoard logging, and CPU policy updates. If your desktop has plenty of CPU
+cores, increase `--num-envs` first. Keep `--batch-size <= --num-envs *
+--n-steps`.
 
 The included environment is deliberately abstract: it models the internal chassis as a damped 2-axis pendulum attached to a moving spherical body. It is fast and domain-randomized, which is a better starting point for residual balance than the older direct-freejoint velocity sims.
+
+The training distribution includes explicit zero-command episodes and command
+segments, plus randomized small head-mass offsets so the policy does not learn
+one fixed drift direction. The export step can also subtract the actor's learned
+all-zero observation bias with `--zero-idle-action`.
 
 On the Jetson, keep smoke tests small because desktop apps and IDEs consume most of the RAM:
 

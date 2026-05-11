@@ -22,11 +22,17 @@ class NormalizedActor(torch.nn.Module):
         obs_var: np.ndarray,
         clip_obs: float,
         epsilon: float,
+        action_bias: np.ndarray | None = None,
     ):
         super().__init__()
         self.policy = policy
         self.register_buffer("obs_mean", torch.as_tensor(obs_mean, dtype=torch.float32))
         self.register_buffer("obs_var", torch.as_tensor(obs_var, dtype=torch.float32))
+        if action_bias is None:
+            action_bias = np.zeros(2, dtype=np.float32)
+        self.register_buffer(
+            "action_bias", torch.as_tensor(action_bias, dtype=torch.float32)
+        )
         self.clip_obs = float(clip_obs)
         self.epsilon = float(epsilon)
 
@@ -43,7 +49,7 @@ class NormalizedActor(torch.nn.Module):
         if isinstance(features, tuple):
             features = features[0]
         latent_pi = self.policy.mlp_extractor.forward_actor(features)
-        action = self.policy.action_net(latent_pi)
+        action = self.policy.action_net(latent_pi) - self.action_bias
         return torch.clamp(action, -1.0, 1.0)
 
 
@@ -53,6 +59,11 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--vec-normalize", type=Path, default=None)
     parser.add_argument("--onnx-out", type=Path, default=None)
     parser.add_argument("--npz-out", type=Path, default=None)
+    parser.add_argument(
+        "--zero-idle-action",
+        action="store_true",
+        help="Subtract the actor output for an all-zero observation during export.",
+    )
     return parser.parse_args()
 
 
@@ -63,6 +74,7 @@ def export_npz(
     clip_obs: float,
     epsilon: float,
     output_path: Path,
+    action_bias: np.ndarray | None = None,
 ) -> None:
     """Export a Stable-Baselines3 MLP actor as plain NumPy arrays."""
     modules = list(policy.mlp_extractor.policy_net) + [policy.action_net]
@@ -83,6 +95,11 @@ def export_npz(
             continue
         else:
             raise TypeError(f"Unsupported policy module for NPZ export: {module}")
+
+    if action_bias is not None:
+        weights[f"b_{layer_index - 1}"] = (
+            weights[f"b_{layer_index - 1}"] - action_bias.astype(np.float32)
+        )
 
     output_path.parent.mkdir(parents=True, exist_ok=True)
     np.savez(
@@ -105,8 +122,9 @@ def export_onnx(
     clip_obs: float,
     epsilon: float,
     output_path: Path,
+    action_bias: np.ndarray | None = None,
 ) -> None:
-    actor = NormalizedActor(policy, obs_mean, obs_var, clip_obs, epsilon)
+    actor = NormalizedActor(policy, obs_mean, obs_var, clip_obs, epsilon, action_bias)
     actor.eval()
     output_path.parent.mkdir(parents=True, exist_ok=True)
 
@@ -121,6 +139,22 @@ def export_onnx(
         opset_version=17,
     )
     print(f"Exported {output_path}")
+
+
+def idle_action_bias(
+    policy: torch.nn.Module,
+    obs_mean: np.ndarray,
+    obs_var: np.ndarray,
+    clip_obs: float,
+    epsilon: float,
+) -> np.ndarray:
+    """Return the deterministic actor output for a perfect idle observation."""
+    actor = NormalizedActor(policy, obs_mean, obs_var, clip_obs, epsilon)
+    actor.eval()
+    idle_obs = torch.zeros((1, obs_mean.shape[0]), dtype=torch.float32)
+    with torch.no_grad():
+        action = actor(idle_obs)[0]
+    return action.detach().cpu().numpy().astype(np.float32)
 
 
 def main() -> None:
@@ -148,10 +182,31 @@ def main() -> None:
         clip_obs = float(vec_norm.clip_obs)
         epsilon = float(vec_norm.epsilon)
 
+    action_bias = None
+    if args.zero_idle_action:
+        action_bias = idle_action_bias(model.policy, obs_mean, obs_var, clip_obs, epsilon)
+        print(f"Subtracting idle action bias {action_bias.tolist()}")
+
     if args.npz_out is not None:
-        export_npz(model.policy, obs_mean, obs_var, clip_obs, epsilon, args.npz_out)
+        export_npz(
+            model.policy,
+            obs_mean,
+            obs_var,
+            clip_obs,
+            epsilon,
+            args.npz_out,
+            action_bias,
+        )
     if args.onnx_out is not None:
-        export_onnx(model.policy, obs_mean, obs_var, clip_obs, epsilon, args.onnx_out)
+        export_onnx(
+            model.policy,
+            obs_mean,
+            obs_var,
+            clip_obs,
+            epsilon,
+            args.onnx_out,
+            action_bias,
+        )
 
 
 if __name__ == "__main__":

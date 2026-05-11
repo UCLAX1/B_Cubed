@@ -120,6 +120,9 @@ class BalanceControllerNode(Node):
         self.declare_parameter("max_output_accel_m_s2", 1.8)
         self.declare_parameter("balance_velocity_leak_per_s", 1.2)
         self.declare_parameter("action_filter_alpha", 0.65)
+        self.declare_parameter("idle_action_nav_deadband_m_s", 0.03)
+        self.declare_parameter("idle_action_tilt_deadband_rad", 0.035)
+        self.declare_parameter("idle_action_rate_deadband_rad_s", 0.2)
         self.declare_parameter("tilt_cutoff_rad", 0.65)
         self.declare_parameter("servo_neutral", [0.0, 0.0, 0.0])
         self.declare_parameter("active_state_value", 1.0)
@@ -176,6 +179,15 @@ class BalanceControllerNode(Node):
             self.get_parameter("balance_velocity_leak_per_s").value
         )
         self.action_filter_alpha = float(self.get_parameter("action_filter_alpha").value)
+        self.idle_action_nav_deadband = float(
+            self.get_parameter("idle_action_nav_deadband_m_s").value
+        )
+        self.idle_action_tilt_deadband = float(
+            self.get_parameter("idle_action_tilt_deadband_rad").value
+        )
+        self.idle_action_rate_deadband = float(
+            self.get_parameter("idle_action_rate_deadband_rad_s").value
+        )
         self.tilt_cutoff = float(self.get_parameter("tilt_cutoff_rad").value)
         servo_neutral = list(self.get_parameter("servo_neutral").value)
         self.servo_neutral = [float(value) for value in servo_neutral[:3]]
@@ -276,7 +288,11 @@ class BalanceControllerNode(Node):
         action = np.asarray(self.policy(obs), dtype=np.float32)
         action = np.clip(action, -1.0, 1.0)
         alpha = min(0.98, max(0.0, self.action_filter_alpha))
-        self.filtered_action = alpha * self.filtered_action + (1.0 - alpha) * action
+        if self._is_stable_idle(nav_xy):
+            action = np.zeros(2, dtype=np.float32)
+            self.filtered_action[:] = 0.0
+        else:
+            self.filtered_action = alpha * self.filtered_action + (1.0 - alpha) * action
         self.previous_action = action
 
         balance_accel = self.filtered_action * self.max_balance_accel
@@ -316,6 +332,15 @@ class BalanceControllerNode(Node):
         if self._fresh(self.last_odom_rx, self.odom_timeout, now):
             return self.odom_velocity
         return self.output_velocity
+
+    def _is_stable_idle(self, nav_xy: np.ndarray) -> bool:
+        tilt_norm = float(np.linalg.norm([self.roll, self.pitch]))
+        rate_norm = float(np.linalg.norm([self.roll_rate, self.pitch_rate]))
+        return (
+            float(np.linalg.norm(nav_xy)) < self.idle_action_nav_deadband
+            and tilt_norm < self.idle_action_tilt_deadband
+            and rate_norm < self.idle_action_rate_deadband
+        )
 
     def _publish_stop(self, reason: str) -> None:
         self.filtered_action[:] = 0.0

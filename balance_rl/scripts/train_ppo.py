@@ -11,19 +11,32 @@ from balance_rl.envs import BB8BalanceEnv, BalanceEnvConfig
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser()
-    parser.add_argument("--timesteps", type=int, default=1_000_000)
-    parser.add_argument("--num-envs", type=int, default=4)
+    parser.add_argument("--timesteps", type=int, default=1_200_000)
+    parser.add_argument("--num-envs", type=int, default=8)
     parser.add_argument("--seed", type=int, default=7)
     parser.add_argument("--run-dir", type=Path, default=Path("runs/bb8_balance_ppo"))
-    parser.add_argument("--subproc", action="store_true")
+    parser.add_argument(
+        "--subproc",
+        action=argparse.BooleanOptionalAction,
+        default=True,
+        help="Run vectorized environments in subprocesses. Use --no-subproc for tiny smoke tests.",
+    )
     parser.add_argument("--n-steps", type=int, default=1024)
-    parser.add_argument("--batch-size", type=int, default=256)
-    parser.add_argument("--n-epochs", type=int, default=10)
+    parser.add_argument("--batch-size", type=int, default=512)
+    parser.add_argument("--n-epochs", type=int, default=5)
     parser.add_argument("--learning-rate", type=float, default=3e-4)
-    parser.add_argument("--device", default="auto")
+    parser.add_argument("--device", default="cpu")
     parser.add_argument("--torch-threads", type=int, default=1)
-    parser.add_argument("--progress-bar", action="store_true")
-    parser.add_argument("--tensorboard", action="store_true")
+    parser.add_argument(
+        "--progress-bar",
+        action=argparse.BooleanOptionalAction,
+        default=True,
+    )
+    parser.add_argument(
+        "--tensorboard",
+        action=argparse.BooleanOptionalAction,
+        default=True,
+    )
     return parser.parse_args()
 
 

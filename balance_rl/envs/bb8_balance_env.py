@@ -46,12 +46,18 @@ class BalanceEnvConfig:
     max_command_accel_m_s2: float = 1.8
     command_interval_min_s: float = 0.45
     command_interval_max_s: float = 1.4
+    idle_episode_probability: float = 0.2
+    idle_command_probability: float = 0.25
+    idle_command_threshold_m_s: float = 0.03
     velocity_tracker_kp: float = 16.0
     max_balance_accel_m_s2: float = 6.0
     max_total_accel_m_s2: float = 22.0
+    idle_velocity_error_weight: float = 1.0
+    idle_action_weight: float = 0.08
     obs_noise_std: float = 0.01
     disturbance_probability: float = 0.025
     max_disturbance_torque_nm: float = 0.18
+    head_offset_max_m: float = 0.025
     action_lag_alpha_min: float = 0.55
     action_lag_alpha_max: float = 0.95
     actuator_scale_min: float = 0.75
@@ -105,11 +111,15 @@ class BB8BalanceEnv(gym.Env):
         self._chassis_body_id = mujoco.mj_name2id(
             self.model, mujoco.mjtObj.mjOBJ_BODY, "chassis_mass"
         )
+        self._head_body_id = mujoco.mj_name2id(
+            self.model, mujoco.mjtObj.mjOBJ_BODY, "head_disturbance_mass"
+        )
         self._pendulum_dofs = np.array(
             [self._joint_qvel["roll"], self._joint_qvel["pitch"]], dtype=np.int32
         )
 
         self._base_body_mass = self.model.body_mass.copy()
+        self._base_body_pos = self.model.body_pos.copy()
         self._base_dof_damping = self.model.dof_damping.copy()
         self._nominal_system_mass = float(np.sum(self.model.body_mass))
 
@@ -146,6 +156,7 @@ class BB8BalanceEnv(gym.Env):
         self.next_command_step = 0
         self.action_lag_alpha = 0.8
         self.actuator_scale = 1.0
+        self.idle_episode = False
 
     def reset(
         self,
@@ -174,6 +185,9 @@ class BB8BalanceEnv(gym.Env):
 
         self.step_count = 0
         self.command_velocity[:] = 0.0
+        self.idle_episode = (
+            self.np_random.random() < self.config.idle_episode_probability
+        )
         self.command_target = self._sample_command()
         self.command_accel[:] = 0.0
         self.previous_action[:] = 0.0
@@ -240,6 +254,7 @@ class BB8BalanceEnv(gym.Env):
 
     def _randomize_model(self) -> None:
         self.model.body_mass[:] = self._base_body_mass
+        self.model.body_pos[:] = self._base_body_pos
         self.model.dof_damping[:] = self._base_dof_damping
 
         mass_scale = self.np_random.uniform(
@@ -251,6 +266,15 @@ class BB8BalanceEnv(gym.Env):
             self.config.damping_scale_min, self.config.damping_scale_max
         )
         self.model.dof_damping[self._pendulum_dofs] *= damping_scale
+        if self.config.head_offset_max_m > 0.0:
+            offset_radius = self.np_random.uniform(0.0, self.config.head_offset_max_m)
+            offset_angle = self.np_random.uniform(-np.pi, np.pi)
+            self.model.body_pos[self._head_body_id, 0] = offset_radius * np.cos(
+                offset_angle
+            )
+            self.model.body_pos[self._head_body_id, 1] = offset_radius * np.sin(
+                offset_angle
+            )
         mujoco.mj_setConst(self.model, self.data)
         self._nominal_system_mass = float(np.sum(self.model.body_mass))
         self.actuator_scale = float(
@@ -278,6 +302,11 @@ class BB8BalanceEnv(gym.Env):
         self.command_accel = (self.command_velocity - previous) / self.dt
 
     def _sample_command(self) -> np.ndarray:
+        if (
+            self.idle_episode
+            or self.np_random.random() < self.config.idle_command_probability
+        ):
+            return np.zeros(2, dtype=np.float32)
         angle = self.np_random.uniform(-np.pi, np.pi)
         speed = self.np_random.uniform(0.0, self.config.max_command_speed_m_s)
         return np.array([np.cos(angle) * speed, np.sin(angle) * speed], dtype=np.float32)
@@ -316,15 +345,29 @@ class BB8BalanceEnv(gym.Env):
     def _reward(self, action: np.ndarray, old_action: np.ndarray) -> float:
         tilt = self._tilt()
         rate = self._tilt_rate()
-        velocity_error = self.command_velocity - self._base_velocity()
+        base_velocity = self._base_velocity()
+        velocity_error = self.command_velocity - base_velocity
         action_delta = action - old_action
-        return (
+        reward = (
             1.0
             - 8.0 * float(np.dot(tilt, tilt))
             - 0.18 * float(np.dot(rate, rate))
             - 0.35 * float(np.dot(velocity_error, velocity_error))
             - 0.035 * float(np.dot(action, action))
             - 0.025 * float(np.dot(action_delta, action_delta))
+        )
+        if self._is_idle_command():
+            reward -= self.config.idle_velocity_error_weight * float(
+                np.dot(base_velocity, base_velocity)
+            )
+            reward -= self.config.idle_action_weight * float(np.dot(action, action))
+        return reward
+
+    def _is_idle_command(self) -> bool:
+        threshold = self.config.idle_command_threshold_m_s
+        return (
+            float(np.linalg.norm(self.command_target)) < threshold
+            and float(np.linalg.norm(self.command_velocity)) < threshold
         )
 
     def _tilt(self) -> np.ndarray:
