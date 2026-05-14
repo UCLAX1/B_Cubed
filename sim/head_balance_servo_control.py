@@ -6,7 +6,9 @@ balance. The arm servo uses open-loop PD command damping to reduce jitter near
 the target angle.
 """
 
+import argparse
 import math
+import signal
 import sys
 import time
 
@@ -18,45 +20,12 @@ from servo_control_filters import PIDCommandDamper
 
 DEBUG = True
 DESIRED_ANGLE = 0.0
+NO_IMU_DATA_TIMEOUT_S = 5.0
+IMU_INIT_TIMEOUT_S = 5.0
 
-# ============================================================================
-# IMU INIT
-# ============================================================================
 SETTINGS_FILE = "RTIMULib"
 sys.path.append("/usr/lib/python3/dist-packages")
 import RTIMU  # type: ignore[import-not-found]  # noqa: E402
-
-settings = RTIMU.Settings(SETTINGS_FILE)
-imu = RTIMU.RTIMU(settings)
-if not imu.IMUInit():
-    if DEBUG:
-        print("IMU init failed")
-    sys.exit(1)
-
-imu.setSlerpPower(0.02)
-imu.setGyroEnable(True)
-imu.setAccelEnable(True)
-imu.setCompassEnable(True)
-imu_poll_interval = imu.IMUGetPollInterval() / 1000.0
-
-# ============================================================================
-# SERVO INIT - use pigpio factory to reduce software-PWM jitter
-# ============================================================================
-# Requires: sudo systemctl enable --now pigpiod
-try:
-    pin_factory = PiGPIOFactory()
-except Exception as exc:
-    if DEBUG:
-        print(
-            f"pigpio not available ({exc}); falling back to default. "
-            "Run `sudo systemctl start pigpiod` to reduce jitter."
-        )
-    pin_factory = None
-
-arm_servo = Servo(13, initial_value=None, pin_factory=pin_factory)
-lazy_susan_servo = Servo(12, initial_value=None, pin_factory=pin_factory)
-head_servo = Servo(18, initial_value=None, pin_factory=pin_factory)
-MOSFET = DigitalOutputDevice(16)
 
 ARM_MIN, ARM_MAX = -120.0, 120.0
 LAZY_SUSAN_MIN, LAZY_SUSAN_MAX = -90.0, 90.0
@@ -125,7 +94,112 @@ class AngleFilter:
         return self.value
 
 
-def main():
+class ImuInitTimeout(TimeoutError):
+    pass
+
+
+def _raise_imu_init_timeout(signum, frame):
+    raise ImuInitTimeout("IMUInit timed out")
+
+
+def imu_init_with_timeout(imu_device, timeout_s):
+    if timeout_s is None or timeout_s <= 0:
+        return imu_device.IMUInit()
+
+    if not hasattr(signal, "SIGALRM") or not hasattr(signal, "setitimer"):
+        if DEBUG:
+            print("IMU init timeout is not supported on this platform.")
+        return imu_device.IMUInit()
+
+    old_handler = signal.getsignal(signal.SIGALRM)
+    signal.signal(signal.SIGALRM, _raise_imu_init_timeout)
+    signal.setitimer(signal.ITIMER_REAL, timeout_s)
+    try:
+        return imu_device.IMUInit()
+    finally:
+        signal.setitimer(signal.ITIMER_REAL, 0)
+        signal.signal(signal.SIGALRM, old_handler)
+
+
+def initialize_imu(init_timeout_s=IMU_INIT_TIMEOUT_S):
+    settings = RTIMU.Settings(SETTINGS_FILE)
+    imu_device = RTIMU.RTIMU(settings)
+
+    try:
+        initialized = imu_init_with_timeout(imu_device, init_timeout_s)
+    except ImuInitTimeout:
+        if DEBUG:
+            print(f"IMU init timed out after {init_timeout_s:.1f}s")
+        return None, None
+
+    if not initialized:
+        if DEBUG:
+            print("IMU init failed")
+        return None, None
+
+    imu_device.setSlerpPower(0.02)
+    imu_device.setGyroEnable(True)
+    imu_device.setAccelEnable(True)
+    imu_device.setCompassEnable(True)
+    return imu_device, imu_device.IMUGetPollInterval() / 1000.0
+
+
+def initialize_servos():
+    # Requires: sudo systemctl enable --now pigpiod
+    try:
+        pin_factory = PiGPIOFactory()
+    except Exception as exc:
+        if DEBUG:
+            print(
+                f"pigpio not available ({exc}); falling back to default. "
+                "Run `sudo systemctl start pigpiod` to reduce jitter."
+            )
+        pin_factory = None
+
+    return (
+        Servo(13, initial_value=None, pin_factory=pin_factory),
+        Servo(12, initial_value=None, pin_factory=pin_factory),
+        Servo(18, initial_value=None, pin_factory=pin_factory),
+        DigitalOutputDevice(16),
+    )
+
+
+def parse_args():
+    parser = argparse.ArgumentParser(
+        description="Balance servos from IMU pitch/roll data."
+    )
+    parser.add_argument(
+        "--duration",
+        type=float,
+        default=None,
+        help="Run for this many seconds, then center servos and exit.",
+    )
+    parser.add_argument(
+        "--updates",
+        type=int,
+        default=None,
+        help="Stop after this many servo updates. Useful for IDE/debug runs.",
+    )
+    parser.add_argument(
+        "--imu-init-timeout",
+        type=float,
+        default=IMU_INIT_TIMEOUT_S,
+        help="Seconds to wait for IMUInit before exiting. Use 0 to disable.",
+    )
+    return parser.parse_args()
+
+
+def main(
+    max_runtime_s=None,
+    max_servo_updates=None,
+    imu_init_timeout_s=IMU_INIT_TIMEOUT_S,
+):
+    imu, imu_poll_interval = initialize_imu(imu_init_timeout_s)
+    if imu is None:
+        return 1
+
+    arm_servo, lazy_susan_servo, head_servo, mosfet = initialize_servos()
+
     roll_filter = AngleFilter(IMU_ALPHA)
     pitch_filter = AngleFilter(IMU_ALPHA)
     yaw_filter = AngleFilter(IMU_ALPHA)
@@ -153,7 +227,7 @@ def main():
     try:
         if DEBUG:
             print("MOSFET on...")
-        MOSFET.on()
+        mosfet.on()
         time.sleep(0.5)
 
         arm_servo.value = 0
@@ -164,12 +238,30 @@ def main():
 
         last_print = time.time()
         last_servo_update = time.time()
+        last_imu_data = time.time()
+        start_time = time.time()
+        servo_update_count = 0
         print_interval = 0.5
         servo_update_interval = 0.00625
 
-        while True:
-            if imu.IMURead():
+        running = True
+        while running:
+            now = time.time()
+            if max_runtime_s is not None and now - start_time >= max_runtime_s:
+                if DEBUG:
+                    print(f"Reached --duration={max_runtime_s:.2f}s; stopping.")
+                break
+
+            try:
+                got_data = imu.IMURead()
+            except Exception as exc:
+                if DEBUG:
+                    print(f"IMU read error: {exc}")
+                got_data = False
+
+            if got_data:
                 now = time.time()
+                last_imu_data = now
                 data = imu.getIMUData()
                 fusion_pose = data["fusionPose"]
                 roll = roll_filter.update(math.degrees(fusion_pose[0]))
@@ -222,6 +314,17 @@ def main():
                     arm_cmd_last = arm_cmd
                     lazy_cmd_last = lazy_cmd
                     head_cmd_last = head_cmd
+                    servo_update_count += 1
+
+                    if (
+                        max_servo_updates is not None
+                        and servo_update_count >= max_servo_updates
+                    ):
+                        if DEBUG:
+                            print(
+                                f"Reached --updates={max_servo_updates}; stopping."
+                            )
+                        running = False
 
                 if DEBUG and now - last_print >= print_interval:
                     print(
@@ -233,6 +336,12 @@ def main():
                     )
                     print("-" * 70)
                     last_print = now
+            elif now - last_imu_data >= NO_IMU_DATA_TIMEOUT_S:
+                if DEBUG:
+                    print(
+                        f"No IMU data for {NO_IMU_DATA_TIMEOUT_S:.1f}s; stopping."
+                    )
+                break
 
             time.sleep(imu_poll_interval)
 
@@ -244,10 +353,18 @@ def main():
         lazy_susan_servo.value = 0
         head_servo.value = 0
         time.sleep(0.5)
-        MOSFET.off()
+        mosfet.off()
         if DEBUG:
             print("Done.")
+    return 0
 
 
 if __name__ == "__main__":
-    main()
+    args = parse_args()
+    sys.exit(
+        main(
+            max_runtime_s=args.duration,
+            max_servo_updates=args.updates,
+            imu_init_timeout_s=args.imu_init_timeout,
+        )
+    )
