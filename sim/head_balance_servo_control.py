@@ -53,17 +53,19 @@ if DEBUG:
 ARM_SERVO_PIN = 13
 MOSFET_PIN    = 16
 
-# Head (encoder 0)
+# Head (encoder 0 — 5.5kg head)
 HEAD_SERVO_PIN = 18
-HEAD_ENC_A     = 13
-HEAD_ENC_B     = 15
-HEAD_ENC_ABS   = 11
+# physical pins: A=13, B=15, ABS=11 -> BCM: A=27, B=22, ABS=17
+HEAD_ENC_A     = 27
+HEAD_ENC_B     = 22
+HEAD_ENC_ABS   = 17
 
-# Lazy Susan (encoder 1)
+# Lazy Susan (encoder 1 — 70kg lazy susan)
 LAZY_SERVO_PIN = 12
-LAZY_ENC_A     = 27
-LAZY_ENC_B     = 22
-LAZY_ENC_ABS   = 17
+# physical pins: A=37, B=31, ABS=29 -> BCM: A=26, B=6, ABS=5
+LAZY_ENC_A     = 26
+LAZY_ENC_B     = 6
+LAZY_ENC_ABS   = 5
 
 # ============================================================================
 # HARDWARE INIT

@@ -10,10 +10,11 @@ from ServoEx import ServoEx
 
 
 # 5.5kg head servo defaults (from existing project scripts)
+# physical pins: A=13, B=15, ABS=11 -> BCM: A=27, B=22, ABS=17
 SERVO_PIN = 18
-ENCODER_PIN_A = 13
-ENCODER_PIN_B = 15
-ABS_ENCODER_PIN = 11
+ENCODER_PIN_A = 27  # physical pin 13
+ENCODER_PIN_B = 22  # physical pin 15
+ABS_ENCODER_PIN = 17  # physical pin 11
 
 SPIN_COMMAND = 0.4   # continuous-servo command in range [-1, 1]
 SAMPLE_HZ = 10.0
