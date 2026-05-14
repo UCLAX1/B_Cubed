@@ -190,7 +190,7 @@ def main():
                     arm_cmd_last, lazy_cmd_last, head_cmd_last = arm_cmd, lazy_cmd, head_cmd
 
                 if DEBUG and now - last_print >= print_interval:
-                    print(f"IMU(filt): R={roll_f:7.2f}  P={pitch_f:7.2f}  Y={yaw_raw:7.2f}")
+                    print(f"IMU(filt): R={roll_f:7.2f}  P={pitch_f:7.2f}  Y={yaw:7.2f}")
                     print(f"Cmd: arm={arm_cmd_last:+.3f}  lazy={lazy_cmd_last:+.3f}  head={head_cmd_last:+.3f}")
                     print("-" * 70)
                     last_print = now
