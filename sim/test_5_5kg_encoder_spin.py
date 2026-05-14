@@ -48,7 +48,13 @@ def parse_args() -> argparse.Namespace:
         "--cycles",
         type=int,
         default=0,
-        help="Forward+reverse cycles to run. 0 means run forever.",
+        help="Cycles to run when in alternating mode. 0 means run forever.",
+    )
+    parser.add_argument(
+        "--mode",
+        choices=["continuous", "alternating"],
+        default="continuous",
+        help="Spin mode: continuous (default) or alternating forward/reverse.",
     )
     return parser.parse_args()
 
@@ -93,11 +99,13 @@ def run_test(args: argparse.Namespace) -> None:
     sample_period = 1.0 / args.sample_hz
     start = time.time()
 
-    # Alternate forward and reverse to make encoder movement obvious.
-    phase_commands = [
-        ("forward", +speed),
-        ("reverse", -speed),
-    ]
+    # In continuous mode, keep one command so the 5.5kg servo spins on its own.
+    phase_commands = [("spin", +speed)]
+    if args.mode == "alternating":
+        phase_commands = [
+            ("forward", +speed),
+            ("reverse", -speed),
+        ]
 
     try:
         print("Turning MOSFET ON...")
@@ -110,7 +118,10 @@ def run_test(args: argparse.Namespace) -> None:
                 break
 
             cycle += 1
-            print(f"\nCycle {cycle}{' (infinite mode)' if args.cycles == 0 else ''}")
+            print(
+                f"\nCycle {cycle}{' (infinite mode)' if args.cycles == 0 else ''} "
+                f"| mode={args.mode}"
+            )
 
             for phase_name, command in phase_commands:
                 print(f"  Phase: {phase_name} (cmd={command:+.2f})")
@@ -125,9 +136,10 @@ def run_test(args: argparse.Namespace) -> None:
                     print_reading(elapsed, command, rel_rot, abs_rot)
                     time.sleep(sample_period)
 
-            print("  Phase: stop (cmd=0.00)")
-            servo.value = 0.0
-            time.sleep(0.25)
+            if args.mode == "alternating":
+                print("  Phase: stop (cmd=0.00)")
+                servo.value = 0.0
+                time.sleep(0.25)
 
     except KeyboardInterrupt:
         print("\nInterrupted by user (Ctrl+C).")
