@@ -29,7 +29,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--speed",
         type=float,
-        default=0.25,
+        default=0.4,
         help="Continuous-servo speed command in range [0.0, 1.0]",
     )
     parser.add_argument(
@@ -56,6 +56,11 @@ def parse_args() -> argparse.Namespace:
         default="continuous",
         help="Spin mode: continuous (default) or alternating forward/reverse.",
     )
+    parser.add_argument(
+        "--auto-ramp",
+        action="store_true",
+        help="Ramp command up until encoder motion is detected, then keep spinning.",
+    )
     return parser.parse_args()
 
 
@@ -74,12 +79,48 @@ def print_reading(elapsed_s: float, command: float, rel_rot: float, abs_rot: flo
     )
 
 
+def detect_motion_and_pick_speed(
+    servo: ServoEx,
+    sample_period: float,
+    segment_seconds: float,
+    requested_speed: float,
+) -> float:
+    print("Running auto-ramp to find a command that actually spins...")
+    candidates = [0.25, 0.40, 0.55, 0.70, 0.85, 1.00]
+    if requested_speed not in candidates:
+        candidates.insert(0, requested_speed)
+
+    motion_threshold_rot = 0.002
+
+    for cmd in candidates:
+        servo.value = cmd
+        start_pos = servo.get_position()
+        start_t = time.time()
+        while time.time() - start_t < segment_seconds:
+            servo.update()
+            time.sleep(sample_period)
+
+        end_pos = servo.get_position()
+        delta_rot = abs(end_pos - start_pos)
+        print(f"  Tried cmd={cmd:+.2f} -> delta={delta_rot:.5f} rot")
+
+        if delta_rot >= motion_threshold_rot:
+            print(f"  Motion detected at cmd={cmd:+.2f}. Using this command.")
+            return cmd
+
+    print("  Warning: no encoder movement detected during auto-ramp; falling back to full command +1.00")
+    return 1.0
+
+
 def run_test(args: argparse.Namespace) -> None:
     speed = clamp(abs(args.speed), 0.0, 1.0)
     if args.sample_hz <= 0:
         raise ValueError("--sample-hz must be > 0")
     if args.segment_seconds <= 0:
         raise ValueError("--segment-seconds must be > 0")
+
+    if args.servo_pin == args.mosfet_pin:
+        raise ValueError("--servo-pin and --mosfet-pin cannot be the same GPIO pin")
 
     print("Initializing 5.5kg servo encoder spin test...")
     print(
@@ -110,7 +151,19 @@ def run_test(args: argparse.Namespace) -> None:
     try:
         print("Turning MOSFET ON...")
         mosfet.on()
+        time.sleep(1.0)
+
+        # Match the bring-up style from other scripts: command stop once before spinning.
+        servo.value = 0.0
         time.sleep(0.5)
+
+        if args.auto_ramp:
+            speed = detect_motion_and_pick_speed(
+                servo=servo,
+                sample_period=sample_period,
+                segment_seconds=max(0.8, args.segment_seconds),
+                requested_speed=speed,
+            )
 
         cycle = 0
         while True:
