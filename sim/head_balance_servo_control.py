@@ -25,6 +25,7 @@ DESIRED_ANGLE = 0.0
 SETTINGS_FILE = "RTIMULib"
 sys.path.append("/usr/lib/python3/dist-packages")
 import RTIMU
+import ServoEx
 
 settings = RTIMU.Settings(SETTINGS_FILE)
 imu = RTIMU.RTIMU(settings)
