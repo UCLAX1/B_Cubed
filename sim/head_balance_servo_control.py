@@ -3,38 +3,19 @@ IMU Reader with Servo Control
 Reads IMU data, calculates target motor angles, and closes the position loop
 on the two continuous-rotation servos using their encoders.
 
-IMPORTANT: This script uses the pigpio pin factory for hardware-timed PWM.
-Without it, software PWM jitter can prevent continuous servos from moving
-(they interpret jittery pulses as "stop"). Make sure pigpiod is running:
-
-    sudo apt install pigpio python3-pigpio
-    sudo systemctl enable pigpiod
-    sudo systemctl start pigpiod
+Servo / Encoder layout (BCM numbering):
+  Arm (servo 0, 150kg, standard positional):  servo=BCM 13                 (pin 33)
+  Lazy Susan (servo 1, 70kg, continuous):     servo=BCM 12                 (pin 32)
+      encoder 1: A=BCM 27 (pin 13), B=BCM 22 (pin 15), ABS=BCM 17 (pin 11)
+  Head (servo 2, 5kg, continuous):            servo=BCM 18                 (pin 12)
+      encoder 0: A=BCM 26 (pin 37), B=BCM 6  (pin 31), ABS=BCM 5  (pin 29)
+  MOSFET: BCM 16 (pin 36)
 """
-
-# ---------------------------------------------------------------------------
-# Set pin factory to pigpio BEFORE any gpiozero imports that create devices.
-# ---------------------------------------------------------------------------
-import os
-os.environ["GPIOZERO_PIN_FACTORY"] = "pigpio"
 
 import sys
 import time
 import math
-
 from gpiozero import Servo, DigitalOutputDevice
-from gpiozero.pins.pigpio import PiGPIOFactory
-from gpiozero import Device
-
-# Force pigpio factory explicitly (belt + suspenders with the env var above)
-try:
-    Device.pin_factory = PiGPIOFactory()
-    print("Using pigpio pin factory (hardware PWM).")
-except Exception as e:
-    print(f"!! Could not initialize pigpio: {e}")
-    print("!! Is pigpiod running? Try: sudo systemctl start pigpiod")
-    sys.exit(1)
-
 from head_balance_math import find_motor_angles
 from ServoEx import ServoEx
 
@@ -89,15 +70,17 @@ LAZY_ENC_ABS   = 17
 # ============================================================================
 # HARDWARE INIT
 # ============================================================================
+# Arm: plain positional servo
 arm_servo = Servo(ARM_SERVO_PIN, initial_value=None)
 MOSFET = DigitalOutputDevice(MOSFET_PIN)
 
-# Power servos before ServoEx init, so is_active checks succeed
+# Power servos before talking to them so ServoEx's is_active waits succeed
 if DEBUG:
     print("Turning MOSFET ON to power servos for init...")
 MOSFET.on()
 time.sleep(0.5)
 
+# ServoEx instances bundle servo + quadrature encoder + absolute encoder
 head_motor = ServoEx(
     servo_pin=HEAD_SERVO_PIN,
     encoder_pin_a=HEAD_ENC_A,
@@ -114,28 +97,45 @@ lazy_motor = ServoEx(
 # ============================================================================
 # LIMITS & TUNING
 # ============================================================================
+# Mechanical limits (degrees, target side)
 ARM_MIN, ARM_MAX = -120, 120
 LAZY_MIN, LAZY_MAX = -90, 90
 HEAD_MIN, HEAD_MAX = -90, 90
 
+# Arm: ±SERVO_RANGE_DEG maps to ±1.0 on gpiozero Servo value.
 ARM_RANGE_DEG = 90.0
 
+# --- Closed-loop tuning ----------------------------------------------------
+# P-gain: servo value per degree of error. 1/30 → 30° error commands full speed.
 LAZY_KP = 1.0 / 30.0
 HEAD_KP = 1.0 / 30.0
 
+# Deadband: no command if |error| under this. Kills jitter at rest.
 LAZY_DEADBAND_DEG = 1.0
 HEAD_DEADBAND_DEG = 1.0
 
+# Min drive to overcome stiction (0 = disabled). Bump to 0.05–0.15 if motor
+# "wants to move but doesn't" with small commands.
 MIN_DRIVE = 0.0
+
+# Cap commanded speed (1.0 = full).
 MAX_DRIVE = 1.0
+
+# Slew rate on the velocity command (units per second). Prevents abrupt
+# speed changes when the IMU jerks.
 VEL_SLEW_RATE = 4.0
 
+# Sign convention: flip if positive command moves the encoder negative.
+# Find empirically by commanding a small positive value and watching the angle.
 LAZY_DIR = +1
 HEAD_DIR = +1
 
+# Calibration offset: encoder-zero angle vs. mechanical-zero angle (degrees).
+# Set so that the resting/centered physical position reads as 0°.
 LAZY_OFFSET_DEG = 0.0
 HEAD_OFFSET_DEG = 0.0
 
+# --- Rates ----------------------------------------------------------------
 CONTROL_RATE_HZ = 50.0
 CONTROL_INTERVAL = 1.0 / CONTROL_RATE_HZ
 PRINT_INTERVAL = 0.5
@@ -148,16 +148,22 @@ def clamp(v, lo, hi):
 
 
 def angle_to_arm_value(angle_deg):
+    """Standard positional servo: angle → [-1, 1]."""
     return clamp(angle_deg / ARM_RANGE_DEG, -1.0, 1.0)
 
 
 def get_motor_angle_deg(motor, offset_deg):
+    """ServoEx position is in rotations; convert to degrees and apply offset."""
     return motor.get_position() * 360.0 - offset_deg
 
 
 def position_controller(target_deg, current_deg, kp, deadband_deg,
                         min_drive, max_drive,
                         prev_cmd, max_delta, direction):
+    """
+    P controller for a continuous-rotation servo with position feedback.
+    Returns a new servo value in [-1, 1], slew-limited from prev_cmd.
+    """
     error = target_deg - current_deg
 
     if abs(error) < deadband_deg:
@@ -168,6 +174,7 @@ def position_controller(target_deg, current_deg, kp, deadband_deg,
         if min_drive > 0 and 0 < abs(raw_cmd) < min_drive:
             raw_cmd = math.copysign(min_drive, raw_cmd)
 
+    # Slew-limit the velocity command itself
     diff = raw_cmd - prev_cmd
     if diff >  max_delta: return prev_cmd + max_delta
     if diff < -max_delta: return prev_cmd - max_delta
@@ -185,7 +192,7 @@ def main():
         if DEBUG:
             print("Centering arm; stopping continuous servos...")
         arm_servo.value = 0
-        head_motor.value = 0
+        head_motor.value = 0   # 0 = stop for continuous
         lazy_motor.value = 0
         time.sleep(1)
 
@@ -196,6 +203,9 @@ def main():
         last_control = time.time()
 
         while True:
+            # ServoEx.update() must run every loop:
+            #   - drives the absolute-encoder PWM decode (edge detection)
+            #   - periodically self-centers the relative encoder
             try:
                 head_motor.update()
                 lazy_motor.update()
@@ -226,6 +236,7 @@ def main():
                 lazy_target = clamp(lazy_target, LAZY_MIN, LAZY_MAX)
                 head_target = clamp(head_target, HEAD_MIN, HEAD_MAX)
 
+                # --- Control step ----------------------------------------
                 dt = current_time - last_control
                 if dt >= CONTROL_INTERVAL:
                     lazy_current = get_motor_angle_deg(lazy_motor, LAZY_OFFSET_DEG)
@@ -251,6 +262,7 @@ def main():
 
                     last_control = current_time
 
+                # --- Logging --------------------------------------------
                 if current_time - last_print >= PRINT_INTERVAL:
                     if DEBUG:
                         lc = get_motor_angle_deg(lazy_motor, LAZY_OFFSET_DEG)
@@ -279,6 +291,7 @@ def main():
             if DEBUG:
                 print(f"Stop error: {e}")
 
+        # Persist encoder positions so we resume in the right place next run
         try:
             head_motor.save_encoder_position()
             lazy_motor.save_encoder_position()
