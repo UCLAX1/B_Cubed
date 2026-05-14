@@ -10,21 +10,40 @@ from gpiozero import RotaryEncoder, Servo
 SERVO_PIN = 18
 SPIN_COMMAND = 0.4
 
-# Candidate BCM pins to test (based on 40-pin header)
-# Common pattern: consecutive or nearby pins
+# Candidate BCM pins to test (all 28 GPIO available on 40-pin header, excluding used ones)
+# Skip: 12 (servo), 13 (servo), 16 (MOSFET), 17 (abs encoder), 18 (servo)
+# Try all other combinations
 CANDIDATES = [
-    (23, 24),  # physical 16, 18
-    (25, 8),   # physical 22, 24
-    (7, 11),   # physical 26, 23
     (2, 3),    # physical 3, 5
+    (2, 4),    # physical 3, 7
+    (2, 5),    # physical 3, 29
+    (2, 6),    # physical 3, 31
+    (2, 7),    # physical 3, 26
+    (2, 8),    # physical 3, 24
+    (2, 9),    # physical 3, 21
+    (2, 10),   # physical 3, 19
+    (2, 11),   # physical 3, 23
+    (2, 14),   # physical 3, 8
+    (2, 15),   # physical 3, 10
+    (3, 4),    # physical 5, 7
+    (3, 5),    # physical 5, 29
+    (4, 5),    # physical 7, 29
+    (4, 6),    # physical 7, 31
+    (5, 6),    # physical 29, 31
+    (5, 10),   # physical 29, 19
+    (5, 11),   # physical 29, 23
+    (6, 10),   # physical 31, 19
+    (8, 9),    # physical 24, 21
     (9, 10),   # physical 21, 19
+    (10, 11),  # physical 19, 23
     (14, 15),  # physical 8, 10
-    (27, 22),  # current (known wrong)
-    (26, 6),   # physical 37, 31 (from 150kg servo)
-    (5, 13),   # physical 29, 33
     (19, 20),  # physical 35, 38
-    (4, 17),   # physical 7, 11 (17 is abs encoder pin)
-    (21, 12),  # physical 40, 32
+    (19, 21),  # physical 35, 40
+    (20, 21),  # physical 38, 40
+    (23, 24),  # physical 16, 18
+    (23, 25),  # physical 16, 22
+    (24, 25),  # physical 18, 22
+    (26, 27),  # physical 37, 13
 ]
 
 def test_encoder_pair(a_pin, b_pin):
@@ -54,12 +73,20 @@ def test_encoder_pair(a_pin, b_pin):
         return False, 0
 
 def main():
-    print("Initializing servo and spinning...")
+    print("Initializing servo...")
     servo = Servo(SERVO_PIN)
+    print(f"Servo initialized on GPIO {SERVO_PIN}")
+    
+    print("\nSpinning servo at 0.4 for 2 seconds to warm up encoder...")
     servo.value = SPIN_COMMAND
+    time.sleep(2.0)
+    
+    print("\nStopping servo and closing GPIO to release pins...")
+    servo.value = 0.0
+    servo.close()
     time.sleep(0.5)
     
-    print("\nTesting encoder pin pairs (servo spinning at 0.4):")
+    print("\nTesting encoder pin pairs:")
     print("=" * 60)
     
     found = []
@@ -69,8 +96,6 @@ def main():
             found.append((a_pin, b_pin, delta))
     
     print("\n" + "=" * 60)
-    servo.value = 0.0
-    servo.close()
     
     if found:
         print(f"\n✓ Found {len(found)} candidate pin pair(s):")
