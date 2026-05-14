@@ -12,9 +12,6 @@ import signal
 import sys
 import time
 
-from gpiozero import DigitalOutputDevice, Servo  # type: ignore[import-not-found]
-from gpiozero.pins.pigpio import PiGPIOFactory  # type: ignore[import-not-found]
-
 from head_balance_math import find_motor_angles
 from servo_control_filters import PIDCommandDamper
 
@@ -25,7 +22,6 @@ IMU_INIT_TIMEOUT_S = 5.0
 
 SETTINGS_FILE = "RTIMULib"
 sys.path.append("/usr/lib/python3/dist-packages")
-import RTIMU  # type: ignore[import-not-found]  # noqa: E402
 
 ARM_MIN, ARM_MAX = -120.0, 120.0
 LAZY_SUSAN_MIN, LAZY_SUSAN_MAX = -90.0, 90.0
@@ -55,6 +51,11 @@ ARM_PD_DEADBAND_DEG = 1.0
 ARM_TARGET_NOISE_DEG = 0.35
 ARM_TARGET_NOISE_RATE_DEG_S = 12.0
 ARM_PD_INTEGRAL_LIMIT_DEG_S = 45.0
+
+
+def log(message):
+    if DEBUG:
+        print(message, flush=True)
 
 
 def clamp(value, minimum, maximum):
@@ -107,8 +108,7 @@ def imu_init_with_timeout(imu_device, timeout_s):
         return imu_device.IMUInit()
 
     if not hasattr(signal, "SIGALRM") or not hasattr(signal, "setitimer"):
-        if DEBUG:
-            print("IMU init timeout is not supported on this platform.")
+        log("IMU init timeout is not supported on this platform.")
         return imu_device.IMUInit()
 
     old_handler = signal.getsignal(signal.SIGALRM)
@@ -122,46 +122,76 @@ def imu_init_with_timeout(imu_device, timeout_s):
 
 
 def initialize_imu(init_timeout_s=IMU_INIT_TIMEOUT_S):
+    log("Loading RTIMU...")
+    import RTIMU  # type: ignore[import-not-found]  # noqa: E402
+
+    log(f"Creating RTIMU settings from {SETTINGS_FILE}...")
     settings = RTIMU.Settings(SETTINGS_FILE)
     imu_device = RTIMU.RTIMU(settings)
 
+    log("Initializing IMU...")
     try:
         initialized = imu_init_with_timeout(imu_device, init_timeout_s)
     except ImuInitTimeout:
-        if DEBUG:
-            print(f"IMU init timed out after {init_timeout_s:.1f}s")
+        log(f"IMU init timed out after {init_timeout_s:.1f}s")
         return None, None
 
     if not initialized:
-        if DEBUG:
-            print("IMU init failed")
+        log("IMU init failed")
         return None, None
 
+    log("IMU initialized.")
     imu_device.setSlerpPower(0.02)
     imu_device.setGyroEnable(True)
     imu_device.setAccelEnable(True)
     imu_device.setCompassEnable(True)
-    return imu_device, imu_device.IMUGetPollInterval() / 1000.0
+    poll_interval = imu_device.IMUGetPollInterval() / 1000.0
+    log(f"IMU poll interval: {poll_interval * 1000:.1f}ms")
+    return imu_device, poll_interval
 
 
 def initialize_servos():
+    from gpiozero import DigitalOutputDevice, Servo  # type: ignore[import-not-found]
+    from gpiozero.pins.pigpio import PiGPIOFactory  # type: ignore[import-not-found]
+
     # Requires: sudo systemctl enable --now pigpiod
+    log("Initializing servos...")
     try:
         pin_factory = PiGPIOFactory()
+        log("Using pigpio hardware-timed PWM.")
     except Exception as exc:
-        if DEBUG:
-            print(
-                f"pigpio not available ({exc}); falling back to default. "
-                "Run `sudo systemctl start pigpiod` to reduce jitter."
-            )
+        log(
+            f"pigpio not available ({exc}); falling back to default. "
+            "Run `sudo systemctl start pigpiod` to reduce jitter."
+        )
         pin_factory = None
 
-    return (
+    servos = (
         Servo(13, initial_value=None, pin_factory=pin_factory),
         Servo(12, initial_value=None, pin_factory=pin_factory),
         Servo(18, initial_value=None, pin_factory=pin_factory),
         DigitalOutputDevice(16),
     )
+    log("Servos initialized.")
+    return servos
+
+
+def run_servo_self_test(arm_servo, lazy_susan_servo, head_servo, mosfet):
+    log("Running servo self-test...")
+    mosfet.on()
+    time.sleep(0.5)
+    for value in (0.0, 0.15, -0.15, 0.0):
+        log(f"Self-test servo command: {value:+.2f}")
+        arm_servo.value = value
+        lazy_susan_servo.value = value
+        head_servo.value = value
+        time.sleep(0.7)
+    arm_servo.value = 0
+    lazy_susan_servo.value = 0
+    head_servo.value = 0
+    time.sleep(0.3)
+    mosfet.off()
+    log("Servo self-test complete.")
 
 
 def parse_args():
@@ -186,6 +216,11 @@ def parse_args():
         default=IMU_INIT_TIMEOUT_S,
         help="Seconds to wait for IMUInit before exiting. Use 0 to disable.",
     )
+    parser.add_argument(
+        "--servo-self-test",
+        action="store_true",
+        help="Move each servo briefly, then exit without starting IMU balance.",
+    )
     return parser.parse_args()
 
 
@@ -193,12 +228,19 @@ def main(
     max_runtime_s=None,
     max_servo_updates=None,
     imu_init_timeout_s=IMU_INIT_TIMEOUT_S,
+    servo_self_test=False,
 ):
-    imu, imu_poll_interval = initialize_imu(imu_init_timeout_s)
-    if imu is None:
-        return 1
+    log("Starting head balance servo control.")
 
     arm_servo, lazy_susan_servo, head_servo, mosfet = initialize_servos()
+    if servo_self_test:
+        run_servo_self_test(arm_servo, lazy_susan_servo, head_servo, mosfet)
+        return 0
+
+    imu, imu_poll_interval = initialize_imu(imu_init_timeout_s)
+    if imu is None:
+        log("Exiting because IMU did not initialize.")
+        return 1
 
     roll_filter = AngleFilter(IMU_ALPHA)
     pitch_filter = AngleFilter(IMU_ALPHA)
@@ -225,16 +267,17 @@ def main(
     )
 
     try:
-        if DEBUG:
-            print("MOSFET on...")
+        log("MOSFET on...")
         mosfet.on()
         time.sleep(0.5)
 
+        log("Centering servos...")
         arm_servo.value = 0
         lazy_susan_servo.value = 0
         head_servo.value = 0
         arm_damper.reset(0.0)
         time.sleep(1)
+        log("Entering balance loop. Press Ctrl+C to stop.")
 
         last_print = time.time()
         last_servo_update = time.time()
@@ -248,15 +291,13 @@ def main(
         while running:
             now = time.time()
             if max_runtime_s is not None and now - start_time >= max_runtime_s:
-                if DEBUG:
-                    print(f"Reached --duration={max_runtime_s:.2f}s; stopping.")
+                log(f"Reached --duration={max_runtime_s:.2f}s; stopping.")
                 break
 
             try:
                 got_data = imu.IMURead()
             except Exception as exc:
-                if DEBUG:
-                    print(f"IMU read error: {exc}")
+                log(f"IMU read error: {exc}")
                 got_data = False
 
             if got_data:
@@ -320,10 +361,7 @@ def main(
                         max_servo_updates is not None
                         and servo_update_count >= max_servo_updates
                     ):
-                        if DEBUG:
-                            print(
-                                f"Reached --updates={max_servo_updates}; stopping."
-                            )
+                        log(f"Reached --updates={max_servo_updates}; stopping.")
                         running = False
 
                 if DEBUG and now - last_print >= print_interval:
@@ -337,25 +375,21 @@ def main(
                     print("-" * 70)
                     last_print = now
             elif now - last_imu_data >= NO_IMU_DATA_TIMEOUT_S:
-                if DEBUG:
-                    print(
-                        f"No IMU data for {NO_IMU_DATA_TIMEOUT_S:.1f}s; stopping."
-                    )
+                log(f"No IMU data for {NO_IMU_DATA_TIMEOUT_S:.1f}s; stopping.")
                 break
 
             time.sleep(imu_poll_interval)
 
     except KeyboardInterrupt:
-        if DEBUG:
-            print("\nStopping...")
+        log("\nStopping...")
     finally:
+        log("Centering servos and shutting down.")
         arm_servo.value = 0
         lazy_susan_servo.value = 0
         head_servo.value = 0
         time.sleep(0.5)
         mosfet.off()
-        if DEBUG:
-            print("Done.")
+        log("Done.")
     return 0
 
 
@@ -366,5 +400,6 @@ if __name__ == "__main__":
             max_runtime_s=args.duration,
             max_servo_updates=args.updates,
             imu_init_timeout_s=args.imu_init_timeout,
+            servo_self_test=args.servo_self_test,
         )
     )
