@@ -11,14 +11,15 @@ wiring table:
   - servo 1 (70kg, lazy susan) -> physical 32 / BCM 12
   - servo 2 (5kg,  head)       -> physical 12 / BCM 18
   - MOSFET                     -> physical 36 / BCM 16
-  - encoder 0 (head):    A=pin 37/BCM 26, B=pin 31/BCM 6, ABS=pin 29/BCM 5
-  - encoder 1 (lazy):    A=pin 13/BCM 27, B=pin 15/BCM 22, ABS=pin 11/BCM 17
+  - encoder 0 (head):    A=pin 37/BCM 26, B=pin 31/BCM 6, ABS=pin 29/BCM 5   [DISABLED]
+  - encoder 1 (lazy):    A=pin 13/BCM 27, B=pin 15/BCM 22, ABS=pin 11/BCM 17 [DISABLED]
 """
 
 import sys
 import time
 import math
 from gpiozero import Servo, DigitalOutputDevice
+# from ServoEx import ServoEx  # DISABLED: encoder support removed
 from head_balance_math import find_motor_angles
 
 # ============================================================================
@@ -34,7 +35,6 @@ DESIRED_ANGLE = 0.0
 SETTINGS_FILE = "RTIMULib"
 sys.path.append("/usr/lib/python3/dist-packages")
 import RTIMU
-from ServoEx import ServoEx
 
 settings = RTIMU.Settings(SETTINGS_FILE)
 imu = RTIMU.RTIMU(settings)
@@ -67,15 +67,18 @@ HEAD_SERVO_PIN = 18   # servo 2 (5kg)   - physical pin 12
 # Power switch for servo rail
 MOSFET_PIN     = 16   # physical pin 36
 
-# Head encoder (encoder 0)
-HEAD_ENC_A     = 26   # physical pin 37
-HEAD_ENC_B     = 6    # physical pin 31
-HEAD_ENC_ABS   = 5    # physical pin 29
-
-# Lazy Susan encoder (encoder 1)
-LAZY_ENC_A     = 27   # physical pin 13
-LAZY_ENC_B     = 22   # physical pin 15
-LAZY_ENC_ABS   = 17   # physical pin 11
+# ----------------------------------------------------------------------------
+# Encoder pin assignments DISABLED
+# ----------------------------------------------------------------------------
+# # Head encoder (encoder 0)
+# HEAD_ENC_A     = 26   # physical pin 37
+# HEAD_ENC_B     = 6    # physical pin 31
+# HEAD_ENC_ABS   = 5    # physical pin 29
+#
+# # Lazy Susan encoder (encoder 1)
+# LAZY_ENC_A     = 27   # physical pin 13
+# LAZY_ENC_B     = 22   # physical pin 15
+# LAZY_ENC_ABS   = 17   # physical pin 11
 
 # ============================================================================
 # HARDWARE INIT
@@ -91,22 +94,21 @@ if DEBUG:
 MOSFET.on()
 time.sleep(0.5)
 
-# ServoEx instances bundle servo + quadrature encoder + absolute encoder.
-# These reuse the same servo pins as the bare Servo objects above; that is
-# intentional if ServoEx is read-only on the servo, but if it tries to drive
-# the pin you'll want to choose one or the other.
-head_motor = ServoEx(
-    servo_pin=HEAD_SERVO_PIN,
-    encoder_pin_a=HEAD_ENC_A,
-    encoder_pin_b=HEAD_ENC_B,
-    absolute_encoder_pin=HEAD_ENC_ABS,
-)
-lazy_motor = ServoEx(
-    servo_pin=LAZY_SERVO_PIN,
-    encoder_pin_a=LAZY_ENC_A,
-    encoder_pin_b=LAZY_ENC_B,
-    absolute_encoder_pin=LAZY_ENC_ABS,
-)
+# ----------------------------------------------------------------------------
+# ServoEx (servo + quadrature encoder + absolute encoder) DISABLED
+# ----------------------------------------------------------------------------
+# head_motor = ServoEx(
+#     servo_pin=HEAD_SERVO_PIN,
+#     encoder_pin_a=HEAD_ENC_A,
+#     encoder_pin_b=HEAD_ENC_B,
+#     absolute_encoder_pin=HEAD_ENC_ABS,
+# )
+# lazy_motor = ServoEx(
+#     servo_pin=LAZY_SERVO_PIN,
+#     encoder_pin_a=LAZY_ENC_A,
+#     encoder_pin_b=LAZY_ENC_B,
+#     absolute_encoder_pin=LAZY_ENC_ABS,
+# )
 
 # Angle limits (degrees) to prevent mechanical damage
 ARM_MIN, ARM_MAX = -120, 120
