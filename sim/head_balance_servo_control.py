@@ -130,21 +130,6 @@ yaw_filter   = AngleFilter(IMU_ALPHA)
 # MAIN
 # ============================================================================
 def main():
-<<<<<<< Updated upstream
-    # Filter state
-    roll_f = pitch_f = 0.0
-    have_filter = False
-
-    # Last commanded servo values (for slew limiting + deadband comparison)
-    arm_cmd_last  = 0.0
-    lazy_cmd_last = 0.0
-    head_cmd_last = 0.0
-
-    # Last target angles (for deadband on the *angle*, not the servo value)
-    arm_tgt_last  = 0.0
-    lazy_tgt_last = 0.0
-    head_tgt_last = 0.0
-=======
     # Track last commanded servo values for slew limiting
     arm_cmd = 0.0
     lazy_susan_cmd = 0.0
@@ -158,7 +143,6 @@ def main():
         target_noise_deg=ARM_TARGET_NOISE_DEG,
         target_noise_rate_deg_s=ARM_TARGET_NOISE_RATE_DEG_S,
     )
->>>>>>> Stashed changes
 
     try:
         if DEBUG: print("MOSFET on...")
@@ -179,7 +163,7 @@ def main():
 
         while True:
             if imu.IMURead():
-                now = time.time()
+                current_time = time.time()
                 data = imu.getIMUData()
                 fp = data["fusionPose"]
                 roll  = roll_filter.update(math.degrees(fp[0]))
@@ -195,20 +179,16 @@ def main():
                     pitch_f += IMU_ALPHA * (pitch - pitch_f)
 
                 # --- Servo update ---
-                if now - last_servo_update >= servo_update_interval:
-                    dt = now - last_servo_update
-                    last_servo_update = now
+                if current_time - last_servo_update >= servo_update_interval:
+                    dt = current_time - last_servo_update
+                    last_servo_update = current_time
 
-<<<<<<< Updated upstream
-                    arm_tgt, lazy_tgt, head_tgt = find_motor_angles(pitch_f, roll_f, 0.0)
-=======
                 # Clamp to safe mechanical limits
                 arm_target = clamp(arm_target, ARM_MIN, ARM_MAX)
                 lazy_susan_target = max(
                     min(lazy_susan_target, LAZY_SUSAN_MAX), LAZY_SUSAN_MIN
                 )
                 head_target = clamp(head_target, HEAD_MIN, HEAD_MAX)
->>>>>>> Stashed changes
 
                     # Deadband on target angle: hold previous target if change is tiny.
                     if abs(arm_tgt  - arm_tgt_last)  < ARM_DEADBAND_DEG:  arm_tgt  = arm_tgt_last
@@ -216,11 +196,6 @@ def main():
                     if abs(head_tgt - head_tgt_last) < CONT_DEADBAND_DEG: head_tgt = head_tgt_last
                     arm_tgt_last, lazy_tgt_last, head_tgt_last = arm_tgt, lazy_tgt, head_tgt
 
-<<<<<<< Updated upstream
-                    # Clamp
-                    arm_tgt  = clamp(arm_tgt,  ARM_MIN, ARM_MAX)
-                    lazy_tgt = clamp(lazy_tgt, LAZY_SUSAN_MIN, LAZY_SUSAN_MAX)
-=======
                 # Update servos at controlled rate with slew limiting
                 dt = current_time - last_servo_update
                 if dt >= servo_update_interval:
@@ -233,7 +208,6 @@ def main():
                         lazy_susan_target, SERVO_RANGE_DEG
                     )
                     head_raw = angle_to_servo_value(head_target, SERVO_RANGE_DEG)
->>>>>>> Stashed changes
 
                     # Convert to servo command
                     arm_cmd  = angle_to_servo_value(arm_tgt,  'standard')
@@ -257,7 +231,7 @@ def main():
                     print(f"IMU(filt): R={roll_f:7.2f}  P={pitch_f:7.2f}  Y={yaw:7.2f}")
                     print(f"Cmd: arm={arm_cmd_last:+.3f}  lazy={lazy_cmd_last:+.3f}  head={head_cmd_last:+.3f}")
                     print("-" * 70)
-                    last_print = now
+                    last_print = current_time
 
             time.sleep(imu_poll_interval)
 
