@@ -106,7 +106,7 @@ def main():
         last_servo_update = time.time()
         print_interval = 0.5
         # Faster updates make slew limiting work properly. 50 Hz is plenty.
-        servo_update_interval = 0.02
+        servo_update_interval = 0.01
 
         while True:
             if imu.IMURead():
