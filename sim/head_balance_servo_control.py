@@ -13,7 +13,7 @@ from head_balance_math import find_motor_angles
 # ============================================================================
 # DEBUG FLAG - Set to True to see print output, False to suppress
 # ============================================================================
-DEBUG = False  # Change to False to silence all output
+DEBUG = True  # Change to False to silence all output
 
 # ============================================================================
 # IMU INITIALIZATION (egg.py style)
