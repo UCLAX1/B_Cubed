@@ -16,7 +16,7 @@ from ServoEx import ServoEx
 
 
 
-servo = ServoEx(servo_pin=16, encoder_pin_a=26, encoder_pin_b=6, absolute_encoder_pin=5)
+servo = ServoEx(servo_pin=16, encoder_pin_a=13, encoder_pin_b=15, absolute_encoder_pin=11)
 
 # device = AbsoluteEncoder(5)
 

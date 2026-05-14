@@ -11,9 +11,9 @@ from ServoEx import ServoEx
 
 # 5.5kg head servo defaults (from existing project scripts)
 SERVO_PIN = 18
-ENCODER_PIN_A = 26
-ENCODER_PIN_B = 6
-ABS_ENCODER_PIN = 5
+ENCODER_PIN_A = 13
+ENCODER_PIN_B = 15
+ABS_ENCODER_PIN = 11
 
 SPIN_COMMAND = 0.4   # continuous-servo command in range [-1, 1]
 SAMPLE_HZ = 10.0

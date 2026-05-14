@@ -19,7 +19,7 @@ from ServoEx import ServoEx
 
 print("Initializing 150kg arm servo...")
 try:
-    arm_servo = ServoEx(servo_pin=13, encoder_pin_a=19, encoder_pin_b=20, absolute_encoder_pin=21)
+    arm_servo = ServoEx(servo_pin=13, encoder_pin_a=37, encoder_pin_b=31, absolute_encoder_pin=29)
 except Exception as e:
     print(f"ERROR initializing arm servo: {e}")
     sys.exit(1)

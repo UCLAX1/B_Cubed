@@ -57,9 +57,9 @@ MOSFET_PIN    = 16
 
 # Head (encoder 0)
 HEAD_SERVO_PIN = 18
-HEAD_ENC_A     = 26
-HEAD_ENC_B     = 6
-HEAD_ENC_ABS   = 5
+HEAD_ENC_A     = 13
+HEAD_ENC_B     = 15
+HEAD_ENC_ABS   = 11
 
 # Lazy Susan (encoder 1)
 LAZY_SERVO_PIN = 12
