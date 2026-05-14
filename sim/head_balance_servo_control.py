@@ -4,6 +4,15 @@ Reads IMU data, calculates target motor angles, and moves servos to balance.
 Uses gpiozero Servo for direct control (matches servo_sample.py).
 
 All three servos are treated as standard (positional) servos.
+
+Pin numbers below are BCM GPIO (the default for gpiozero), matching the
+wiring table:
+  - servo 0 (15kg, arm)        -> physical 33 / BCM 13
+  - servo 1 (70kg, lazy susan) -> physical 32 / BCM 12
+  - servo 2 (5kg,  head)       -> physical 12 / BCM 18
+  - MOSFET                     -> physical 36 / BCM 16
+  - encoder 0 (head):    A=pin 37/BCM 26, B=pin 31/BCM 6, ABS=pin 29/BCM 5
+  - encoder 1 (lazy):    A=pin 13/BCM 27, B=pin 15/BCM 22, ABS=pin 11/BCM 17
 """
 
 import sys
@@ -48,30 +57,32 @@ if DEBUG:
     print(f"IMU initialized. Poll interval: {imu_poll_interval*1000:.1f}ms\n")
 
 # ============================================================================
-# SERVO INITIALIZATION (match servo_sample.py)
+# PIN ASSIGNMENTS (BCM GPIO numbers)
 # ============================================================================
-ARM_SERVO_PIN = 13
-MOSFET_PIN    = 16
+# Servos
+ARM_SERVO_PIN  = 13   # servo 0 (15kg)  - physical pin 33
+LAZY_SERVO_PIN = 12   # servo 1 (70kg)  - physical pin 32
+HEAD_SERVO_PIN = 18   # servo 2 (5kg)   - physical pin 12
 
-# Head (encoder 0 — 5.5kg head)
-HEAD_SERVO_PIN = 18
-# physical pins: A=13, B=15, ABS=11 -> BCM: A=27, B=22, ABS=17
-HEAD_ENC_A     = 27
-HEAD_ENC_B     = 22
-HEAD_ENC_ABS   = 17
+# Power switch for servo rail
+MOSFET_PIN     = 16   # physical pin 36
 
-# Lazy Susan (encoder 1 — 70kg lazy susan)
-LAZY_SERVO_PIN = 12
-# physical pins: A=37, B=31, ABS=29 -> BCM: A=26, B=6, ABS=5
-LAZY_ENC_A     = 26
-LAZY_ENC_B     = 6
-LAZY_ENC_ABS   = 5
+# Head encoder (encoder 0)
+HEAD_ENC_A     = 26   # physical pin 37
+HEAD_ENC_B     = 6    # physical pin 31
+HEAD_ENC_ABS   = 5    # physical pin 29
+
+# Lazy Susan encoder (encoder 1)
+LAZY_ENC_A     = 27   # physical pin 13
+LAZY_ENC_B     = 22   # physical pin 15
+LAZY_ENC_ABS   = 17   # physical pin 11
 
 # ============================================================================
 # HARDWARE INIT
 # ============================================================================
-# Arm: plain positional servo
-arm_servo = Servo(ARM_SERVO_PIN, initial_value=None)
+arm_servo        = Servo(ARM_SERVO_PIN,  initial_value=None)
+lazy_susan_servo = Servo(LAZY_SERVO_PIN, initial_value=None)
+head_servo       = Servo(HEAD_SERVO_PIN, initial_value=None)
 MOSFET = DigitalOutputDevice(MOSFET_PIN)
 
 # Power servos before talking to them so ServoEx's is_active waits succeed
@@ -80,7 +91,10 @@ if DEBUG:
 MOSFET.on()
 time.sleep(0.5)
 
-# ServoEx instances bundle servo + quadrature encoder + absolute encoder
+# ServoEx instances bundle servo + quadrature encoder + absolute encoder.
+# These reuse the same servo pins as the bare Servo objects above; that is
+# intentional if ServoEx is read-only on the servo, but if it tries to drive
+# the pin you'll want to choose one or the other.
 head_motor = ServoEx(
     servo_pin=HEAD_SERVO_PIN,
     encoder_pin_a=HEAD_ENC_A,
@@ -122,8 +136,6 @@ def slew_limit(current, target, max_delta):
         return current - max_delta
     return target
 
-lazy_susan_servo = Servo(12, initial_value=None)
-head_servo = Servo(18, initial_value=None) 
 
 # ============================================================================
 # MAIN LOOP
