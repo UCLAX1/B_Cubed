@@ -1,22 +1,18 @@
 """
-IMU Reader with Servo Control
-Reads IMU data, calculates target motor angles, and moves servos to balance.
-Uses gpiozero Servo for direct control (matches servo_sample.py).
+IMU Reader with Servo Control (smoothed, no PID)
 """
 
 import sys
 import time
 import math
 from gpiozero import Servo, DigitalOutputDevice
+from gpiozero.pins.pigpio import PiGPIOFactory  # hardware-timed PWM
 from head_balance_math import find_motor_angles
 
-# ============================================================================
-# DEBUG FLAG - Set to True to see print output, False to suppress
-# ============================================================================
-DEBUG = True # Change to False to silence all output
+DEBUG = True
 
 # ============================================================================
-# IMU INITIALIZATION (egg.py style)
+# IMU INIT
 # ============================================================================
 SETTINGS_FILE = "RTIMULib"
 sys.path.append("/usr/lib/python3/dist-packages")
@@ -24,155 +20,163 @@ import RTIMU
 
 settings = RTIMU.Settings(SETTINGS_FILE)
 imu = RTIMU.RTIMU(settings)
-
 if not imu.IMUInit():
-    if DEBUG:
-        print("IMU init failed")
+    if DEBUG: print("IMU init failed")
     sys.exit(1)
 
 imu.setSlerpPower(0.02)
 imu.setGyroEnable(True)
 imu.setAccelEnable(True)
 imu.setCompassEnable(True)
-
 imu_poll_interval = imu.IMUGetPollInterval() / 1000.0
 
-if DEBUG:
-    print(f"IMU initialized. Poll interval: {imu_poll_interval*1000:.1f}ms\n")
+# ============================================================================
+# SERVO INIT  -- use pigpio factory to remove software-PWM jitter
+# ============================================================================
+# Requires:  sudo systemctl enable --now pigpiod
+try:
+    pin_factory = PiGPIOFactory()
+except Exception as e:
+    if DEBUG: print(f"pigpio not available ({e}); falling back to default. "
+                    "Run `sudo systemctl start pigpiod` to reduce jitter.")
+    pin_factory = None
+
+arm_servo        = Servo(13, initial_value=None, pin_factory=pin_factory)
+lazy_susan_servo = Servo(12, initial_value=None, pin_factory=pin_factory)
+head_servo       = Servo(18, initial_value=None, pin_factory=pin_factory)
+MOSFET           = DigitalOutputDevice(16)
+
+ARM_MIN, ARM_MAX = -120, 120
+LAZY_SUSAN_MIN, LAZY_SUSAN_MAX = -90, 90
 
 # ============================================================================
-# SERVO INITIALIZATION (match servo_sample.py)
+# SMOOTHING / DEADBAND / SLEW PARAMETERS  (tune these)
 # ============================================================================
-arm_servo = Servo(13, initial_value=None)           # annimos_150kg (Standard, Physical Pin 33)
-lazy_susan_servo = Servo(12, initial_value=None)   # diymall_70kg (Continuous, Physical Pin 32)
-head_servo = Servo(18, initial_value=None)         # garosa_5kg (Continuous, Physical Pin 12)
-MOSFET = DigitalOutputDevice(16)                   # MOSFET control (Physical Pin 36)
+# Exponential moving average on the IMU angles. Lower = smoother but laggier.
+IMU_ALPHA = 0.15
 
-# Angle limits (degrees) to prevent mechanical damage
-ARM_MIN = -120
-ARM_MAX = 120
-LAZY_SUSAN_MIN = -90
-LAZY_SUSAN_MAX = 90
+# Deadband: ignore target changes smaller than this (degrees). Kills micro-buzz.
+ARM_DEADBAND_DEG     = 1.0
+CONT_DEADBAND_DEG    = 2.0   # continuous servos need a bigger deadband
+
+# Slew limit on the commanded servo value (-1..1 units per second).
+# Smaller = smoother, slower response.
+ARM_SLEW_PER_SEC     = 0.8
+CONT_SLEW_PER_SEC    = 0.6
+
+# Continuous-servo speed scaling. Bigger denominator = gentler response.
+CONT_MAX_ANGLE_SPEED = 15.0   # was 5.0 -- 5 was so small everything saturated
+
+def clamp(x, lo, hi): return max(lo, min(hi, x))
 
 def angle_to_servo_value(angle_deg, servo_type='standard'):
-    """
-    Convert target angle (degrees) to servo control value (-1 to 1).
-    
-    For standard servos (arm): -1 = full left, 0 = center, 1 = full right
-    For continuous servos (lazy susan, head): -1 = full reverse, 0 = stop, 1 = full forward
-    
-    Args:
-        angle_deg: Target angle in degrees
-        servo_type: 'standard' or 'continuous'
-    
-    Returns:
-        Servo value between -1 and 1
-    """
     if servo_type == 'standard':
-        # Standard servo: assume ±90° maps to ±1.0
-        return max(min(angle_deg / 90.0, 1.0), -1.0)
-    else:  # continuous
-        # For continuous servos, we use the angle to determine speed/direction
-        # Proportionally map angle to velocity
-        # ULTRA-SLOW: max comfortable speed is 5°/sec (9x slower than normal 45°/sec)
-        max_angle_speed = 5.0
-        return max(min(angle_deg / max_angle_speed, 1.0), -1.0)
-
+        return clamp(angle_deg / 90.0, -1.0, 1.0)
+    return clamp(angle_deg / CONT_MAX_ANGLE_SPEED, -1.0, 1.0)
 
 # ============================================================================
-# MAIN LOOP
+# MAIN
 # ============================================================================
-
 def main():
+    # Filter state
+    roll_f = pitch_f = 0.0
+    have_filter = False
+
+    # Last commanded servo values (for slew limiting + deadband comparison)
+    arm_cmd_last  = 0.0
+    lazy_cmd_last = 0.0
+    head_cmd_last = 0.0
+
+    # Last target angles (for deadband on the *angle*, not the servo value)
+    arm_tgt_last  = 0.0
+    lazy_tgt_last = 0.0
+    head_tgt_last = 0.0
+
     try:
-        if DEBUG:
-            print("Turning MOSFET ON...")
+        if DEBUG: print("MOSFET on...")
         MOSFET.on()
         time.sleep(0.5)
-        
-        if DEBUG:
-            print("Centering all servos...")
+
         arm_servo.value = 0
         lazy_susan_servo.value = 0
         head_servo.value = 0
         time.sleep(1)
-        
-        if DEBUG:
-            print("Reading IMU data and moving servos. Press Ctrl+C to stop.\n")
-        
+
         last_print = time.time()
         last_servo_update = time.time()
-        print_interval = 0.5     # Print every 500ms
-        servo_update_interval = 0.5  # Update servos every 500ms (ultra-slow)
-        
+        print_interval = 0.5
+        # Faster updates make slew limiting work properly. 50 Hz is plenty.
+        servo_update_interval = 0.02
+
         while True:
-            # Read IMU at its natural poll interval
             if imu.IMURead():
-                current_time = time.time()
-                
-                # Print IMU and target data periodically
-                if current_time - last_print >= print_interval:
-                    data = imu.getIMUData()
-                    fusionPose = data["fusionPose"]
-                    
-                    # Convert to degrees
-                    roll = math.degrees(fusionPose[0])
-                    pitch = math.degrees(fusionPose[1])
-                    yaw = math.degrees(fusionPose[2])
-                    
-                    # Calculate target motor angles
-                    arm_target, lazy_susan_target, head_target = find_motor_angles(pitch, roll, 0.0)
-                    
-                    if DEBUG:
-                        print(f"IMU: Roll={roll:7.2f}°  Pitch={pitch:7.2f}°  Yaw={yaw:7.2f}°")
-                        print(f"Targets: Arm={arm_target:7.2f}°  Lazy Susan={lazy_susan_target:7.2f}°  Head={head_target:7.2f}°")
-                        print("-" * 80)
-                    
-                    last_print = current_time
-                
-                # Update servo positions at controlled rate
-                if current_time - last_servo_update >= servo_update_interval:
-                    data = imu.getIMUData()
-                    fusionPose = data["fusionPose"]
-                    
-                    roll = math.degrees(fusionPose[0])
-                    pitch = math.degrees(fusionPose[1])
-                    
-                    # Calculate target angles
-                    arm_target, lazy_susan_target, head_target = find_motor_angles(pitch, roll, 0.0)
-                    
-                    # Clamp to safe limits
-                    arm_target = max(min(arm_target, ARM_MAX), ARM_MIN)
-                    lazy_susan_target = max(min(lazy_susan_target, LAZY_SUSAN_MAX), LAZY_SUSAN_MIN)
-                    
-                    # Convert angles to servo values and move
-                    arm_servo.value = angle_to_servo_value(arm_target, 'standard')
-                    lazy_susan_servo.value = angle_to_servo_value(lazy_susan_target, 'continuous')
-                    head_servo.value = angle_to_servo_value(head_target, 'continuous')
-                    
-                    last_servo_update = current_time
-            
-            # Sleep for RTIMU's recommended poll interval
+                now = time.time()
+                data = imu.getIMUData()
+                fp = data["fusionPose"]
+                roll_raw  = math.degrees(fp[0])
+                pitch_raw = math.degrees(fp[1])
+                yaw_raw   = math.degrees(fp[2])
+
+                # --- Low-pass filter the IMU angles ---
+                if not have_filter:
+                    roll_f, pitch_f = roll_raw, pitch_raw
+                    have_filter = True
+                else:
+                    roll_f  += IMU_ALPHA * (roll_raw  - roll_f)
+                    pitch_f += IMU_ALPHA * (pitch_raw - pitch_f)
+
+                # --- Servo update ---
+                if now - last_servo_update >= servo_update_interval:
+                    dt = now - last_servo_update
+                    last_servo_update = now
+
+                    arm_tgt, lazy_tgt, head_tgt = find_motor_angles(pitch_f, roll_f, 0.0)
+
+                    # Deadband on target angle: hold previous target if change is tiny.
+                    if abs(arm_tgt  - arm_tgt_last)  < ARM_DEADBAND_DEG:  arm_tgt  = arm_tgt_last
+                    if abs(lazy_tgt - lazy_tgt_last) < CONT_DEADBAND_DEG: lazy_tgt = lazy_tgt_last
+                    if abs(head_tgt - head_tgt_last) < CONT_DEADBAND_DEG: head_tgt = head_tgt_last
+                    arm_tgt_last, lazy_tgt_last, head_tgt_last = arm_tgt, lazy_tgt, head_tgt
+
+                    # Clamp
+                    arm_tgt  = clamp(arm_tgt,  ARM_MIN, ARM_MAX)
+                    lazy_tgt = clamp(lazy_tgt, LAZY_SUSAN_MIN, LAZY_SUSAN_MAX)
+
+                    # Convert to servo command
+                    arm_cmd  = angle_to_servo_value(arm_tgt,  'standard')
+                    lazy_cmd = angle_to_servo_value(lazy_tgt, 'continuous')
+                    head_cmd = angle_to_servo_value(head_tgt, 'continuous')
+
+                    # Slew-limit each command
+                    arm_max_step  = ARM_SLEW_PER_SEC  * dt
+                    cont_max_step = CONT_SLEW_PER_SEC * dt
+                    arm_cmd  = arm_cmd_last  + clamp(arm_cmd  - arm_cmd_last,  -arm_max_step,  arm_max_step)
+                    lazy_cmd = lazy_cmd_last + clamp(lazy_cmd - lazy_cmd_last, -cont_max_step, cont_max_step)
+                    head_cmd = head_cmd_last + clamp(head_cmd - head_cmd_last, -cont_max_step, cont_max_step)
+
+                    arm_servo.value        = arm_cmd
+                    lazy_susan_servo.value = lazy_cmd
+                    head_servo.value       = head_cmd
+
+                    arm_cmd_last, lazy_cmd_last, head_cmd_last = arm_cmd, lazy_cmd, head_cmd
+
+                if DEBUG and now - last_print >= print_interval:
+                    print(f"IMU(filt): R={roll_f:7.2f}  P={pitch_f:7.2f}  Y={yaw_raw:7.2f}")
+                    print(f"Cmd: arm={arm_cmd_last:+.3f}  lazy={lazy_cmd_last:+.3f}  head={head_cmd_last:+.3f}")
+                    print("-" * 70)
+                    last_print = now
+
             time.sleep(imu_poll_interval)
-    
+
     except KeyboardInterrupt:
-        if DEBUG:
-            print("\n\nStopping...")
-    
+        if DEBUG: print("\nStopping...")
     finally:
-        if DEBUG:
-            print("Centering servos...")
         arm_servo.value = 0
         lazy_susan_servo.value = 0
         head_servo.value = 0
         time.sleep(0.5)
-        
-        if DEBUG:
-            print("Turning MOSFET OFF...")
         MOSFET.off()
-        if DEBUG:
-            print("Done!")
-
+        if DEBUG: print("Done.")
 
 if __name__ == "__main__":
     main()
