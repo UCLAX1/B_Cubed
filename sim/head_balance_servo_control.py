@@ -97,6 +97,35 @@ def angle_to_servo_value(angle_deg, servo_type='standard'):
         return clamp(angle_deg / 90.0, -1.0, 1.0)
     return clamp(angle_deg / CONT_MAX_ANGLE_SPEED, -1.0, 1.0)
 
+
+# ============================================================================
+# IMU FILTER
+# ============================================================================
+# Lower alpha = smoother but more lag. Range ~0.05 (very smooth) to 0.4 (snappy).
+IMU_ALPHA = 0.15
+
+class AngleFilter:
+    """Exponential moving average with wrap-around handling for angles."""
+    def __init__(self, alpha):
+        self.alpha = alpha
+        self.value = None
+
+    def update(self, new_deg):
+        if self.value is None:
+            self.value = new_deg
+            return self.value
+        # Handle ±180° wrap-around by taking the shortest angular path
+        diff = (new_deg - self.value + 180.0) % 360.0 - 180.0
+        self.value += self.alpha * diff
+        # Keep filtered value in (-180, 180]
+        if self.value > 180.0:   self.value -= 360.0
+        if self.value <= -180.0: self.value += 360.0
+        return self.value
+
+roll_filter  = AngleFilter(IMU_ALPHA)
+pitch_filter = AngleFilter(IMU_ALPHA)
+yaw_filter   = AngleFilter(IMU_ALPHA)
+
 # ============================================================================
 # MAIN
 # ============================================================================
@@ -153,17 +182,17 @@ def main():
                 now = time.time()
                 data = imu.getIMUData()
                 fp = data["fusionPose"]
-                roll_raw  = math.degrees(fp[0])
-                pitch_raw = math.degrees(fp[1])
-                yaw_raw   = math.degrees(fp[2])
+                roll  = roll_filter.update(math.degrees(fp[0]))
+                pitch = pitch_filter.update(math.degrees(fp[1]))
+                yaw   = yaw_filter.update(math.degrees(fp[2]))
 
                 # --- Low-pass filter the IMU angles ---
                 if not have_filter:
-                    roll_f, pitch_f = roll_raw, pitch_raw
+                    roll_f, pitch_f = roll, pitch
                     have_filter = True
                 else:
-                    roll_f  += IMU_ALPHA * (roll_raw  - roll_f)
-                    pitch_f += IMU_ALPHA * (pitch_raw - pitch_f)
+                    roll_f  += IMU_ALPHA * (roll  - roll_f)
+                    pitch_f += IMU_ALPHA * (pitch - pitch_f)
 
                 # --- Servo update ---
                 if now - last_servo_update >= servo_update_interval:
@@ -225,7 +254,7 @@ def main():
                     arm_cmd_last, lazy_cmd_last, head_cmd_last = arm_cmd, lazy_cmd, head_cmd
 
                 if DEBUG and now - last_print >= print_interval:
-                    print(f"IMU(filt): R={roll_f:7.2f}  P={pitch_f:7.2f}  Y={yaw_raw:7.2f}")
+                    print(f"IMU(filt): R={roll_f:7.2f}  P={pitch_f:7.2f}  Y={yaw:7.2f}")
                     print(f"Cmd: arm={arm_cmd_last:+.3f}  lazy={lazy_cmd_last:+.3f}  head={head_cmd_last:+.3f}")
                     print("-" * 70)
                     last_print = now
