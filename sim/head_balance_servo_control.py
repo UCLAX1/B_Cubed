@@ -119,6 +119,8 @@ def slew_limit(current, target, max_delta):
         return current - max_delta
     return target
 
+lazy_susan_servo = Servo(12, initial_value=None)
+head_servo = Servo(18, initial_value=None) 
 
 # ============================================================================
 # MAIN LOOP
