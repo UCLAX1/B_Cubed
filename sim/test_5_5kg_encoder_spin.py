@@ -42,9 +42,13 @@ def main() -> None:
             t = time.time() - start_time
             rel_rot = servo.get_position()
             abs_rot = servo.get_absolute_position()
+            
+            # DEBUG: Raw encoder step count
+            raw_steps = servo.encoder.steps
 
             print(
                 f"t={t:7.2f}s | cmd={SPIN_COMMAND:+.2f} | "
+                f"steps={raw_steps:8.0f} | "
                 f"rel={rel_rot:8.4f} rot ({rel_rot * 360.0:8.2f} deg) | "
                 f"abs={abs_rot:8.4f} rot ({abs_rot * 360.0:8.2f} deg)",
                 flush=True,
