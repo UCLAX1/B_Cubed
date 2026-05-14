@@ -1,4 +1,9 @@
-from servo_control_filters import PDCommandDamper, angle_to_servo_value, slew_limit
+from servo_control_filters import (
+    PDCommandDamper,
+    PIDCommandDamper,
+    angle_to_servo_value,
+    slew_limit,
+)
 
 
 def assert_close(actual, expected, tolerance=1e-6):
@@ -42,9 +47,27 @@ def test_pd_damper_moves_for_real_target_change():
         raise AssertionError(f"expected velocity limit to cap first step, got {next_angle}")
 
 
+def test_pid_damper_integral_stays_bounded():
+    damper = PIDCommandDamper(
+        initial_angle=0.0,
+        kp=0.0,
+        ki=1.0,
+        kd=0.0,
+        integral_limit_deg_s=1.0,
+        max_velocity_deg_s=160.0,
+    )
+
+    for _ in range(20):
+        damper.update(30.0, 0.1)
+
+    if damper.integral > 1.0:
+        raise AssertionError(f"expected integral clamp, got {damper.integral}")
+
+
 if __name__ == "__main__":
     test_angle_to_servo_value()
     test_slew_limit()
     test_pd_damper_holds_small_target_noise_near_setpoint()
     test_pd_damper_moves_for_real_target_change()
+    test_pid_damper_integral_stays_bounded()
     print("servo_control_filters tests passed")
