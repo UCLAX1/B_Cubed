@@ -1,15 +1,9 @@
 """
 IMU Reader with Servo Control
-Reads IMU data, calculates target motor angles, and closes the position loop
-on the two continuous-rotation servos using their encoders.
+Reads IMU data, calculates target motor angles, and moves servos to balance.
+Uses gpiozero Servo for direct control (matches servo_sample.py).
 
-Servo / Encoder layout (BCM numbering):
-  Arm (servo 0, 150kg, standard positional):  servo=BCM 13                 (pin 33)
-  Lazy Susan (servo 1, 70kg, continuous):     servo=BCM 12                 (pin 32)
-      encoder 1: A=BCM 27 (pin 13), B=BCM 22 (pin 15), ABS=BCM 17 (pin 11)
-  Head (servo 2, 5kg, continuous):            servo=BCM 18                 (pin 12)
-      encoder 0: A=BCM 26 (pin 37), B=BCM 6  (pin 31), ABS=BCM 5  (pin 29)
-  MOSFET: BCM 16 (pin 36)
+All three servos are treated as standard (positional) servos.
 """
 
 import sys
@@ -17,16 +11,16 @@ import time
 import math
 from gpiozero import Servo, DigitalOutputDevice
 from head_balance_math import find_motor_angles
-from ServoEx import ServoEx
 
 # ============================================================================
-# DEBUG / SETPOINT
+# DEBUG FLAG - Set to True to see print output, False to suppress
 # ============================================================================
-DEBUG = True
+DEBUG = True  # Change to False to silence all output
+
 DESIRED_ANGLE = 0.0
 
 # ============================================================================
-# IMU INITIALIZATION
+# IMU INITIALIZATION (egg.py style)
 # ============================================================================
 SETTINGS_FILE = "RTIMULib"
 sys.path.append("/usr/lib/python3/dist-packages")
@@ -40,17 +34,20 @@ if not imu.IMUInit():
         print("IMU init failed")
     sys.exit(1)
 
-imu.setSlerpPower(0.02)
+imu.setSlerpPower(
+    0.02
+)  # NOTE: raise to 0.05-0.1 if you see slow drift while stationary
 imu.setGyroEnable(True)
 imu.setAccelEnable(True)
 imu.setCompassEnable(True)
 
 imu_poll_interval = imu.IMUGetPollInterval() / 1000.0
+
 if DEBUG:
     print(f"IMU initialized. Poll interval: {imu_poll_interval*1000:.1f}ms\n")
 
 # ============================================================================
-# PINS (BCM)
+# SERVO INITIALIZATION (match servo_sample.py)
 # ============================================================================
 ARM_SERVO_PIN = 13
 MOSFET_PIN    = 16
@@ -94,125 +91,68 @@ lazy_motor = ServoEx(
     absolute_encoder_pin=LAZY_ENC_ABS,
 )
 
-# ============================================================================
-# LIMITS & TUNING
-# ============================================================================
-# Mechanical limits (degrees, target side)
+# Angle limits (degrees) to prevent mechanical damage
 ARM_MIN, ARM_MAX = -120, 120
-LAZY_MIN, LAZY_MAX = -90, 90
+LAZY_SUSAN_MIN, LAZY_SUSAN_MAX = -90, 90
 HEAD_MIN, HEAD_MAX = -90, 90
 
-# Arm: ±SERVO_RANGE_DEG maps to ±1.0 on gpiozero Servo value.
-ARM_RANGE_DEG = 90.0
+# Servo range: assume ±90° maps to ±1.0 on the gpiozero Servo value.
+# If your servos have a wider/narrower range, adjust SERVO_RANGE_DEG accordingly.
+SERVO_RANGE_DEG = 90.0
 
-# --- Closed-loop tuning ----------------------------------------------------
-# P-gain: servo value per degree of error. 1/30 → 30° error commands full speed.
-LAZY_KP = 1.0 / 30.0
-HEAD_KP = 1.0 / 30.0
-
-# Deadband: no command if |error| under this. Kills jitter at rest.
-LAZY_DEADBAND_DEG = 1.0
-HEAD_DEADBAND_DEG = 1.0
-
-# Min drive to overcome stiction (0 = disabled). Bump to 0.05–0.15 if motor
-# "wants to move but doesn't" with small commands.
-MIN_DRIVE = 0.0
-
-# Cap commanded speed (1.0 = full).
-MAX_DRIVE = 1.0
-
-# Slew rate on the velocity command (units per second). Prevents abrupt
-# speed changes when the IMU jerks.
-VEL_SLEW_RATE = 4.0
-
-# Sign convention: flip if positive command moves the encoder negative.
-# Find empirically by commanding a small positive value and watching the angle.
-LAZY_DIR = +1
-HEAD_DIR = +1
-
-# Calibration offset: encoder-zero angle vs. mechanical-zero angle (degrees).
-# Set so that the resting/centered physical position reads as 0°.
-LAZY_OFFSET_DEG = 0.0
-HEAD_OFFSET_DEG = 0.0
-
-# --- Rates ----------------------------------------------------------------
-CONTROL_RATE_HZ = 50.0
-CONTROL_INTERVAL = 1.0 / CONTROL_RATE_HZ
-PRINT_INTERVAL = 0.5
-
-# ============================================================================
-# HELPERS
-# ============================================================================
-def clamp(v, lo, hi):
-    return max(lo, min(hi, v))
+# Slew-rate limit: max change in servo value per second (-1..1 range).
+# 2.0 = full sweep in 1 second. Lower = smoother but slower to respond.
+SERVO_SLEW_RATE = 2.0
 
 
-def angle_to_arm_value(angle_deg):
-    """Standard positional servo: angle → [-1, 1]."""
-    return clamp(angle_deg / ARM_RANGE_DEG, -1.0, 1.0)
+def angle_to_servo_value(angle_deg):
+    """Convert a target angle in degrees to a servo value in [-1, 1]."""
+    return max(min(angle_deg / SERVO_RANGE_DEG, 1.0), -1.0)
 
 
-def get_motor_angle_deg(motor, offset_deg):
-    """ServoEx position is in rotations; convert to degrees and apply offset."""
-    return motor.get_position() * 360.0 - offset_deg
-
-
-def position_controller(target_deg, current_deg, kp, deadband_deg,
-                        min_drive, max_drive,
-                        prev_cmd, max_delta, direction):
-    """
-    P controller for a continuous-rotation servo with position feedback.
-    Returns a new servo value in [-1, 1], slew-limited from prev_cmd.
-    """
-    error = target_deg - current_deg
-
-    if abs(error) < deadband_deg:
-        raw_cmd = 0.0
-    else:
-        raw_cmd = direction * kp * error
-        raw_cmd = clamp(raw_cmd, -max_drive, max_drive)
-        if min_drive > 0 and 0 < abs(raw_cmd) < min_drive:
-            raw_cmd = math.copysign(min_drive, raw_cmd)
-
-    # Slew-limit the velocity command itself
-    diff = raw_cmd - prev_cmd
-    if diff >  max_delta: return prev_cmd + max_delta
-    if diff < -max_delta: return prev_cmd - max_delta
-    return raw_cmd
+def slew_limit(current, target, max_delta):
+    """Move current toward target by at most max_delta."""
+    diff = target - current
+    if diff > max_delta:
+        return current + max_delta
+    if diff < -max_delta:
+        return current - max_delta
+    return target
 
 
 # ============================================================================
 # MAIN LOOP
 # ============================================================================
+
+
 def main():
-    lazy_cmd = 0.0
+    # Track last commanded servo values for slew limiting
+    arm_cmd = 0.0
+    lazy_susan_cmd = 0.0
     head_cmd = 0.0
 
     try:
         if DEBUG:
-            print("Centering arm; stopping continuous servos...")
+            print("Turning MOSFET ON...")
+        MOSFET.on()
+        time.sleep(0.5)
+
+        if DEBUG:
+            print("Centering all servos...")
         arm_servo.value = 0
-        head_motor.value = 0   # 0 = stop for continuous
-        lazy_motor.value = 0
+        lazy_susan_servo.value = 0
+        head_servo.value = 0
         time.sleep(1)
 
         if DEBUG:
-            print("Running. Press Ctrl+C to stop.\n")
+            print("Reading IMU data and moving servos. Press Ctrl+C to stop.\n")
 
         last_print = time.time()
-        last_control = time.time()
+        last_servo_update = time.time()
+        print_interval = 0.5  # Print every 500ms
+        servo_update_interval = 0.05  # 20Hz servo updates; smoothness from slew limit
 
         while True:
-            # ServoEx.update() must run every loop:
-            #   - drives the absolute-encoder PWM decode (edge detection)
-            #   - periodically self-centers the relative encoder
-            try:
-                head_motor.update()
-                lazy_motor.update()
-            except Exception as e:
-                if DEBUG:
-                    print(f"Encoder update error: {e}")
-
             try:
                 got_data = imu.IMURead()
             except Exception as e:
@@ -220,59 +160,59 @@ def main():
                     print(f"IMU read error: {e}")
                 got_data = False
 
-            current_time = time.time()
-
             if got_data:
+                current_time = time.time()
+
                 data = imu.getIMUData()
                 fusionPose = data["fusionPose"]
-                roll  = math.degrees(fusionPose[0])
-                pitch = math.degrees(fusionPose[1])
-                yaw   = math.degrees(fusionPose[2])
 
-                arm_target, lazy_target, head_target = find_motor_angles(
+                roll = math.degrees(fusionPose[0])
+                pitch = math.degrees(fusionPose[1])
+                yaw = math.degrees(fusionPose[2])
+
+                # Compute absolute target angles for all three positional servos
+                arm_target, lazy_susan_target, head_target = find_motor_angles(
                     pitch, roll, DESIRED_ANGLE
                 )
-                arm_target  = clamp(arm_target,  ARM_MIN,  ARM_MAX)
-                lazy_target = clamp(lazy_target, LAZY_MIN, LAZY_MAX)
-                head_target = clamp(head_target, HEAD_MIN, HEAD_MAX)
 
-                # --- Control step ----------------------------------------
-                dt = current_time - last_control
-                if dt >= CONTROL_INTERVAL:
-                    lazy_current = get_motor_angle_deg(lazy_motor, LAZY_OFFSET_DEG)
-                    head_current = get_motor_angle_deg(head_motor, HEAD_OFFSET_DEG)
-                    max_delta = VEL_SLEW_RATE * dt
+                # Clamp to safe mechanical limits
+                arm_target = max(min(arm_target, ARM_MAX), ARM_MIN)
+                lazy_susan_target = max(
+                    min(lazy_susan_target, LAZY_SUSAN_MAX), LAZY_SUSAN_MIN
+                )
+                head_target = max(min(head_target, HEAD_MAX), HEAD_MIN)
 
-                    lazy_cmd = position_controller(
-                        lazy_target, lazy_current,
-                        LAZY_KP, LAZY_DEADBAND_DEG,
-                        MIN_DRIVE, MAX_DRIVE,
-                        lazy_cmd, max_delta, LAZY_DIR,
-                    )
-                    head_cmd = position_controller(
-                        head_target, head_current,
-                        HEAD_KP, HEAD_DEADBAND_DEG,
-                        MIN_DRIVE, MAX_DRIVE,
-                        head_cmd, max_delta, HEAD_DIR,
-                    )
-
-                    lazy_motor.value = lazy_cmd
-                    head_motor.value = head_cmd
-                    arm_servo.value = angle_to_arm_value(arm_target)
-
-                    last_control = current_time
-
-                # --- Logging --------------------------------------------
-                if current_time - last_print >= PRINT_INTERVAL:
+                if current_time - last_print >= print_interval:
                     if DEBUG:
-                        lc = get_motor_angle_deg(lazy_motor, LAZY_OFFSET_DEG)
-                        hc = get_motor_angle_deg(head_motor, HEAD_OFFSET_DEG)
-                        print(f"IMU: Roll={roll:7.2f}°  Pitch={pitch:7.2f}°  Yaw={yaw:7.2f}°")
-                        print(f"Targets: Arm={arm_target:7.2f}°  Lazy={lazy_target:7.2f}°  Head={head_target:7.2f}°")
-                        print(f"Encoders: Lazy={lc:7.2f}°  Head={hc:7.2f}°  | Cmd: Lazy={lazy_cmd:+.3f}  Head={head_cmd:+.3f}")
+                        print(
+                            f"IMU: Roll={roll:7.2f}°  Pitch={pitch:7.2f}°  Yaw={yaw:7.2f}°"
+                        )
+                        print(
+                            f"Targets: Arm={arm_target:7.2f}°  Lazy Susan={lazy_susan_target:7.2f}°  Head={head_target:7.2f}°"
+                        )
                         print("-" * 80)
                     last_print = current_time
 
+                # Update servos at controlled rate with slew limiting
+                dt = current_time - last_servo_update
+                if dt >= servo_update_interval:
+                    arm_raw = angle_to_servo_value(arm_target)
+                    lazy_raw = angle_to_servo_value(lazy_susan_target)
+                    head_raw = angle_to_servo_value(head_target)
+
+                    max_delta = SERVO_SLEW_RATE * dt
+                    arm_cmd = slew_limit(arm_cmd, arm_raw, max_delta)
+                    lazy_susan_cmd = slew_limit(lazy_susan_cmd, lazy_raw, max_delta)
+                    head_cmd = slew_limit(head_cmd, head_raw, max_delta)
+
+                    arm_servo.value = arm_cmd
+                    lazy_susan_servo.value = lazy_susan_cmd
+                    head_servo.value = head_cmd
+
+                    last_servo_update = current_time
+
+            # Short sleep — IMURead() returns False until fresh data is ready,
+            # so this just keeps the loop from pegging the CPU.
             time.sleep(0.001)
 
     except KeyboardInterrupt:
@@ -281,25 +221,11 @@ def main():
 
     finally:
         if DEBUG:
-            print("Stopping motors / centering arm...")
-        try:
-            arm_servo.value = 0
-            head_motor.value = 0
-            lazy_motor.value = 0
-            time.sleep(0.5)
-        except Exception as e:
-            if DEBUG:
-                print(f"Stop error: {e}")
-
-        # Persist encoder positions so we resume in the right place next run
-        try:
-            head_motor.save_encoder_position()
-            lazy_motor.save_encoder_position()
-            if DEBUG:
-                print("Encoder positions saved.")
-        except Exception as e:
-            if DEBUG:
-                print(f"Save error: {e}")
+            print("Centering servos...")
+        arm_servo.value = 0
+        lazy_susan_servo.value = 0
+        head_servo.value = 0
+        time.sleep(0.5)
 
         if DEBUG:
             print("Turning MOSFET OFF...")
