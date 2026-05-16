@@ -18,6 +18,7 @@
         <span class="status-chip" id="planStatus">planner idle</span>
         <span class="status-chip" id="navStatus">nav idle</span>
         <span class="status-chip" id="manualStatus">manual idle</span>
+        <span class="status-chip" id="personStatus">person off</span>
       </div>
       <div class="toolbar">
         <button type="button" id="navigateButton" class="primary" title="Navigate to the planned goal" disabled>Navigate</button>
@@ -86,6 +87,29 @@
             <div>
               <dt>Z</dt>
               <dd id="robotZ">-</dd>
+            </div>
+          </dl>
+        </div>
+
+        <div class="panel-section">
+          <h2>People</h2>
+          <label class="toggle-row" for="personTrackingToggle">
+            <span>Tracker</span>
+            <input id="personTrackingToggle" type="checkbox">
+            <span class="toggle-track" aria-hidden="true"></span>
+          </label>
+          <div class="person-view">
+            <img id="personImage" alt="Person tracking view" hidden>
+            <div id="personImagePlaceholder">No frame</div>
+          </div>
+          <dl class="metric-list">
+            <div>
+              <dt>Count</dt>
+              <dd id="personCount">0</dd>
+            </div>
+            <div>
+              <dt>Frame</dt>
+              <dd id="personFrameAge">-</dd>
             </div>
           </dl>
         </div>

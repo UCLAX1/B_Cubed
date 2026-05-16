@@ -53,6 +53,9 @@ class PlanningConsoleRequestHandler(BaseHTTPRequestHandler):
         if parsed_url.path == "/api/map.png":
             self._send_map_png()
             return
+        if parsed_url.path == "/api/person_tracking/image.jpg":
+            self._send_person_tracking_image()
+            return
         if parsed_url.path == "/api/health":
             self._send_json({"ok": True})
             return
@@ -84,6 +87,11 @@ class PlanningConsoleRequestHandler(BaseHTTPRequestHandler):
             if parsed_url.path == "/api/manual_cmd":
                 payload = self._read_json_body()
                 result = self.server.node.publish_manual_command(payload)
+                self._send_json({"ok": True, **result})
+                return
+            if parsed_url.path == "/api/person_tracking":
+                payload = self._read_json_body()
+                result = self.server.node.set_person_tracking_enabled(payload)
                 self._send_json({"ok": True, **result})
                 return
         except PlanningConsoleError as error:
@@ -150,6 +158,25 @@ class PlanningConsoleRequestHandler(BaseHTTPRequestHandler):
         self.send_header("Content-Length", str(len(png_data)))
         self.end_headers()
         self.wfile.write(png_data)
+
+    def _send_person_tracking_image(self) -> None:
+        snapshot = self.server.node.person_tracking_image_snapshot()
+        if snapshot is None:
+            self.send_error(
+                HTTPStatus.NOT_FOUND,
+                "No person-tracking image has been received yet.",
+            )
+            return
+
+        revision, content_type, image_data = snapshot
+        self.send_response(HTTPStatus.OK)
+        self._send_common_headers()
+        self.send_header("Content-Type", content_type)
+        self.send_header("Cache-Control", "no-store")
+        self.send_header("ETag", f'"person-tracking-{revision}"')
+        self.send_header("Content-Length", str(len(image_data)))
+        self.end_headers()
+        self.wfile.write(image_data)
 
     def _send_static_file(self, request_path: str) -> None:
         static_dir = self.server.node.static_dir

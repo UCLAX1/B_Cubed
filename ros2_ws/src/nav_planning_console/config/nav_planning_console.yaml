@@ -11,6 +11,16 @@ nav_planning_console:
     manual_control_enabled: true
     manual_max_linear_velocity: 0.25
     manual_max_angular_velocity: 0.50
+    person_tracking_control_enabled: true
+    person_tracking_node_name: person_tracking
+    person_tracking_image_topic: /zed/zed_node/rgb/color/rect/image/compressed
+    person_tracking_engine_path: /home/jetson-nano-x1/Documents/B_Cubed/models/yolo11n.engine
+    person_tracking_show_window: false
+    person_tracking_publish_annotated_image: true
+    person_tracking_detection_topic: /person_tracking/detections
+    person_tracking_annotated_image_topic: /person_tracking/annotated_image/compressed
+    person_tracking_confidence_threshold: 0.4
+    person_tracking_nms_threshold: 0.45
     planner_id: ""
     planner_server_timeout_sec: 2.0
     navigator_server_timeout_sec: 2.0

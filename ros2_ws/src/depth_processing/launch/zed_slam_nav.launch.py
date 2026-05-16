@@ -53,6 +53,38 @@ def generate_launch_description() -> LaunchDescription:
             DeclareLaunchArgument("planning_console_host", default_value="127.0.0.1"),
             DeclareLaunchArgument("planning_console_port", default_value="8080"),
             DeclareLaunchArgument("manual_cmd_topic", default_value="cmd_vel_manual"),
+            DeclareLaunchArgument(
+                "person_tracking_control_enabled",
+                default_value="true",
+            ),
+            DeclareLaunchArgument(
+                "person_tracking_image_topic",
+                default_value="/zed/zed_node/rgb/color/rect/image/compressed",
+            ),
+            DeclareLaunchArgument(
+                "person_tracking_engine_path",
+                default_value=(
+                    "/home/jetson-nano-x1/Documents/B_Cubed/models/yolo11n.engine"
+                ),
+            ),
+            DeclareLaunchArgument("person_tracking_show_window", default_value="false"),
+            DeclareLaunchArgument(
+                "person_tracking_publish_annotated_image",
+                default_value="true",
+            ),
+            DeclareLaunchArgument(
+                "person_tracking_detection_topic",
+                default_value="/person_tracking/detections",
+            ),
+            DeclareLaunchArgument(
+                "person_tracking_annotated_image_topic",
+                default_value="/person_tracking/annotated_image/compressed",
+            ),
+            DeclareLaunchArgument(
+                "person_tracking_confidence_threshold",
+                default_value="0.4",
+            ),
+            DeclareLaunchArgument("person_tracking_nms_threshold", default_value="0.45"),
             DeclareLaunchArgument("enable_tracking_node", default_value="true"),
             DeclareLaunchArgument("autostart_nav2", default_value="true"),
             DeclareLaunchArgument(
@@ -210,6 +242,42 @@ def generate_launch_description() -> LaunchDescription:
                         "manual_cmd_topic": LaunchConfiguration("manual_cmd_topic"),
                         "navigation_plane_z": ParameterValue(
                             LaunchConfiguration("navigation_plane_z"),
+                            value_type=float,
+                        ),
+                        "person_tracking_control_enabled": ParameterValue(
+                            LaunchConfiguration("person_tracking_control_enabled"),
+                            value_type=bool,
+                        ),
+                        "person_tracking_image_topic": LaunchConfiguration(
+                            "person_tracking_image_topic"
+                        ),
+                        "person_tracking_engine_path": LaunchConfiguration(
+                            "person_tracking_engine_path"
+                        ),
+                        "person_tracking_show_window": ParameterValue(
+                            LaunchConfiguration("person_tracking_show_window"),
+                            value_type=bool,
+                        ),
+                        "person_tracking_publish_annotated_image": ParameterValue(
+                            LaunchConfiguration(
+                                "person_tracking_publish_annotated_image"
+                            ),
+                            value_type=bool,
+                        ),
+                        "person_tracking_detection_topic": LaunchConfiguration(
+                            "person_tracking_detection_topic"
+                        ),
+                        "person_tracking_annotated_image_topic": LaunchConfiguration(
+                            "person_tracking_annotated_image_topic"
+                        ),
+                        "person_tracking_confidence_threshold": ParameterValue(
+                            LaunchConfiguration(
+                                "person_tracking_confidence_threshold"
+                            ),
+                            value_type=float,
+                        ),
+                        "person_tracking_nms_threshold": ParameterValue(
+                            LaunchConfiguration("person_tracking_nms_threshold"),
                             value_type=float,
                         ),
                     }

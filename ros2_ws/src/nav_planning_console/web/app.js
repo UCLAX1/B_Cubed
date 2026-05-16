@@ -7,6 +7,7 @@ const poseStatus = document.getElementById("poseStatus");
 const planStatus = document.getElementById("planStatus");
 const navStatus = document.getElementById("navStatus");
 const manualStatus = document.getElementById("manualStatus");
+const personStatus = document.getElementById("personStatus");
 const readout = document.getElementById("readout");
 const navigateButton = document.getElementById("navigateButton");
 const stopButton = document.getElementById("stopButton");
@@ -32,6 +33,11 @@ const manualStopButton = document.getElementById("manualStopButton");
 const manualCwButton = document.getElementById("manualCwButton");
 const manualCommand = document.getElementById("manualCommand");
 const manualWheels = document.getElementById("manualWheels");
+const personTrackingToggle = document.getElementById("personTrackingToggle");
+const personImage = document.getElementById("personImage");
+const personImagePlaceholder = document.getElementById("personImagePlaceholder");
+const personCount = document.getElementById("personCount");
+const personFrameAge = document.getElementById("personFrameAge");
 
 const mapImage = new Image();
 const SQRT_3 = Math.sqrt(3);
@@ -55,9 +61,11 @@ const manualWheelDefs = [
 
 let state = null;
 let mapRevision = -1;
+let personImageRevision = -1;
 let mapReady = false;
 let needsFit = true;
 let lastPlanRequest = 0;
+let personTrackingRequestPending = false;
 let selectedGoal = null;
 let dragStart = null;
 let manualPointerId = null;
@@ -683,6 +691,78 @@ function updateMapImage(nextState) {
   mapImage.src = `/api/map.png?rev=${mapRevision}`;
 }
 
+function updatePersonTracking(nextState) {
+  const person = nextState.person_tracking || {};
+  const image = person.image || {};
+  const detections = Array.isArray(person.detections) ? person.detections : [];
+  const status = person.status || "stopped";
+  const enabled = Boolean(person.enabled);
+  const isExternal = status === "external";
+
+  personTrackingToggle.checked = enabled;
+  personTrackingToggle.disabled = (
+    personTrackingRequestPending ||
+    !person.control_enabled ||
+    isExternal
+  );
+
+  if (person.error) {
+    setChip(personStatus, person.error, "bad");
+  } else if (status === "running") {
+    setChip(personStatus, `person ${detections.length}`, "good");
+  } else if (status === "external") {
+    setChip(personStatus, "person external", "good");
+  } else if (status === "starting" || status === "stopping") {
+    setChip(personStatus, `person ${status}`, "warn");
+  } else if (status.startsWith("exited")) {
+    setChip(personStatus, `person ${status}`, "bad");
+  } else {
+    setChip(personStatus, "person off", "");
+  }
+
+  personCount.textContent = String(detections.length);
+  personFrameAge.textContent = seconds(image.age_sec);
+
+  if (image.available && image.revision !== personImageRevision) {
+    personImageRevision = image.revision;
+    personImage.hidden = false;
+    personImagePlaceholder.hidden = true;
+    personImage.src = `/api/person_tracking/image.jpg?rev=${personImageRevision}`;
+  } else if (!image.available) {
+    personImageRevision = -1;
+    personImage.removeAttribute("src");
+    personImage.hidden = true;
+    personImagePlaceholder.hidden = false;
+  }
+}
+
+async function setPersonTrackingEnabled(enabled) {
+  personTrackingRequestPending = true;
+  personTrackingToggle.disabled = true;
+  setChip(personStatus, enabled ? "person starting" : "person stopping", "warn");
+
+  try {
+    const response = await fetch("/api/person_tracking", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({ enabled })
+    });
+    const payload = await response.json();
+    if (!response.ok || !payload.ok) {
+      throw new Error(payload.error || "Person tracking update failed.");
+    }
+    await refreshState();
+  } catch (error) {
+    personTrackingToggle.checked = !enabled;
+    setChip(personStatus, error.message, "bad");
+  } finally {
+    personTrackingRequestPending = false;
+    updatePersonTracking(state || {});
+  }
+}
+
 function updateMetrics() {
   if (!state) {
     return;
@@ -772,6 +852,7 @@ function updateMetrics() {
   const canNavigate = Boolean(goal) && points > 0 && !isNavigationActive(navState);
   navigateButton.disabled = !canNavigate;
   stopButton.disabled = !isNavigationActive(navState);
+  updatePersonTracking(state);
 }
 
 async function refreshState() {
@@ -936,6 +1017,15 @@ for (const button of [manualCcwButton, manualCwButton]) {
 
 manualStopButton.addEventListener("click", () => {
   stopManualCommand();
+});
+
+personTrackingToggle.addEventListener("change", () => {
+  setPersonTrackingEnabled(personTrackingToggle.checked);
+});
+
+personImage.addEventListener("error", () => {
+  personImage.hidden = true;
+  personImagePlaceholder.hidden = false;
 });
 
 headingMode.addEventListener("change", () => {

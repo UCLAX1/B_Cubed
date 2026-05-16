@@ -3,9 +3,14 @@
 
 from __future__ import annotations
 
+import json
 import math
+import os
 from pathlib import Path
+import shutil
+import signal
 import struct
+import subprocess
 import threading
 import time
 from typing import Any, Callable
@@ -22,6 +27,8 @@ from rclpy.duration import Duration
 from rclpy.node import Node
 from rclpy.qos import DurabilityPolicy, HistoryPolicy, QoSProfile, ReliabilityPolicy
 from rclpy.time import Time
+from sensor_msgs.msg import CompressedImage
+from std_msgs.msg import String
 from tf2_ros import Buffer, TransformException, TransformListener
 
 from nav_planning_console.errors import PlanningConsoleError
@@ -48,6 +55,25 @@ def _quaternion_from_yaw(yaw: float) -> tuple[float, float, float, float]:
 def _clamp(value: float, minimum: float, maximum: float) -> float:
     """Clamp a float between minimum and maximum."""
     return max(minimum, min(float(value), maximum))
+
+
+def _coerce_bool(value: Any) -> bool:
+    """Convert common HTTP/launch truthy values to bool."""
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, str):
+        return value.strip().lower() in ("1", "true", "yes", "on")
+    return bool(value)
+
+
+def _content_type_from_compressed_format(format_text: str) -> str:
+    """Return an HTTP content type for a sensor_msgs/CompressedImage format."""
+    normalized = format_text.lower()
+    if "png" in normalized:
+        return "image/png"
+    if "jpg" in normalized or "jpeg" in normalized:
+        return "image/jpeg"
+    return "application/octet-stream"
 
 
 def _duration_to_float(duration_msg: Any) -> float:
@@ -396,6 +422,36 @@ class NavPlanningConsoleNode(Node):
             0.0,
             float(self.get_parameter("manual_max_angular_velocity").value),
         )
+        self.person_tracking_control_enabled = bool(
+            self.get_parameter("person_tracking_control_enabled").value
+        )
+        self.person_tracking_node_name = str(
+            self.get_parameter("person_tracking_node_name").value
+        ).lstrip("/")
+        self.person_tracking_image_topic = str(
+            self.get_parameter("person_tracking_image_topic").value
+        )
+        self.person_tracking_engine_path = str(
+            self.get_parameter("person_tracking_engine_path").value
+        )
+        self.person_tracking_show_window = bool(
+            self.get_parameter("person_tracking_show_window").value
+        )
+        self.person_tracking_publish_annotated_image = bool(
+            self.get_parameter("person_tracking_publish_annotated_image").value
+        )
+        self.person_tracking_detection_topic = str(
+            self.get_parameter("person_tracking_detection_topic").value
+        )
+        self.person_tracking_annotated_image_topic = str(
+            self.get_parameter("person_tracking_annotated_image_topic").value
+        )
+        self.person_tracking_confidence_threshold = float(
+            self.get_parameter("person_tracking_confidence_threshold").value
+        )
+        self.person_tracking_nms_threshold = float(
+            self.get_parameter("person_tracking_nms_threshold").value
+        )
         self.planner_id = str(self.get_parameter("planner_id").value)
         self.planner_server_timeout_sec = float(
             self.get_parameter("planner_server_timeout_sec").value
@@ -457,6 +513,16 @@ class NavPlanningConsoleNode(Node):
             "active": False,
             "stamp": 0.0,
         }
+        self._person_tracking_process: subprocess.Popen[bytes] | None = None
+        self._person_tracking_control_status = "stopped"
+        self._person_tracking_error = ""
+        self._person_tracking_image: bytes | None = None
+        self._person_tracking_image_content_type = "image/jpeg"
+        self._person_tracking_image_revision = 0
+        self._person_tracking_image_received_time = 0.0
+        self._person_tracking_image_stamp: float | None = None
+        self._person_tracking_detections: list[dict[str, Any]] = []
+        self._person_tracking_detections_received_time = 0.0
 
         map_qos = QoSProfile(
             reliability=ReliabilityPolicy.RELIABLE,
@@ -492,6 +558,18 @@ class NavPlanningConsoleNode(Node):
             self.manual_cmd_topic,
             10,
         )
+        self.person_tracking_detection_sub = self.create_subscription(
+            String,
+            self.person_tracking_detection_topic,
+            self._person_tracking_detection_callback,
+            10,
+        )
+        self.person_tracking_image_sub = self.create_subscription(
+            CompressedImage,
+            self.person_tracking_annotated_image_topic,
+            self._person_tracking_image_callback,
+            1,
+        )
 
         self.http_server = PlanningConsoleHttpServer(
             (self.web_host, self.web_port),
@@ -519,6 +597,13 @@ class NavPlanningConsoleNode(Node):
         self.get_logger().info(
             f"Manual control publishes Twist commands to {self.manual_cmd_topic}."
         )
+        self.get_logger().info(
+            "Person tracking console control "
+            f"{'enabled' if self.person_tracking_control_enabled else 'disabled'}; "
+            f"image_topic={self.person_tracking_image_topic}, "
+            f"annotated_image_topic={self.person_tracking_annotated_image_topic}, "
+            f"detection_topic={self.person_tracking_detection_topic}."
+        )
 
     def _declare_parameters(self) -> None:
         self.declare_parameter("web_host", "127.0.0.1")
@@ -532,6 +617,28 @@ class NavPlanningConsoleNode(Node):
         self.declare_parameter("manual_control_enabled", True)
         self.declare_parameter("manual_max_linear_velocity", 0.25)
         self.declare_parameter("manual_max_angular_velocity", 0.50)
+        self.declare_parameter("person_tracking_control_enabled", True)
+        self.declare_parameter("person_tracking_node_name", "person_tracking")
+        self.declare_parameter(
+            "person_tracking_image_topic",
+            "/zed/zed_node/rgb/color/rect/image/compressed",
+        )
+        self.declare_parameter(
+            "person_tracking_engine_path",
+            "/home/jetson-nano-x1/Documents/B_Cubed/models/yolo11n.engine",
+        )
+        self.declare_parameter("person_tracking_show_window", False)
+        self.declare_parameter("person_tracking_publish_annotated_image", True)
+        self.declare_parameter(
+            "person_tracking_detection_topic",
+            "/person_tracking/detections",
+        )
+        self.declare_parameter(
+            "person_tracking_annotated_image_topic",
+            "/person_tracking/annotated_image/compressed",
+        )
+        self.declare_parameter("person_tracking_confidence_threshold", 0.4)
+        self.declare_parameter("person_tracking_nms_threshold", 0.45)
         self.declare_parameter("planner_id", "")
         self.declare_parameter("planner_server_timeout_sec", 2.0)
         self.declare_parameter("navigator_server_timeout_sec", 2.0)
@@ -547,6 +654,7 @@ class NavPlanningConsoleNode(Node):
 
     def destroy_node(self) -> bool:
         """Stop the HTTP server when the ROS node is destroyed."""
+        self._stop_managed_person_tracking(wait_sec=1.5)
         if hasattr(self, "http_server"):
             self.http_server.shutdown()
             self.http_server.server_close()
@@ -578,6 +686,38 @@ class NavPlanningConsoleNode(Node):
             self._map_png = map_png
             self._map_revision += 1
             self._map_received_time = time.monotonic()
+
+    def _person_tracking_detection_callback(self, msg: String) -> None:
+        try:
+            payload = json.loads(msg.data)
+        except json.JSONDecodeError as error:
+            self.get_logger().warning(
+                f"Unable to parse person-tracking detections: {error}"
+            )
+            return
+
+        detections = payload.get("detections", [])
+        if not isinstance(detections, list):
+            detections = []
+
+        cleaned_detections = []
+        for detection in detections:
+            if isinstance(detection, dict):
+                cleaned_detections.append(dict(detection))
+
+        with self._lock:
+            self._person_tracking_detections = cleaned_detections
+            self._person_tracking_detections_received_time = time.monotonic()
+
+    def _person_tracking_image_callback(self, msg: CompressedImage) -> None:
+        with self._lock:
+            self._person_tracking_image = bytes(msg.data)
+            self._person_tracking_image_content_type = (
+                _content_type_from_compressed_format(msg.format)
+            )
+            self._person_tracking_image_revision += 1
+            self._person_tracking_image_received_time = time.monotonic()
+            self._person_tracking_image_stamp = _time_to_float(msg.header.stamp)
 
     def _update_pose_from_tf(self) -> None:
         try:
@@ -613,6 +753,17 @@ class NavPlanningConsoleNode(Node):
             if self._map_png is None:
                 return None
             return self._map_revision, self._map_png
+
+    def person_tracking_image_snapshot(self) -> tuple[int, str, bytes] | None:
+        """Return the latest person-tracking annotated image."""
+        with self._lock:
+            if self._person_tracking_image is None:
+                return None
+            return (
+                self._person_tracking_image_revision,
+                self._person_tracking_image_content_type,
+                self._person_tracking_image,
+            )
 
     def snapshot_state(self) -> dict[str, Any]:
         """Return JSON-serializable state for the browser overlay."""
@@ -689,7 +840,217 @@ class NavPlanningConsoleNode(Node):
                 "max_angular_velocity": self.manual_max_angular_velocity,
                 "command": manual_command,
             },
+            "person_tracking": self._person_tracking_state_payload(),
         }
+
+    def _person_tracking_node_is_running(self) -> bool:
+        target_name = self.person_tracking_node_name.lstrip("/")
+        target_full_name = f"/{target_name}"
+        for node_name, namespace in self.get_node_names_and_namespaces():
+            namespace = namespace.rstrip("/") or "/"
+            full_name = (
+                f"/{node_name}"
+                if namespace == "/"
+                else f"{namespace}/{node_name}"
+            )
+            if node_name == target_name or full_name == target_full_name:
+                return True
+        return False
+
+    def _refresh_person_tracking_process(self) -> tuple[bool, str]:
+        with self._lock:
+            process = self._person_tracking_process
+            status = self._person_tracking_control_status
+
+        if process is None:
+            return False, status
+
+        return_code = process.poll()
+        if return_code is None:
+            return True, "starting"
+
+        status = "stopped" if return_code == 0 else f"exited {return_code}"
+        error = "" if return_code == 0 else "Managed person tracking process exited."
+        with self._lock:
+            if self._person_tracking_process is process:
+                self._person_tracking_process = None
+                self._person_tracking_control_status = status
+                self._person_tracking_error = error
+        return False, status
+
+    def _person_tracking_state_payload(self) -> dict[str, Any]:
+        managed_running, process_status = self._refresh_person_tracking_process()
+        node_running = self._person_tracking_node_is_running()
+        now = time.monotonic()
+
+        with self._lock:
+            image_available = self._person_tracking_image is not None
+            image_revision = self._person_tracking_image_revision
+            image_received_time = self._person_tracking_image_received_time
+            image_stamp = self._person_tracking_image_stamp
+            detections = [
+                dict(detection)
+                for detection in self._person_tracking_detections
+            ]
+            detections_received_time = (
+                self._person_tracking_detections_received_time
+            )
+            error = self._person_tracking_error
+
+        if node_running:
+            status = "running" if managed_running else "external"
+        elif managed_running:
+            status = process_status
+        else:
+            status = process_status or "stopped"
+
+        image_age = (
+            now - image_received_time
+            if image_received_time > 0.0
+            else None
+        )
+        detections_age = (
+            now - detections_received_time
+            if detections_received_time > 0.0
+            else None
+        )
+
+        return {
+            "control_enabled": self.person_tracking_control_enabled,
+            "enabled": bool(node_running or managed_running),
+            "managed": managed_running,
+            "status": status,
+            "error": error,
+            "node_name": self.person_tracking_node_name,
+            "image_topic": self.person_tracking_image_topic,
+            "annotated_image_topic": self.person_tracking_annotated_image_topic,
+            "detection_topic": self.person_tracking_detection_topic,
+            "image": {
+                "available": image_available,
+                "revision": image_revision,
+                "age_sec": image_age,
+                "stamp": image_stamp,
+            },
+            "detections": detections,
+            "detections_age_sec": detections_age,
+        }
+
+    def set_person_tracking_enabled(self, payload: dict[str, Any]) -> dict[str, Any]:
+        """Start or stop the console-managed person-tracking process."""
+        enabled = _coerce_bool(payload.get("enabled", False))
+        if enabled:
+            self._start_person_tracking()
+        else:
+            self._stop_person_tracking()
+        return {"person_tracking": self._person_tracking_state_payload()}
+
+    def _person_tracking_launch_command(self) -> list[str]:
+        ros2_executable = shutil.which("ros2")
+        if ros2_executable is None:
+            raise PlanningConsoleError(
+                "The ros2 command is not available in the console environment."
+            )
+
+        return [
+            ros2_executable,
+            "launch",
+            "person_tracking",
+            "person_tracking.launch.py",
+            f"image_topic:={self.person_tracking_image_topic}",
+            f"engine_path:={self.person_tracking_engine_path}",
+            f"show_window:={str(self.person_tracking_show_window).lower()}",
+            (
+                "publish_annotated_image:="
+                f"{str(self.person_tracking_publish_annotated_image).lower()}"
+            ),
+            f"detection_topic:={self.person_tracking_detection_topic}",
+            (
+                "annotated_image_topic:="
+                f"{self.person_tracking_annotated_image_topic}"
+            ),
+            (
+                "confidence_threshold:="
+                f"{self.person_tracking_confidence_threshold:.3f}"
+            ),
+            f"nms_threshold:={self.person_tracking_nms_threshold:.3f}",
+        ]
+
+    def _start_person_tracking(self) -> None:
+        if not self.person_tracking_control_enabled:
+            raise PlanningConsoleError("Person tracking control is disabled.")
+
+        managed_running, _ = self._refresh_person_tracking_process()
+        if managed_running or self._person_tracking_node_is_running():
+            with self._lock:
+                self._person_tracking_control_status = "running"
+                self._person_tracking_error = ""
+            return
+
+        command = self._person_tracking_launch_command()
+        try:
+            process = subprocess.Popen(  # noqa: S603 - command is fixed argv.
+                command,
+                env=os.environ.copy(),
+                start_new_session=True,
+            )
+        except OSError as error:
+            with self._lock:
+                self._person_tracking_control_status = "failed"
+                self._person_tracking_error = str(error)
+            raise PlanningConsoleError(
+                f"Unable to start person tracking: {error}"
+            ) from error
+
+        with self._lock:
+            self._person_tracking_process = process
+            self._person_tracking_control_status = "starting"
+            self._person_tracking_error = ""
+
+    def _stop_person_tracking(self) -> None:
+        stopped = self._stop_managed_person_tracking(wait_sec=4.0)
+        if stopped:
+            return
+        if self._person_tracking_node_is_running():
+            raise PlanningConsoleError(
+                "Person tracking is running outside the web console; stop that "
+                "launch process directly."
+            )
+        with self._lock:
+            self._person_tracking_control_status = "stopped"
+            self._person_tracking_error = ""
+
+    def _stop_managed_person_tracking(self, wait_sec: float) -> bool:
+        with self._lock:
+            process = self._person_tracking_process
+            self._person_tracking_process = None
+
+        if process is None:
+            return False
+        if process.poll() is not None:
+            with self._lock:
+                self._person_tracking_control_status = "stopped"
+                self._person_tracking_error = ""
+            return True
+
+        try:
+            os.killpg(process.pid, signal.SIGTERM)
+            process.wait(timeout=wait_sec)
+        except (ProcessLookupError, subprocess.TimeoutExpired):
+            if process.poll() is None:
+                try:
+                    os.killpg(process.pid, signal.SIGKILL)
+                except ProcessLookupError:
+                    pass
+                try:
+                    process.wait(timeout=1.0)
+                except subprocess.TimeoutExpired:
+                    pass
+        finally:
+            with self._lock:
+                self._person_tracking_control_status = "stopped"
+                self._person_tracking_error = ""
+
+        return True
 
     def publish_manual_command(self, payload: dict[str, Any]) -> dict[str, Any]:
         """Publish a normalized manual-control command as a Twist."""

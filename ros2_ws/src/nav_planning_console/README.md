@@ -16,6 +16,11 @@ The manual control panel publishes `geometry_msgs/Twist` commands to
 `cmd_vel_manual` by default. The low-level Kiwi drive controller can subscribe
 to that topic and temporarily prioritize manual commands over Nav2 output.
 
+The person-tracking panel can start a console-managed `person_tracking` launch,
+show `/person_tracking/annotated_image/compressed`, and display the current
+detection count. If person tracking is already running from another launch, the
+console shows it as external and only displays the published view.
+
 When the live robot/camera pose falls inside an occupied map cell, the console
 can adjust only the planner start pose to the nearest nearby free cell before
 calling `ComputePathToPose`. Tune that behavior with:

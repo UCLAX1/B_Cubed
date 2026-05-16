@@ -67,7 +67,7 @@ START_PERSON_TRACKING="${START_PERSON_TRACKING:-false}"
 PERSON_TRACKING_IMAGE_TOPIC="${PERSON_TRACKING_IMAGE_TOPIC:-$INPUT_IMAGE_TOPIC}"
 PERSON_TRACKING_ENGINE_PATH="${PERSON_TRACKING_ENGINE_PATH:-$REPO_DIR/models/yolo11n.engine}"
 SHOW_PERSON_TRACKING_WINDOW="${SHOW_PERSON_TRACKING_WINDOW:-false}"
-PUBLISH_PERSON_TRACKING_IMAGE="${PUBLISH_PERSON_TRACKING_IMAGE:-false}"
+PUBLISH_PERSON_TRACKING_IMAGE="${PUBLISH_PERSON_TRACKING_IMAGE:-true}"
 PERSON_TRACKING_TOPIC="${PERSON_TRACKING_TOPIC:-/person_tracking/detections}"
 PERSON_TRACKING_ANNOTATED_IMAGE_TOPIC="${PERSON_TRACKING_ANNOTATED_IMAGE_TOPIC:-/person_tracking/annotated_image/compressed}"
 PERSON_TRACKING_CONFIDENCE_THRESHOLD="${PERSON_TRACKING_CONFIDENCE_THRESHOLD:-0.4}"
@@ -360,6 +360,7 @@ MediaPipe gesture recognition:
 
 Person tracking:
   enabled=$START_PERSON_TRACKING
+  web_console_toggle=available
   image_topic=$PERSON_TRACKING_IMAGE_TOPIC
   result_topic=$PERSON_TRACKING_TOPIC
   annotated_image_topic=$PERSON_TRACKING_ANNOTATED_IMAGE_TOPIC
@@ -526,6 +527,15 @@ run_terminal \
     planning_console_host:='${PLANNING_CONSOLE_HOST}' \
     planning_console_port:='${PLANNING_CONSOLE_PORT}' \
     manual_cmd_topic:='${MANUAL_CMD_TOPIC}' \
+    person_tracking_control_enabled:='true' \
+    person_tracking_image_topic:='${PERSON_TRACKING_IMAGE_TOPIC}' \
+    person_tracking_engine_path:='${PERSON_TRACKING_ENGINE_PATH}' \
+    person_tracking_show_window:='${SHOW_PERSON_TRACKING_WINDOW}' \
+    person_tracking_publish_annotated_image:='${PUBLISH_PERSON_TRACKING_IMAGE}' \
+    person_tracking_detection_topic:='${PERSON_TRACKING_TOPIC}' \
+    person_tracking_annotated_image_topic:='${PERSON_TRACKING_ANNOTATED_IMAGE_TOPIC}' \
+    person_tracking_confidence_threshold:='${PERSON_TRACKING_CONFIDENCE_THRESHOLD}' \
+    person_tracking_nms_threshold:='${PERSON_TRACKING_NMS_THRESHOLD}' \
     enable_tracking_node:='true' \
     base_frame:='${BASE_FRAME}' \
     enable_base_adapter:='true' \
@@ -563,6 +573,7 @@ run_terminal \
    echo '  Annotated image topic: $GESTURE_ANNOTATED_IMAGE_TOPIC'; \
    echo; \
    echo 'Person tracking:'; \
+   echo '  Web console toggle: available'; \
    echo '  Result topic: $PERSON_TRACKING_TOPIC'; \
    echo '  Annotated image topic: $PERSON_TRACKING_ANNOTATED_IMAGE_TOPIC'; \
    echo; \
