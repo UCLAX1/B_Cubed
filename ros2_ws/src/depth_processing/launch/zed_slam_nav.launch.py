@@ -52,6 +52,7 @@ def generate_launch_description() -> LaunchDescription:
             DeclareLaunchArgument("enable_planning_console", default_value="false"),
             DeclareLaunchArgument("planning_console_host", default_value="127.0.0.1"),
             DeclareLaunchArgument("planning_console_port", default_value="8080"),
+            DeclareLaunchArgument("manual_cmd_topic", default_value="cmd_vel_manual"),
             DeclareLaunchArgument("enable_tracking_node", default_value="true"),
             DeclareLaunchArgument("autostart_nav2", default_value="true"),
             DeclareLaunchArgument(
@@ -206,6 +207,7 @@ def generate_launch_description() -> LaunchDescription:
                         "base_frame": LaunchConfiguration("base_frame"),
                         "planner_action_name": "compute_path_to_pose",
                         "navigator_action_name": "navigate_to_pose",
+                        "manual_cmd_topic": LaunchConfiguration("manual_cmd_topic"),
                         "navigation_plane_z": ParameterValue(
                             LaunchConfiguration("navigation_plane_z"),
                             value_type=float,

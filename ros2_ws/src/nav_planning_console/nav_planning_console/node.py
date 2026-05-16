@@ -13,6 +13,7 @@ import zlib
 
 from action_msgs.msg import GoalStatus
 from ament_index_python.packages import PackageNotFoundError, get_package_share_directory
+from geometry_msgs.msg import Twist
 from nav2_msgs.action import ComputePathToPose, NavigateToPose
 from nav_msgs.msg import OccupancyGrid
 import rclpy
@@ -42,6 +43,11 @@ def _quaternion_from_yaw(yaw: float) -> tuple[float, float, float, float]:
     """Return x/y/z/w quaternion values for a planar yaw."""
     half_yaw = yaw * 0.5
     return 0.0, 0.0, math.sin(half_yaw), math.cos(half_yaw)
+
+
+def _clamp(value: float, minimum: float, maximum: float) -> float:
+    """Clamp a float between minimum and maximum."""
+    return max(minimum, min(float(value), maximum))
 
 
 def _duration_to_float(duration_msg: Any) -> float:
@@ -378,6 +384,18 @@ class NavPlanningConsoleNode(Node):
         self.navigator_action_name = str(
             self.get_parameter("navigator_action_name").value
         )
+        self.manual_cmd_topic = str(self.get_parameter("manual_cmd_topic").value)
+        self.manual_control_enabled = bool(
+            self.get_parameter("manual_control_enabled").value
+        )
+        self.manual_max_linear_velocity = max(
+            0.0,
+            float(self.get_parameter("manual_max_linear_velocity").value),
+        )
+        self.manual_max_angular_velocity = max(
+            0.0,
+            float(self.get_parameter("manual_max_angular_velocity").value),
+        )
         self.planner_id = str(self.get_parameter("planner_id").value)
         self.planner_server_timeout_sec = float(
             self.get_parameter("planner_server_timeout_sec").value
@@ -432,6 +450,13 @@ class NavPlanningConsoleNode(Node):
         self._navigation_feedback: dict[str, Any] = {}
         self._navigation_goal_handle: Any | None = None
         self._navigation_goal_token = 0
+        self._manual_command: dict[str, Any] = {
+            "linear_x": 0.0,
+            "linear_y": 0.0,
+            "angular_z": 0.0,
+            "active": False,
+            "stamp": 0.0,
+        }
 
         map_qos = QoSProfile(
             reliability=ReliabilityPolicy.RELIABLE,
@@ -462,6 +487,11 @@ class NavPlanningConsoleNode(Node):
             NavigateToPose,
             self.navigator_action_name,
         )
+        self.manual_cmd_pub = self.create_publisher(
+            Twist,
+            self.manual_cmd_topic,
+            10,
+        )
 
         self.http_server = PlanningConsoleHttpServer(
             (self.web_host, self.web_port),
@@ -486,6 +516,9 @@ class NavPlanningConsoleNode(Node):
             f"{self.navigator_action_name}, navigation_plane_z="
             f"{self.navigation_plane_z:.3f}."
         )
+        self.get_logger().info(
+            f"Manual control publishes Twist commands to {self.manual_cmd_topic}."
+        )
 
     def _declare_parameters(self) -> None:
         self.declare_parameter("web_host", "127.0.0.1")
@@ -495,6 +528,10 @@ class NavPlanningConsoleNode(Node):
         self.declare_parameter("base_frame", "base_link")
         self.declare_parameter("planner_action_name", "compute_path_to_pose")
         self.declare_parameter("navigator_action_name", "navigate_to_pose")
+        self.declare_parameter("manual_cmd_topic", "cmd_vel_manual")
+        self.declare_parameter("manual_control_enabled", True)
+        self.declare_parameter("manual_max_linear_velocity", 0.25)
+        self.declare_parameter("manual_max_angular_velocity", 0.50)
         self.declare_parameter("planner_id", "")
         self.declare_parameter("planner_server_timeout_sec", 2.0)
         self.declare_parameter("navigator_server_timeout_sec", 2.0)
@@ -602,6 +639,7 @@ class NavPlanningConsoleNode(Node):
             navigation_status = self._navigation_status
             navigation_error = self._navigation_error
             navigation_feedback = dict(self._navigation_feedback)
+            manual_command = dict(self._manual_command)
 
         map_payload = None
         if map_msg is not None:
@@ -644,7 +682,57 @@ class NavPlanningConsoleNode(Node):
                 "goal": navigation_goal,
                 "feedback": navigation_feedback,
             },
+            "manual": {
+                "enabled": self.manual_control_enabled,
+                "cmd_topic": self.manual_cmd_topic,
+                "max_linear_velocity": self.manual_max_linear_velocity,
+                "max_angular_velocity": self.manual_max_angular_velocity,
+                "command": manual_command,
+            },
         }
+
+    def publish_manual_command(self, payload: dict[str, Any]) -> dict[str, Any]:
+        """Publish a normalized manual-control command as a Twist."""
+        if not self.manual_control_enabled:
+            raise PlanningConsoleError("Manual control is disabled.")
+
+        x_value = float(payload.get("x", 0.0))
+        y_value = float(payload.get("y", 0.0))
+        angular_value = float(payload.get("angular", 0.0))
+
+        magnitude = math.hypot(x_value, y_value)
+        if magnitude > 1.0:
+            x_value /= magnitude
+            y_value /= magnitude
+            magnitude = 1.0
+
+        x_value = _clamp(x_value, -1.0, 1.0)
+        y_value = _clamp(y_value, -1.0, 1.0)
+        angular_value = _clamp(angular_value, -1.0, 1.0)
+
+        twist = Twist()
+        twist.linear.x = x_value * self.manual_max_linear_velocity
+        twist.linear.y = y_value * self.manual_max_linear_velocity
+        twist.angular.z = angular_value * self.manual_max_angular_velocity
+
+        active = (
+            abs(twist.linear.x) > 1e-5
+            or abs(twist.linear.y) > 1e-5
+            or abs(twist.angular.z) > 1e-5
+        )
+        command = {
+            "linear_x": twist.linear.x,
+            "linear_y": twist.linear.y,
+            "angular_z": twist.angular.z,
+            "active": active,
+            "stamp": time.time(),
+        }
+
+        self.manual_cmd_pub.publish(twist)
+        with self._lock:
+            self._manual_command = command
+
+        return {"manual": {"command": command}}
 
     def plan_to_goal(self, payload: dict[str, Any]) -> dict[str, Any]:
         """Send a ComputePathToPose request to Nav2."""

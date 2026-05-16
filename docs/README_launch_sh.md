@@ -164,10 +164,21 @@ running it.
   Default: `true`
 - `ENABLE_PLANNING_CONSOLE`
   Default: `true`
+- `MANUAL_CMD_TOPIC`
+  Default: `cmd_vel_manual`
 - `PLANNING_CONSOLE_HOST`
   Default: `127.0.0.1`
 - `PLANNING_CONSOLE_PORT`
   Default: `8080`
+
+### Kiwi drive controller
+
+- `START_KIWI_DRIVE_CONTROLLER`
+  Default: `false`
+- `KIWI_HARDWARE_ENABLED`
+  Default: `true`
+- `KIWI_NAV_CMD_TOPIC`
+  Default: `cmd_vel`
 
 The console can also be launched independently:
 

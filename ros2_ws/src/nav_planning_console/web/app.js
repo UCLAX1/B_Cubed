@@ -6,6 +6,7 @@ const mapStatus = document.getElementById("mapStatus");
 const poseStatus = document.getElementById("poseStatus");
 const planStatus = document.getElementById("planStatus");
 const navStatus = document.getElementById("navStatus");
+const manualStatus = document.getElementById("manualStatus");
 const readout = document.getElementById("readout");
 const navigateButton = document.getElementById("navigateButton");
 const stopButton = document.getElementById("stopButton");
@@ -24,8 +25,33 @@ const robotYaw = document.getElementById("robotYaw");
 const navDistance = document.getElementById("navDistance");
 const navTime = document.getElementById("navTime");
 const navRecoveries = document.getElementById("navRecoveries");
+const manualCanvas = document.getElementById("manualCanvas");
+const manualContext = manualCanvas.getContext("2d");
+const manualCcwButton = document.getElementById("manualCcwButton");
+const manualStopButton = document.getElementById("manualStopButton");
+const manualCwButton = document.getElementById("manualCwButton");
+const manualCommand = document.getElementById("manualCommand");
+const manualWheels = document.getElementById("manualWheels");
 
 const mapImage = new Image();
+const SQRT_3 = Math.sqrt(3);
+const manualWheelDefs = [
+  {
+    key: "topLeft",
+    coord: [-SQRT_3 / 2, 0.5],
+    direction: [-0.5, -SQRT_3 / 2]
+  },
+  {
+    key: "topRight",
+    coord: [SQRT_3 / 2, 0.5],
+    direction: [-0.5, SQRT_3 / 2]
+  },
+  {
+    key: "bottom",
+    coord: [0, -1],
+    direction: [1, 0]
+  }
+];
 
 let state = null;
 let mapRevision = -1;
@@ -34,6 +60,15 @@ let needsFit = true;
 let lastPlanRequest = 0;
 let selectedGoal = null;
 let dragStart = null;
+let manualPointerId = null;
+let manualRotation = 0;
+let manualSendPending = false;
+let manualState = {
+  x: 0,
+  y: 0,
+  angular: 0,
+  wheels: [0, 0, 0]
+};
 let viewport = {
   scale: 1,
   offsetX: 0,
@@ -65,6 +100,13 @@ function seconds(value) {
   return `${value.toFixed(1)} s`;
 }
 
+function compactNumber(value) {
+  if (!Number.isFinite(value)) {
+    return "0.00";
+  }
+  return value.toFixed(2);
+}
+
 function setChip(element, text, className) {
   element.textContent = text;
   element.className = `status-chip ${className || ""}`.trim();
@@ -72,6 +114,224 @@ function setChip(element, text, className) {
 
 function isNavigationActive(status) {
   return status === "sending" || status === "active" || status === "canceling";
+}
+
+function dot2(a, b) {
+  return a[0] * b[0] + a[1] * b[1];
+}
+
+function cross2d(a, b) {
+  return a[0] * b[1] - a[1] * b[0];
+}
+
+function normalIntersection(a, b) {
+  const abCross = cross2d(a, b);
+  if (Math.abs(abCross) < 1e-6) {
+    return a;
+  }
+  const intersectionBScalar = dot2(a, [b[0] - a[0], b[1] - a[1]]) / abCross;
+  return [
+    b[0] + intersectionBScalar * -b[1],
+    b[1] + intersectionBScalar * b[0]
+  ];
+}
+
+function manualWheelPowers(x, y, angular) {
+  return manualWheelDefs.map((wheel) => dot2([x, y], wheel.direction) + angular);
+}
+
+function setManualState(x, y, angular) {
+  const magnitude = Math.hypot(x, y);
+  let nextX = x;
+  let nextY = y;
+  if (magnitude > 1) {
+    nextX /= magnitude;
+    nextY /= magnitude;
+  }
+  manualState = {
+    x: clamp(nextX, -1, 1),
+    y: clamp(nextY, -1, 1),
+    angular: clamp(angular, -1, 1),
+    wheels: manualWheelPowers(
+      clamp(nextX, -1, 1),
+      clamp(nextY, -1, 1),
+      clamp(angular, -1, 1)
+    )
+  };
+  updateManualMetrics();
+  drawManualControl();
+}
+
+function updateManualMetrics() {
+  manualCommand.textContent = [
+    compactNumber(manualState.x),
+    compactNumber(manualState.y),
+    compactNumber(manualState.angular)
+  ].join(", ");
+  manualWheels.textContent = manualState.wheels.map(compactNumber).join(", ");
+}
+
+function manualPointToScreen(point, center, scale) {
+  return {
+    x: center.x + point[0] * scale,
+    y: center.y - point[1] * scale
+  };
+}
+
+function drawManualLine(start, end, color, width = 2) {
+  manualContext.strokeStyle = color;
+  manualContext.lineWidth = width;
+  manualContext.lineCap = "round";
+  manualContext.beginPath();
+  manualContext.moveTo(start.x, start.y);
+  manualContext.lineTo(end.x, end.y);
+  manualContext.stroke();
+}
+
+function drawManualControl() {
+  const width = manualCanvas.width;
+  const height = manualCanvas.height;
+  const center = { x: width * 0.5, y: height * 0.52 };
+  const scale = Math.min(width, height) * 0.36;
+  const velocity = [manualState.x, manualState.y];
+  const wheelVectors = manualWheelDefs.map((wheel, index) => [
+    manualState.wheels[index] * wheel.direction[0],
+    manualState.wheels[index] * wheel.direction[1]
+  ]);
+
+  manualContext.clearRect(0, 0, width, height);
+  manualContext.fillStyle = "#111820";
+  manualContext.fillRect(0, 0, width, height);
+
+  manualContext.strokeStyle = "#f8fafc";
+  manualContext.lineWidth = 2;
+  manualContext.beginPath();
+  manualContext.arc(center.x, center.y, scale, 0, Math.PI * 2);
+  manualContext.stroke();
+
+  manualWheelDefs.forEach((wheel) => {
+    const coord = wheel.coord;
+    const direction = wheel.direction;
+    drawManualLine(
+      manualPointToScreen(
+        [coord[0] - direction[0], coord[1] - direction[1]],
+        center,
+        scale
+      ),
+      manualPointToScreen(
+        [coord[0] + direction[0], coord[1] + direction[1]],
+        center,
+        scale
+      ),
+      "#3b82f6",
+      1
+    );
+  });
+
+  drawManualLine(
+    center,
+    manualPointToScreen(velocity, center, scale),
+    "#ef4444",
+    5
+  );
+
+  wheelVectors.forEach((wheelVector, index) => {
+    const coord = manualWheelDefs[index].coord;
+    drawManualLine(
+      manualPointToScreen(coord, center, scale),
+      manualPointToScreen(
+        [coord[0] + wheelVector[0], coord[1] + wheelVector[1]],
+        center,
+        scale
+      ),
+      "#22c55e",
+      4
+    );
+    drawManualLine(
+      center,
+      manualPointToScreen(wheelVector, center, scale),
+      "#22c55e",
+      3
+    );
+  });
+
+  const intersections = [
+    normalIntersection(wheelVectors[2], wheelVectors[0]),
+    normalIntersection(wheelVectors[0], wheelVectors[1]),
+    normalIntersection(wheelVectors[2], wheelVectors[1])
+  ];
+  manualContext.strokeStyle = "#22d3ee";
+  intersections.forEach((point) => {
+    if (!Number.isFinite(point[0]) || !Number.isFinite(point[1])) {
+      return;
+    }
+    const screenPoint = manualPointToScreen(point, center, scale);
+    manualContext.beginPath();
+    manualContext.arc(screenPoint.x, screenPoint.y, 3, 0, Math.PI * 2);
+    manualContext.stroke();
+  });
+}
+
+async function sendManualCommand(force = false) {
+  if (manualSendPending && !force) {
+    return;
+  }
+  manualSendPending = true;
+  try {
+    const response = await fetch("/api/manual_cmd", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({
+        x: manualState.x,
+        y: manualState.y,
+        angular: manualState.angular
+      })
+    });
+    const payload = await response.json();
+    if (!response.ok || !payload.ok) {
+      throw new Error(payload.error || "Manual command failed.");
+    }
+    setChip(manualStatus, "manual active", "good");
+  } catch (error) {
+    setChip(manualStatus, error.message, "bad");
+  } finally {
+    manualSendPending = false;
+  }
+}
+
+function stopManualCommand() {
+  manualPointerId = null;
+  manualRotation = 0;
+  setManualState(0, 0, 0);
+  sendManualCommand(true);
+  setChip(manualStatus, "manual idle", "");
+}
+
+function manualCommandFromPointer(event) {
+  const rect = manualCanvas.getBoundingClientRect();
+  const x = (event.clientX - rect.left) / rect.width;
+  const y = (event.clientY - rect.top) / rect.height;
+  const centeredX = x * 2 - 1;
+  const centeredY = -(y * 2 - 1);
+  const deadband = 0.04;
+  if (Math.hypot(centeredX, centeredY) < deadband) {
+    return [0, 0];
+  }
+  return [centeredX, centeredY];
+}
+
+function updateManualFromPointer(event) {
+  const [x, y] = manualCommandFromPointer(event);
+  setManualState(x, y, manualRotation);
+  sendManualCommand();
+}
+
+function setManualRotation(direction) {
+  manualRotation = direction;
+  setManualState(manualState.x, manualState.y, manualRotation);
+  sendManualCommand(true);
 }
 
 function resizeCanvas() {
@@ -89,6 +349,7 @@ function resizeCanvas() {
   }
 
   draw();
+  drawManualControl();
 }
 
 function canvasSize() {
@@ -495,6 +756,19 @@ function updateMetrics() {
     ? String(navFeedback.number_of_recoveries)
     : "-";
 
+  const manual = state.manual || {};
+  const localManualActive = (
+    Math.hypot(manualState.x, manualState.y) > 0.01 ||
+    Math.abs(manualState.angular) > 0.01
+  );
+  if (!manual.enabled) {
+    setChip(manualStatus, "manual disabled", "bad");
+  } else if (localManualActive) {
+    setChip(manualStatus, "manual active", "good");
+  } else {
+    setChip(manualStatus, "manual idle", "");
+  }
+
   const canNavigate = Boolean(goal) && points > 0 && !isNavigationActive(navState);
   navigateButton.disabled = !canNavigate;
   stopButton.disabled = !isNavigationActive(navState);
@@ -611,6 +885,59 @@ stopButton.addEventListener("click", () => {
   cancelNavigation();
 });
 
+manualCanvas.addEventListener("pointerdown", (event) => {
+  manualPointerId = event.pointerId;
+  manualCanvas.setPointerCapture(event.pointerId);
+  updateManualFromPointer(event);
+});
+
+manualCanvas.addEventListener("pointermove", (event) => {
+  if (manualPointerId !== event.pointerId) {
+    return;
+  }
+  updateManualFromPointer(event);
+});
+
+manualCanvas.addEventListener("pointerup", (event) => {
+  if (manualPointerId !== event.pointerId) {
+    return;
+  }
+  manualCanvas.releasePointerCapture(event.pointerId);
+  manualPointerId = null;
+  setManualState(0, 0, manualRotation);
+  sendManualCommand(true);
+});
+
+manualCanvas.addEventListener("pointercancel", () => {
+  stopManualCommand();
+});
+
+manualCcwButton.addEventListener("pointerdown", () => {
+  setManualRotation(1);
+});
+
+manualCwButton.addEventListener("pointerdown", () => {
+  setManualRotation(-1);
+});
+
+for (const button of [manualCcwButton, manualCwButton]) {
+  button.addEventListener("pointerup", () => {
+    setManualRotation(0);
+  });
+  button.addEventListener("pointercancel", () => {
+    setManualRotation(0);
+  });
+  button.addEventListener("pointerleave", (event) => {
+    if (event.buttons === 0) {
+      setManualRotation(0);
+    }
+  });
+}
+
+manualStopButton.addEventListener("click", () => {
+  stopManualCommand();
+});
+
 headingMode.addEventListener("change", () => {
   headingInput.disabled = headingMode.value !== "custom";
 });
@@ -621,3 +948,14 @@ headingInput.disabled = true;
 resizeCanvas();
 refreshState();
 setInterval(refreshState, 700);
+setInterval(() => {
+  const active = (
+    manualPointerId !== null ||
+    manualRotation !== 0 ||
+    Math.hypot(manualState.x, manualState.y) > 0.01 ||
+    Math.abs(manualState.angular) > 0.01
+  );
+  if (active) {
+    sendManualCommand();
+  }
+}, 80);

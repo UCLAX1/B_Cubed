@@ -24,6 +24,7 @@ def generate_launch_description() -> LaunchDescription:
     base_frame = LaunchConfiguration("base_frame")
     planner_action_name = LaunchConfiguration("planner_action_name")
     navigator_action_name = LaunchConfiguration("navigator_action_name")
+    manual_cmd_topic = LaunchConfiguration("manual_cmd_topic")
     navigation_plane_z = LaunchConfiguration("navigation_plane_z")
 
     return LaunchDescription(
@@ -42,6 +43,7 @@ def generate_launch_description() -> LaunchDescription:
                 "navigator_action_name",
                 default_value="navigate_to_pose",
             ),
+            DeclareLaunchArgument("manual_cmd_topic", default_value="cmd_vel_manual"),
             DeclareLaunchArgument("navigation_plane_z", default_value="0.0"),
             Node(
                 package="nav_planning_console",
@@ -58,6 +60,7 @@ def generate_launch_description() -> LaunchDescription:
                         "base_frame": base_frame,
                         "planner_action_name": planner_action_name,
                         "navigator_action_name": navigator_action_name,
+                        "manual_cmd_topic": manual_cmd_topic,
                         "navigation_plane_z": ParameterValue(
                             navigation_plane_z,
                             value_type=float,

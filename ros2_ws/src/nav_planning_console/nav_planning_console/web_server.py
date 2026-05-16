@@ -81,6 +81,11 @@ class PlanningConsoleRequestHandler(BaseHTTPRequestHandler):
                 result = self.server.node.cancel_navigation()
                 self._send_json({"ok": True, **result})
                 return
+            if parsed_url.path == "/api/manual_cmd":
+                payload = self._read_json_body()
+                result = self.server.node.publish_manual_command(payload)
+                self._send_json({"ok": True, **result})
+                return
         except PlanningConsoleError as error:
             self._send_json(
                 {"ok": False, "error": str(error)},

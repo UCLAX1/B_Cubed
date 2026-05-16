@@ -7,6 +7,10 @@ nav_planning_console:
     base_frame: base_link
     planner_action_name: compute_path_to_pose
     navigator_action_name: navigate_to_pose
+    manual_cmd_topic: cmd_vel_manual
+    manual_control_enabled: true
+    manual_max_linear_velocity: 0.25
+    manual_max_angular_velocity: 0.50
     planner_id: ""
     planner_server_timeout_sec: 2.0
     navigator_server_timeout_sec: 2.0

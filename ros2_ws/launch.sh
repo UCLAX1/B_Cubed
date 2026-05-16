@@ -80,6 +80,7 @@ PUBLISH_TRACKING_IMAGE="${PUBLISH_TRACKING_IMAGE:-false}"
 ENABLE_NAV2="${ENABLE_NAV2:-false}"
 ENABLE_PLANNER_ONLY="${ENABLE_PLANNER_ONLY:-true}"
 ENABLE_PLANNING_CONSOLE="${ENABLE_PLANNING_CONSOLE:-true}"
+MANUAL_CMD_TOPIC="${MANUAL_CMD_TOPIC:-cmd_vel_manual}"
 PLANNING_CONSOLE_HOST="${PLANNING_CONSOLE_HOST:-127.0.0.1}"
 PLANNING_CONSOLE_PORT="${PLANNING_CONSOLE_PORT:-8080}"
 PLANNING_CONSOLE_URL_HOST="$PLANNING_CONSOLE_HOST"
@@ -89,6 +90,10 @@ fi
 
 START_RVIZ="${START_RVIZ:-false}"
 RVIZ_COMMAND="${RVIZ_COMMAND:-rviz2}"
+
+START_KIWI_DRIVE_CONTROLLER="${START_KIWI_DRIVE_CONTROLLER:-false}"
+KIWI_HARDWARE_ENABLED="${KIWI_HARDWARE_ENABLED:-true}"
+KIWI_NAV_CMD_TOPIC="${KIWI_NAV_CMD_TOPIC:-cmd_vel}"
 
 TOPIC_WAIT_TIMEOUT_SEC="${TOPIC_WAIT_TIMEOUT_SEC:-60}"
 
@@ -363,7 +368,14 @@ Web planning console:
   http://$PLANNING_CONSOLE_URL_HOST:$PLANNING_CONSOLE_PORT/
   Nav2 planner-only enabled: $ENABLE_PLANNER_ONLY
   Full Nav2 enabled: $ENABLE_NAV2
+  manual_cmd_topic=$MANUAL_CMD_TOPIC
   Full Nav2 can be tested later with ENABLE_NAV2=true.
+
+Kiwi drive controller:
+  enabled=$START_KIWI_DRIVE_CONTROLLER
+  hardware_enabled=$KIWI_HARDWARE_ENABLED
+  nav_cmd_topic=$KIWI_NAV_CMD_TOPIC
+  manual_cmd_topic=$MANUAL_CMD_TOPIC
 
 Save commands after the map looks good:
   ros2 service call /slam_toolbox/save_map slam_toolbox/srv/SaveMap "{name: {data: '$MAP_PREFIX'}}"
@@ -495,6 +507,15 @@ if bool_is_true "$START_RVIZ"; then
   run_terminal "rviz2" "$RVIZ_COMMAND"
 fi
 
+if bool_is_true "$START_KIWI_DRIVE_CONTROLLER"; then
+  run_terminal \
+    "kiwi drive controller" \
+    "ros2 launch lowlevelrunner kiwi_drive_controller.launch.py \
+      hardware_enabled:='${KIWI_HARDWARE_ENABLED}' \
+      nav_cmd_topic:='${KIWI_NAV_CMD_TOPIC}' \
+      manual_cmd_topic:='${MANUAL_CMD_TOPIC}'"
+fi
+
 run_terminal \
   "handheld mapping" \
   "ros2 launch depth_processing zed_slam_nav.launch.py \
@@ -504,6 +525,7 @@ run_terminal \
     enable_planning_console:='${ENABLE_PLANNING_CONSOLE}' \
     planning_console_host:='${PLANNING_CONSOLE_HOST}' \
     planning_console_port:='${PLANNING_CONSOLE_PORT}' \
+    manual_cmd_topic:='${MANUAL_CMD_TOPIC}' \
     enable_tracking_node:='true' \
     base_frame:='${BASE_FRAME}' \
     enable_base_adapter:='true' \
@@ -529,6 +551,12 @@ run_terminal \
    echo '  Nav2 planner-only enabled: $ENABLE_PLANNER_ONLY'; \
    echo '  Full Nav2 enabled: $ENABLE_NAV2'; \
    echo '  Full Nav2 can be tested later with ENABLE_NAV2=true.'; \
+   echo '  Manual command topic: $MANUAL_CMD_TOPIC'; \
+   echo; \
+   echo 'Kiwi drive controller:'; \
+   echo '  Enabled: $START_KIWI_DRIVE_CONTROLLER'; \
+   echo '  Hardware enabled: $KIWI_HARDWARE_ENABLED'; \
+   echo '  Nav command topic: $KIWI_NAV_CMD_TOPIC'; \
    echo; \
    echo 'MediaPipe gesture recognition:'; \
    echo '  Result topic: $GESTURE_TOPIC'; \
