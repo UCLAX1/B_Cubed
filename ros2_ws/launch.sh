@@ -42,7 +42,7 @@ BASE_FRAME="${BASE_FRAME:-zed_camera_link}"
 CAMERA_MODEL="${CAMERA_MODEL:-zedm}"
 START_WRAPPER="${START_WRAPPER:-true}"
 ZED_GRAB_RESOLUTION="${ZED_GRAB_RESOLUTION:-VGA}"
-ZED_GRAB_FRAME_RATE="${ZED_GRAB_FRAME_RATE:-15}"
+ZED_GRAB_FRAME_RATE="${ZED_GRAB_FRAME_RATE:-30}"
 ZED_PARAM_OVERRIDES="${ZED_PARAM_OVERRIDES:-general.grab_resolution:=${ZED_GRAB_RESOLUTION};general.grab_frame_rate:=${ZED_GRAB_FRAME_RATE};pos_tracking.pos_tracking_enabled:=true;pos_tracking.area_memory:=true;pos_tracking.two_d_mode:=true;debug.use_pub_timestamps:=true}"
 WRAPPER_LAUNCH="${WRAPPER_LAUNCH:-ros2 launch zed_wrapper zed_camera.launch.py camera_model:=${CAMERA_MODEL} publish_tf:=false publish_map_tf:=false param_overrides:='${ZED_PARAM_OVERRIDES}'}"
 
