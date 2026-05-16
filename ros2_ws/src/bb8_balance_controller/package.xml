@@ -1,0 +1,26 @@
+<?xml version="1.0"?>
+<package format="3">
+  <name>bb8_balance_controller</name>
+  <version>0.1.0</version>
+  <description>Residual balance controller for the B_Cubed kiwi-drive shell robot.</description>
+  <maintainer email="uclax1@example.com">UCLA X1</maintainer>
+  <license>MIT</license>
+
+  <depend>rclpy</depend>
+  <depend>geometry_msgs</depend>
+  <depend>sensor_msgs</depend>
+  <depend>std_msgs</depend>
+  <depend>nav_msgs</depend>
+  <exec_depend>ament_index_python</exec_depend>
+  <exec_depend>launch</exec_depend>
+  <exec_depend>launch_ros</exec_depend>
+
+  <test_depend>ament_copyright</test_depend>
+  <test_depend>ament_flake8</test_depend>
+  <test_depend>ament_pep257</test_depend>
+  <test_depend>python3-pytest</test_depend>
+
+  <export>
+    <build_type>ament_python</build_type>
+  </export>
+</package>
