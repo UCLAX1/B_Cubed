@@ -120,6 +120,7 @@ See these docs for more detail:
 - launches the ZED wrapper
 - waits for the ZED pose, odom, cloud, and gesture image topics
 - starts MediaPipe gesture recognition
+- starts TensorRT person tracking
 - starts `zed_slam_nav.launch.py` in mapping mode
 - opens the web planning console and prints the save commands
 
@@ -133,3 +134,4 @@ Useful environment overrides before running `launch.sh`:
 - `BASE_TO_CAMERA_TRANSLATION=x,y,z`
 - `BASE_TO_CAMERA_RPY=roll,pitch,yaw`
 - `START_GESTURE_RECOGNITION=false`
+- `START_PERSON_TRACKING=false`

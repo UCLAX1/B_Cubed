@@ -4,6 +4,7 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 WS_DIR="$SCRIPT_DIR"
+REPO_DIR="$(cd -- "$WS_DIR/.." && pwd)"
 INSTALL_SETUP="$WS_DIR/install/local_setup.bash"
 
 if ! command -v gnome-terminal >/dev/null 2>&1; then
@@ -42,6 +43,16 @@ SHOW_GESTURE_WINDOW="${SHOW_GESTURE_WINDOW:-false}"
 PUBLISH_GESTURE_ANNOTATED_IMAGE="${PUBLISH_GESTURE_ANNOTATED_IMAGE:-true}"
 GESTURE_TOPIC="${GESTURE_TOPIC:-/gesture_recognition/result}"
 GESTURE_ANNOTATED_IMAGE_TOPIC="${GESTURE_ANNOTATED_IMAGE_TOPIC:-/gesture_recognition/annotated_image/compressed}"
+
+START_PERSON_TRACKING="${START_PERSON_TRACKING:-true}"
+PERSON_TRACKING_IMAGE_TOPIC="${PERSON_TRACKING_IMAGE_TOPIC:-$INPUT_IMAGE_TOPIC}"
+PERSON_TRACKING_ENGINE_PATH="${PERSON_TRACKING_ENGINE_PATH:-$REPO_DIR/models/yolo11n.engine}"
+SHOW_PERSON_TRACKING_WINDOW="${SHOW_PERSON_TRACKING_WINDOW:-false}"
+PUBLISH_PERSON_TRACKING_IMAGE="${PUBLISH_PERSON_TRACKING_IMAGE:-true}"
+PERSON_TRACKING_TOPIC="${PERSON_TRACKING_TOPIC:-/person_tracking/detections}"
+PERSON_TRACKING_ANNOTATED_IMAGE_TOPIC="${PERSON_TRACKING_ANNOTATED_IMAGE_TOPIC:-/person_tracking/annotated_image/compressed}"
+PERSON_TRACKING_CONFIDENCE_THRESHOLD="${PERSON_TRACKING_CONFIDENCE_THRESHOLD:-0.4}"
+PERSON_TRACKING_NMS_THRESHOLD="${PERSON_TRACKING_NMS_THRESHOLD:-0.45}"
 
 ENABLE_TRACKING_VISUALIZATION="${ENABLE_TRACKING_VISUALIZATION:-false}"
 SHOW_TRACKING_WINDOW="${SHOW_TRACKING_WINDOW:-false}"
@@ -209,6 +220,12 @@ MediaPipe gesture recognition:
   result_topic=$GESTURE_TOPIC
   annotated_image_topic=$GESTURE_ANNOTATED_IMAGE_TOPIC
 
+Person tracking:
+  enabled=$START_PERSON_TRACKING
+  image_topic=$PERSON_TRACKING_IMAGE_TOPIC
+  result_topic=$PERSON_TRACKING_TOPIC
+  annotated_image_topic=$PERSON_TRACKING_ANNOTATED_IMAGE_TOPIC
+
 Web planning console:
   http://$PLANNING_CONSOLE_URL_HOST:$PLANNING_CONSOLE_PORT/
   Nav2 planner-only enabled: $ENABLE_PLANNER_ONLY
@@ -250,6 +267,12 @@ missing_topics() {
   if bool_is_true "$START_GESTURE_RECOGNITION"; then
     if ! grep -Fxq "$GESTURE_IMAGE_TOPIC" <<<"$available_topics"; then
       missing+=("$GESTURE_IMAGE_TOPIC")
+    fi
+  fi
+
+  if bool_is_true "$START_PERSON_TRACKING"; then
+    if ! grep -Fxq "$PERSON_TRACKING_IMAGE_TOPIC" <<<"$available_topics"; then
+      missing+=("$PERSON_TRACKING_IMAGE_TOPIC")
     fi
   fi
 
@@ -317,6 +340,22 @@ if bool_is_true "$START_GESTURE_RECOGNITION"; then
     "$gesture_launch_command"
 fi
 
+if bool_is_true "$START_PERSON_TRACKING"; then
+  person_tracking_launch_command="ros2 launch person_tracking person_tracking.launch.py"
+  person_tracking_launch_command+=" $(launch_arg image_topic "$PERSON_TRACKING_IMAGE_TOPIC")"
+  person_tracking_launch_command+=" $(launch_arg engine_path "$PERSON_TRACKING_ENGINE_PATH")"
+  person_tracking_launch_command+=" $(launch_arg show_window "$SHOW_PERSON_TRACKING_WINDOW")"
+  person_tracking_launch_command+=" $(launch_arg publish_annotated_image "$PUBLISH_PERSON_TRACKING_IMAGE")"
+  person_tracking_launch_command+=" $(launch_arg detection_topic "$PERSON_TRACKING_TOPIC")"
+  person_tracking_launch_command+=" $(launch_arg annotated_image_topic "$PERSON_TRACKING_ANNOTATED_IMAGE_TOPIC")"
+  person_tracking_launch_command+=" $(launch_arg confidence_threshold "$PERSON_TRACKING_CONFIDENCE_THRESHOLD")"
+  person_tracking_launch_command+=" $(launch_arg nms_threshold "$PERSON_TRACKING_NMS_THRESHOLD")"
+
+  run_terminal \
+    "person tracking" \
+    "$person_tracking_launch_command"
+fi
+
 if bool_is_true "$START_RVIZ"; then
   run_terminal "rviz2" "$RVIZ_COMMAND"
 fi
@@ -330,7 +369,7 @@ run_terminal \
     enable_planning_console:='${ENABLE_PLANNING_CONSOLE}' \
     planning_console_host:='${PLANNING_CONSOLE_HOST}' \
     planning_console_port:='${PLANNING_CONSOLE_PORT}' \
-    enable_tracking_node:='false' \
+    enable_tracking_node:='true' \
     base_frame:='${BASE_FRAME}' \
     enable_base_adapter:='true' \
     base_to_camera_translation:='${BASE_TO_CAMERA_TRANSLATION}' \
@@ -359,6 +398,10 @@ run_terminal \
    echo 'MediaPipe gesture recognition:'; \
    echo '  Result topic: $GESTURE_TOPIC'; \
    echo '  Annotated image topic: $GESTURE_ANNOTATED_IMAGE_TOPIC'; \
+   echo; \
+   echo 'Person tracking:'; \
+   echo '  Result topic: $PERSON_TRACKING_TOPIC'; \
+   echo '  Annotated image topic: $PERSON_TRACKING_ANNOTATED_IMAGE_TOPIC'; \
    echo; \
    echo 'Save commands:'; \
    echo \"ros2 service call /slam_toolbox/save_map slam_toolbox/srv/SaveMap \\\"{name: {data: '$MAP_PREFIX'}}\\\"\"; \

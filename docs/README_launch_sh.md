@@ -22,6 +22,7 @@ By default the script launches these pieces in separate terminals:
 
 - the ZED wrapper
 - `gesture_recognition gesture_recognition.launch.py`
+- `person_tracking person_tracking.launch.py`
 - `depth_processing zed_slam_nav.launch.py` in `mapping` mode
 - the standalone `nav_planning_console` web planning console
 - an instructions terminal
@@ -40,8 +41,12 @@ When `START_GESTURE_RECOGNITION=true`, it also waits for:
 
 - `/zed/zed_node/rgb/color/rect/image/compressed`
 
+When `START_PERSON_TRACKING=true`, it waits for:
+
+- `/zed/zed_node/rgb/color/rect/image/compressed`
+
 This keeps MediaPipe gesture recognition from launching before the ZED image
-feed exists.
+feed exists, and does the same for the person detector.
 
 ## Basic usage
 
@@ -107,6 +112,23 @@ running it.
   Default: `/gesture_recognition/result`
 - `GESTURE_ANNOTATED_IMAGE_TOPIC`
   Default: `/gesture_recognition/annotated_image/compressed`
+
+### Person tracking
+
+- `START_PERSON_TRACKING`
+  Default: `true`
+- `PERSON_TRACKING_IMAGE_TOPIC`
+  Default: same as `INPUT_IMAGE_TOPIC`
+- `PERSON_TRACKING_ENGINE_PATH`
+  Default: `../models/yolo11n.engine` relative to `ros2_ws`
+- `SHOW_PERSON_TRACKING_WINDOW`
+  Default: `false`
+- `PUBLISH_PERSON_TRACKING_IMAGE`
+  Default: `true`
+- `PERSON_TRACKING_TOPIC`
+  Default: `/person_tracking/detections`
+- `PERSON_TRACKING_ANNOTATED_IMAGE_TOPIC`
+  Default: `/person_tracking/annotated_image/compressed`
 
 ### Planning and visualization
 
