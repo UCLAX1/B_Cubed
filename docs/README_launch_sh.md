@@ -89,6 +89,9 @@ running it.
   Use this if the ZED wrapper is already running.
 - `CAMERA_MODEL`
   Default: `zedm`
+- `ZED_PARAM_OVERRIDES`
+  Default:
+  `general.grab_resolution:=HD720;pos_tracking.pos_tracking_enabled:=true;pos_tracking.area_memory:=true;pos_tracking.two_d_mode:=true;debug.use_pub_timestamps:=true`
 - `WRAPPER_LAUNCH`
   Full override for the wrapper launch command.
 - `TOPIC_WAIT_TIMEOUT_SEC`

@@ -25,7 +25,8 @@ BASE_FRAME="${BASE_FRAME:-zed_camera_link}"
 
 CAMERA_MODEL="${CAMERA_MODEL:-zedm}"
 START_WRAPPER="${START_WRAPPER:-true}"
-WRAPPER_LAUNCH="${WRAPPER_LAUNCH:-ros2 launch zed_wrapper zed_camera.launch.py camera_model:=${CAMERA_MODEL} publish_tf:=false publish_map_tf:=false param_overrides:='pos_tracking.two_d_mode:=true;debug.use_pub_timestamps:=true'}"
+ZED_PARAM_OVERRIDES="${ZED_PARAM_OVERRIDES:-general.grab_resolution:=HD720;pos_tracking.pos_tracking_enabled:=true;pos_tracking.area_memory:=true;pos_tracking.two_d_mode:=true;debug.use_pub_timestamps:=true}"
+WRAPPER_LAUNCH="${WRAPPER_LAUNCH:-ros2 launch zed_wrapper zed_camera.launch.py camera_model:=${CAMERA_MODEL} publish_tf:=false publish_map_tf:=false param_overrides:='${ZED_PARAM_OVERRIDES}'}"
 
 INPUT_POSE_TOPIC="${INPUT_POSE_TOPIC:-/zed/zed_node/pose}"
 INPUT_POSE_COV_TOPIC="${INPUT_POSE_COV_TOPIC:-/zed/zed_node/pose_with_covariance}"
@@ -209,6 +210,12 @@ Expected upstream wrapper topics:
   $INPUT_POSE_TOPIC
   $INPUT_ODOM_TOPIC
   $CLOUD_TOPIC
+
+ZED wrapper:
+  camera_model=$CAMERA_MODEL
+  publish_tf=false
+  publish_map_tf=false
+  param_overrides=$ZED_PARAM_OVERRIDES
 
 Optional upstream wrapper topics:
   $INPUT_POSE_COV_TOPIC

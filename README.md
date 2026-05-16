@@ -133,5 +133,6 @@ Useful environment overrides before running `launch.sh`:
 - `MAP_OUTPUT_DIR=/home/jetson-nano-x1/Documents/B_Cubed/maps`
 - `BASE_TO_CAMERA_TRANSLATION=x,y,z`
 - `BASE_TO_CAMERA_RPY=roll,pitch,yaw`
+- `ZED_PARAM_OVERRIDES='general.grab_resolution:=HD720;pos_tracking.pos_tracking_enabled:=true;pos_tracking.area_memory:=true;pos_tracking.two_d_mode:=true;debug.use_pub_timestamps:=true'`
 - `START_GESTURE_RECOGNITION=false`
 - `START_PERSON_TRACKING=false`
