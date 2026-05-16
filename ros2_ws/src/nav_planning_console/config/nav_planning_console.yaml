@@ -13,3 +13,8 @@ nav_planning_console:
     planning_timeout_sec: 10.0
     navigation_plane_z: 0.0
     pose_update_period_sec: 0.2
+    start_pose_rescue_enabled: true
+    start_pose_rescue_radius: 0.50
+    start_pose_rescue_clearance: 0.25
+    start_pose_occupied_threshold: 65
+    start_pose_unknown_is_occupied: false

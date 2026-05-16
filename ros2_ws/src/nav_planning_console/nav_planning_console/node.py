@@ -188,6 +188,178 @@ def _point_in_map_bounds(map_msg: OccupancyGrid, x_value: float, y_value: float)
     )
 
 
+def _world_to_map_cell(
+    map_msg: OccupancyGrid,
+    x_value: float,
+    y_value: float,
+) -> tuple[int, int] | None:
+    """Convert a world point to integer map-cell indices."""
+    if map_msg.info.resolution <= 0.0:
+        return None
+    grid_x, grid_y = _world_to_map_grid(map_msg, x_value, y_value)
+    cell_x = math.floor(grid_x)
+    cell_y = math.floor(grid_y)
+    if (
+        cell_x < 0
+        or cell_y < 0
+        or cell_x >= int(map_msg.info.width)
+        or cell_y >= int(map_msg.info.height)
+    ):
+        return None
+    return int(cell_x), int(cell_y)
+
+
+def _map_cell_to_world(
+    map_msg: OccupancyGrid,
+    cell_x: int,
+    cell_y: int,
+) -> tuple[float, float]:
+    """Convert map-cell indices to the world point at the cell center."""
+    origin = map_msg.info.origin
+    yaw = _yaw_from_quaternion(origin.orientation)
+    resolution = float(map_msg.info.resolution)
+    map_x = (float(cell_x) + 0.5) * resolution
+    map_y = (float(cell_y) + 0.5) * resolution
+    cos_yaw = math.cos(yaw)
+    sin_yaw = math.sin(yaw)
+    return (
+        float(origin.position.x) + cos_yaw * map_x - sin_yaw * map_y,
+        float(origin.position.y) + sin_yaw * map_x + cos_yaw * map_y,
+    )
+
+
+def _cell_occupancy(map_msg: OccupancyGrid, cell_x: int, cell_y: int) -> int | None:
+    """Return the occupancy value for a map cell, or None when out of bounds."""
+    width = int(map_msg.info.width)
+    height = int(map_msg.info.height)
+    if cell_x < 0 or cell_y < 0 or cell_x >= width or cell_y >= height:
+        return None
+    index = cell_y * width + cell_x
+    if index < 0 or index >= len(map_msg.data):
+        return None
+    return int(map_msg.data[index])
+
+
+def _cell_is_free(
+    map_msg: OccupancyGrid,
+    cell_x: int,
+    cell_y: int,
+    occupied_threshold: int,
+    treat_unknown_as_occupied: bool,
+) -> bool:
+    """Return whether a map cell can be used as a planner start cell."""
+    occupancy = _cell_occupancy(map_msg, cell_x, cell_y)
+    if occupancy is None:
+        return False
+    if occupancy < 0:
+        return not treat_unknown_as_occupied
+    return occupancy < occupied_threshold
+
+
+def _cell_has_clearance(
+    map_msg: OccupancyGrid,
+    cell_x: int,
+    cell_y: int,
+    clearance_cells: int,
+    occupied_threshold: int,
+    treat_unknown_as_occupied: bool,
+) -> bool:
+    """Return whether a cell is far enough from occupied cells."""
+    if not _cell_is_free(
+        map_msg,
+        cell_x,
+        cell_y,
+        occupied_threshold,
+        treat_unknown_as_occupied,
+    ):
+        return False
+
+    if clearance_cells <= 0:
+        return True
+
+    radius_squared = clearance_cells * clearance_cells
+    for dy in range(-clearance_cells, clearance_cells + 1):
+        for dx in range(-clearance_cells, clearance_cells + 1):
+            if dx * dx + dy * dy > radius_squared:
+                continue
+            if not _cell_is_free(
+                map_msg,
+                cell_x + dx,
+                cell_y + dy,
+                occupied_threshold,
+                treat_unknown_as_occupied,
+            ):
+                return False
+    return True
+
+
+def _find_nearest_free_start_pose(
+    map_msg: OccupancyGrid,
+    start_pose: dict[str, Any],
+    search_radius_m: float,
+    clearance_m: float,
+    occupied_threshold: int,
+    treat_unknown_as_occupied: bool,
+) -> tuple[dict[str, Any] | None, float]:
+    """Find the nearest nearby free start pose for Nav2 planning."""
+    start_cell = _world_to_map_cell(
+        map_msg,
+        float(start_pose["x"]),
+        float(start_pose["y"]),
+    )
+    if start_cell is None or map_msg.info.resolution <= 0.0:
+        return None, 0.0
+
+    resolution = float(map_msg.info.resolution)
+    search_cells = max(0, int(math.ceil(search_radius_m / resolution)))
+    clearance_cells = max(0, int(math.ceil(clearance_m / resolution)))
+    start_x, start_y = start_cell
+
+    if _cell_has_clearance(
+        map_msg,
+        start_x,
+        start_y,
+        clearance_cells,
+        occupied_threshold,
+        treat_unknown_as_occupied,
+    ):
+        return dict(start_pose), 0.0
+
+    candidate_offsets = []
+    for dy in range(-search_cells, search_cells + 1):
+        for dx in range(-search_cells, search_cells + 1):
+            distance_cells_squared = dx * dx + dy * dy
+            if distance_cells_squared > search_cells * search_cells:
+                continue
+            candidate_offsets.append((distance_cells_squared, dx, dy))
+    candidate_offsets.sort()
+
+    for _, dx, dy in candidate_offsets:
+        cell_x = start_x + dx
+        cell_y = start_y + dy
+        if not _cell_has_clearance(
+            map_msg,
+            cell_x,
+            cell_y,
+            clearance_cells,
+            occupied_threshold,
+            treat_unknown_as_occupied,
+        ):
+            continue
+
+        x_value, y_value = _map_cell_to_world(map_msg, cell_x, cell_y)
+        distance_m = math.hypot(
+            x_value - float(start_pose["x"]),
+            y_value - float(start_pose["y"]),
+        )
+        adjusted_pose = dict(start_pose)
+        adjusted_pose["x"] = x_value
+        adjusted_pose["y"] = y_value
+        return adjusted_pose, distance_m
+
+    return None, 0.0
+
+
 class NavPlanningConsoleNode(Node):
     """Bridge ROS map, TF, and Nav2 planning into a local web console."""
 
@@ -221,6 +393,23 @@ class NavPlanningConsoleNode(Node):
         )
         self.pose_update_period_sec = float(
             self.get_parameter("pose_update_period_sec").value
+        )
+        self.start_pose_rescue_enabled = bool(
+            self.get_parameter("start_pose_rescue_enabled").value
+        )
+        self.start_pose_rescue_radius = max(
+            0.0,
+            float(self.get_parameter("start_pose_rescue_radius").value),
+        )
+        self.start_pose_rescue_clearance = max(
+            0.0,
+            float(self.get_parameter("start_pose_rescue_clearance").value),
+        )
+        self.start_pose_occupied_threshold = int(
+            self.get_parameter("start_pose_occupied_threshold").value
+        )
+        self.start_pose_unknown_is_occupied = bool(
+            self.get_parameter("start_pose_unknown_is_occupied").value
         )
         static_dir_param = str(self.get_parameter("static_dir").value)
         self.static_dir = self._resolve_static_dir(static_dir_param)
@@ -312,6 +501,11 @@ class NavPlanningConsoleNode(Node):
         self.declare_parameter("planning_timeout_sec", 10.0)
         self.declare_parameter("navigation_plane_z", 0.0)
         self.declare_parameter("pose_update_period_sec", 0.2)
+        self.declare_parameter("start_pose_rescue_enabled", True)
+        self.declare_parameter("start_pose_rescue_radius", 0.50)
+        self.declare_parameter("start_pose_rescue_clearance", 0.25)
+        self.declare_parameter("start_pose_occupied_threshold", 65)
+        self.declare_parameter("start_pose_unknown_is_occupied", False)
         self.declare_parameter("static_dir", "")
 
     def destroy_node(self) -> bool:
@@ -457,6 +651,7 @@ class NavPlanningConsoleNode(Node):
         x_value = float(payload["x"])
         y_value = float(payload["y"])
         yaw = payload.get("yaw")
+        start_pose_adjustment: dict[str, Any] | None = None
         with self._lock:
             map_msg = self._map_msg
             start_pose = dict(self._pose) if self._pose is not None else None
@@ -480,6 +675,46 @@ class NavPlanningConsoleNode(Node):
             message = "Robot pose is outside the current map bounds."
             self._set_planner_error(message)
             raise PlanningConsoleError(message)
+        if start_pose is not None and self.start_pose_rescue_enabled:
+            adjusted_start_pose, adjustment_distance = _find_nearest_free_start_pose(
+                map_msg,
+                start_pose,
+                self.start_pose_rescue_radius,
+                self.start_pose_rescue_clearance,
+                self.start_pose_occupied_threshold,
+                self.start_pose_unknown_is_occupied,
+            )
+            if adjusted_start_pose is None:
+                message = (
+                    "Robot pose is inside or too close to an obstacle, and no "
+                    "free planning start was found within "
+                    f"{self.start_pose_rescue_radius:.2f} m."
+                )
+                self._set_planner_error(message)
+                raise PlanningConsoleError(message)
+            if adjustment_distance > 1e-6:
+                start_pose_adjustment = {
+                    "original": {
+                        "x": float(start_pose["x"]),
+                        "y": float(start_pose["y"]),
+                        "z": float(start_pose.get("z", self.navigation_plane_z)),
+                        "yaw": float(start_pose["yaw"]),
+                    },
+                    "adjusted": {
+                        "x": float(adjusted_start_pose["x"]),
+                        "y": float(adjusted_start_pose["y"]),
+                        "z": float(
+                            adjusted_start_pose.get("z", self.navigation_plane_z)
+                        ),
+                        "yaw": float(adjusted_start_pose["yaw"]),
+                    },
+                    "distance_m": adjustment_distance,
+                }
+                start_pose = adjusted_start_pose
+                self.get_logger().warning(
+                    "Planner start pose was inside or too close to an obstacle; "
+                    f"using nearest free start {adjustment_distance:.2f} m away."
+                )
 
         with self._lock:
             self._goal = {
@@ -488,7 +723,13 @@ class NavPlanningConsoleNode(Node):
                 "z": self.navigation_plane_z,
                 "yaw": yaw_value,
             }
-            self._planner_status = "planning"
+            if start_pose_adjustment is None:
+                self._planner_status = "planning"
+            else:
+                self._planner_status = (
+                    "planning "
+                    f"(start shifted {start_pose_adjustment['distance_m']:.2f} m)"
+                )
             self._planner_error = ""
 
         if not self.planner_client.wait_for_server(
@@ -561,9 +802,13 @@ class NavPlanningConsoleNode(Node):
             self._path_points = path_points
             self._path_revision += 1
             self._planner_status = f"planned {len(path_points)} poses"
+            if start_pose_adjustment is not None:
+                self._planner_status += (
+                    f" (start shifted {start_pose_adjustment['distance_m']:.2f} m)"
+                )
             self._planner_error = ""
 
-        return {
+        result = {
             "goal": {
                 "x": x_value,
                 "y": y_value,
@@ -577,6 +822,9 @@ class NavPlanningConsoleNode(Node):
             },
             "planning_time_sec": planning_time_sec,
         }
+        if start_pose_adjustment is not None:
+            result["start_pose_adjustment"] = start_pose_adjustment
+        return result
 
     def clear_path(self) -> None:
         """Clear the cached path and goal overlays."""

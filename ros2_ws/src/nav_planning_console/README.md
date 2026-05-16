@@ -11,3 +11,13 @@ ros2 launch nav_planning_console nav_planning_console.launch.py
 
 The ROS bridge node lives in `nav_planning_console/node.py`. Static browser
 assets live in `web/` and are installed into the package share directory.
+
+When the live robot/camera pose falls inside an occupied map cell, the console
+can adjust only the planner start pose to the nearest nearby free cell before
+calling `ComputePathToPose`. Tune that behavior with:
+
+- `start_pose_rescue_enabled`
+- `start_pose_rescue_radius`
+- `start_pose_rescue_clearance`
+- `start_pose_occupied_threshold`
+- `start_pose_unknown_is_occupied`
