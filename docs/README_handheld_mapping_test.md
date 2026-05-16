@@ -26,15 +26,16 @@ That script lives at
 1. builds the workspace
 2. starts the ZED wrapper in a new terminal by default
 3. waits until the required wrapper topics appear
-4. starts MediaPipe gesture recognition on the ZED color feed
-5. launches `zed_slam_nav.launch.py` in `mapping` mode with:
+4. launches `zed_slam_nav.launch.py` in `mapping` mode with:
    - `enable_nav2:=false`
    - `base_frame:=zed_camera_link`
    - `base_to_camera_translation:=0.0,0.0,0.0`
    - `base_to_camera_rpy:=0.0,0.0,0.0`
+5. opens the save-command instructions terminal
 
-It also opens a small instructions terminal with the exact save commands for the
-current run.
+The optional MediaPipe gesture recognition and TensorRT person tracking pieces
+are disabled by default on the Jetson. Planner-only Nav2 is enabled by default
+when the required Nav2 packages are installed.
 
 ## Why the zero offset matters
 
@@ -96,8 +97,8 @@ export CLOUD_TOPIC="/my_zed/cloud"
 - `REQUIRE_POSE_COV_TOPIC=true`
   Only use this if you specifically want the launcher to wait for a real
   covariance topic instead of allowing `zed_tracking` to synthesize one.
-- `START_GESTURE_RECOGNITION=false`
-  Disables the MediaPipe gesture recognition terminal.
+- `START_GESTURE_RECOGNITION=true`
+  Enables the MediaPipe gesture recognition terminal.
 - `GESTURE_IMAGE_TOPIC=/zed/zed_node/rgb/color/rect/image/compressed`
   Overrides the image topic used by MediaPipe gesture recognition.
 - `GESTURE_TOPIC=/gesture_recognition/result`
@@ -106,6 +107,12 @@ export CLOUD_TOPIC="/my_zed/cloud"
   Opens a plain `rviz2` window in another terminal.
 - `RVIZ_COMMAND="rviz2"`
   Lets you replace the RViz command if you prefer a custom one.
+- `LAUNCH_MAX_CORES=1`
+  Restricts launched terminals to one CPU core if the Jetson is under pressure.
+- `BUILD_PARALLEL_WORKERS=2`
+  Lowers build parallelism if compile memory use becomes a problem.
+- `LAUNCH_MEMORY_LIMIT_MB=3072`
+  Adds a hard virtual-memory cap. Use carefully with ZED/CUDA processes.
 
 ## What to look at in RViz
 

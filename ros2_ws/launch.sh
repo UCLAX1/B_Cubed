@@ -15,6 +15,22 @@ fi
 NPROC_VALUE="$(command -v nproc >/dev/null 2>&1 && nproc || echo 4)"
 SESSION_STAMP="$(date +%Y%m%d_%H%M%S)"
 
+DEFAULT_LAUNCH_MAX_CORES="$NPROC_VALUE"
+if (( DEFAULT_LAUNCH_MAX_CORES > 4 )); then
+  DEFAULT_LAUNCH_MAX_CORES=4
+fi
+DEFAULT_BUILD_PARALLEL_WORKERS="$DEFAULT_LAUNCH_MAX_CORES"
+
+BUILD_PARALLEL_WORKERS="${BUILD_PARALLEL_WORKERS:-$DEFAULT_BUILD_PARALLEL_WORKERS}"
+LAUNCH_MAX_CORES="${LAUNCH_MAX_CORES:-$DEFAULT_LAUNCH_MAX_CORES}"
+LAUNCH_CPU_SET="${LAUNCH_CPU_SET:-}"
+LAUNCH_THREAD_LIMIT="${LAUNCH_THREAD_LIMIT:-2}"
+LAUNCH_NICE="${LAUNCH_NICE:-10}"
+LAUNCH_IONICE_PRIORITY="${LAUNCH_IONICE_PRIORITY:-7}"
+LAUNCH_MEMORY_LIMIT_MB="${LAUNCH_MEMORY_LIMIT_MB:-0}"
+LAUNCH_MEMORY_LIMIT_KB=0
+LAUNCH_MEMORY_LIMIT_DISPLAY="disabled"
+
 MAP_OUTPUT_DIR="${MAP_OUTPUT_DIR:-$WS_DIR/maps}"
 MAP_SESSION_NAME="${MAP_SESSION_NAME:-handheld_${SESSION_STAMP}}"
 MAP_PREFIX="${MAP_PREFIX:-$MAP_OUTPUT_DIR/$MAP_SESSION_NAME}"
@@ -25,7 +41,9 @@ BASE_FRAME="${BASE_FRAME:-zed_camera_link}"
 
 CAMERA_MODEL="${CAMERA_MODEL:-zedm}"
 START_WRAPPER="${START_WRAPPER:-true}"
-ZED_PARAM_OVERRIDES="${ZED_PARAM_OVERRIDES:-general.grab_resolution:=HD720;pos_tracking.pos_tracking_enabled:=true;pos_tracking.area_memory:=true;pos_tracking.two_d_mode:=true;debug.use_pub_timestamps:=true}"
+ZED_GRAB_RESOLUTION="${ZED_GRAB_RESOLUTION:-VGA}"
+ZED_GRAB_FRAME_RATE="${ZED_GRAB_FRAME_RATE:-15}"
+ZED_PARAM_OVERRIDES="${ZED_PARAM_OVERRIDES:-general.grab_resolution:=${ZED_GRAB_RESOLUTION};general.grab_frame_rate:=${ZED_GRAB_FRAME_RATE};pos_tracking.pos_tracking_enabled:=true;pos_tracking.area_memory:=true;pos_tracking.two_d_mode:=true;debug.use_pub_timestamps:=true}"
 WRAPPER_LAUNCH="${WRAPPER_LAUNCH:-ros2 launch zed_wrapper zed_camera.launch.py camera_model:=${CAMERA_MODEL} publish_tf:=false publish_map_tf:=false param_overrides:='${ZED_PARAM_OVERRIDES}'}"
 
 INPUT_POSE_TOPIC="${INPUT_POSE_TOPIC:-/zed/zed_node/pose}"
@@ -36,20 +54,20 @@ INPUT_IMAGE_IS_COMPRESSED="${INPUT_IMAGE_IS_COMPRESSED:-true}"
 CLOUD_TOPIC="${CLOUD_TOPIC:-/zed/zed_node/point_cloud/cloud_registered}"
 REQUIRE_POSE_COV_TOPIC="${REQUIRE_POSE_COV_TOPIC:-false}"
 
-START_GESTURE_RECOGNITION="${START_GESTURE_RECOGNITION:-true}"
+START_GESTURE_RECOGNITION="${START_GESTURE_RECOGNITION:-false}"
 GESTURE_IMAGE_TOPIC="${GESTURE_IMAGE_TOPIC:-$INPUT_IMAGE_TOPIC}"
 GESTURE_IMAGE_IS_COMPRESSED="${GESTURE_IMAGE_IS_COMPRESSED:-$INPUT_IMAGE_IS_COMPRESSED}"
 GESTURE_MODEL_PATH="${GESTURE_MODEL_PATH:-}"
 SHOW_GESTURE_WINDOW="${SHOW_GESTURE_WINDOW:-false}"
-PUBLISH_GESTURE_ANNOTATED_IMAGE="${PUBLISH_GESTURE_ANNOTATED_IMAGE:-true}"
+PUBLISH_GESTURE_ANNOTATED_IMAGE="${PUBLISH_GESTURE_ANNOTATED_IMAGE:-false}"
 GESTURE_TOPIC="${GESTURE_TOPIC:-/gesture_recognition/result}"
 GESTURE_ANNOTATED_IMAGE_TOPIC="${GESTURE_ANNOTATED_IMAGE_TOPIC:-/gesture_recognition/annotated_image/compressed}"
 
-START_PERSON_TRACKING="${START_PERSON_TRACKING:-true}"
+START_PERSON_TRACKING="${START_PERSON_TRACKING:-false}"
 PERSON_TRACKING_IMAGE_TOPIC="${PERSON_TRACKING_IMAGE_TOPIC:-$INPUT_IMAGE_TOPIC}"
 PERSON_TRACKING_ENGINE_PATH="${PERSON_TRACKING_ENGINE_PATH:-$REPO_DIR/models/yolo11n.engine}"
 SHOW_PERSON_TRACKING_WINDOW="${SHOW_PERSON_TRACKING_WINDOW:-false}"
-PUBLISH_PERSON_TRACKING_IMAGE="${PUBLISH_PERSON_TRACKING_IMAGE:-true}"
+PUBLISH_PERSON_TRACKING_IMAGE="${PUBLISH_PERSON_TRACKING_IMAGE:-false}"
 PERSON_TRACKING_TOPIC="${PERSON_TRACKING_TOPIC:-/person_tracking/detections}"
 PERSON_TRACKING_ANNOTATED_IMAGE_TOPIC="${PERSON_TRACKING_ANNOTATED_IMAGE_TOPIC:-/person_tracking/annotated_image/compressed}"
 PERSON_TRACKING_CONFIDENCE_THRESHOLD="${PERSON_TRACKING_CONFIDENCE_THRESHOLD:-0.4}"
@@ -79,11 +97,30 @@ mkdir -p "$MAP_OUTPUT_DIR"
 run_terminal() {
   local title="$1"
   local command="$2"
+  local command_with_shell
+  local quoted_command
+
+  command_with_shell="${command}
+exec bash"
+  quoted_command="$(printf '%q' "$command_with_shell")"
 
   gnome-terminal --title="$title" -- bash -lc "
     source '$INSTALL_SETUP'
-    $command
-    exec bash
+    export OMP_NUM_THREADS='$LAUNCH_THREAD_LIMIT'
+    export OPENBLAS_NUM_THREADS='$LAUNCH_THREAD_LIMIT'
+    export MKL_NUM_THREADS='$LAUNCH_THREAD_LIMIT'
+    export NUMEXPR_NUM_THREADS='$LAUNCH_THREAD_LIMIT'
+    export OPENCV_FOR_THREADS_NUM='$LAUNCH_THREAD_LIMIT'
+    export VECLIB_MAXIMUM_THREADS='$LAUNCH_THREAD_LIMIT'
+    export MALLOC_ARENA_MAX=2
+    export CUDA_MODULE_LOADING=LAZY
+    if [[ '$LAUNCH_MEMORY_LIMIT_KB' != '0' ]]; then
+      ulimit -v '$LAUNCH_MEMORY_LIMIT_KB'
+    fi
+    exec ionice -c 2 -n '$LAUNCH_IONICE_PRIORITY' \
+      nice -n '$LAUNCH_NICE' \
+      taskset -c '$LAUNCH_CPU_SET' \
+      bash -lc $quoted_command
   "
 }
 
@@ -101,6 +138,87 @@ bool_is_true() {
     1|true|yes|on) return 0 ;;
     *) return 1 ;;
   esac
+}
+
+sanitize_nonnegative_int() {
+  local variable_name="$1"
+  local default_value="$2"
+  local value="${!variable_name}"
+
+  if ! [[ "$value" =~ ^[0-9]+$ ]]; then
+    printf -v "$variable_name" '%s' "$default_value"
+  fi
+}
+
+configure_resource_limits() {
+  sanitize_nonnegative_int BUILD_PARALLEL_WORKERS "$DEFAULT_BUILD_PARALLEL_WORKERS"
+  sanitize_nonnegative_int LAUNCH_MAX_CORES "$DEFAULT_LAUNCH_MAX_CORES"
+  sanitize_nonnegative_int LAUNCH_THREAD_LIMIT 2
+  sanitize_nonnegative_int LAUNCH_NICE 10
+  sanitize_nonnegative_int LAUNCH_IONICE_PRIORITY 7
+  sanitize_nonnegative_int LAUNCH_MEMORY_LIMIT_MB 0
+
+  if (( BUILD_PARALLEL_WORKERS < 1 )); then
+    BUILD_PARALLEL_WORKERS=1
+  fi
+  if (( BUILD_PARALLEL_WORKERS > NPROC_VALUE )); then
+    BUILD_PARALLEL_WORKERS="$NPROC_VALUE"
+  fi
+
+  if (( LAUNCH_MAX_CORES < 1 )); then
+    LAUNCH_MAX_CORES=1
+  fi
+  if (( LAUNCH_MAX_CORES > NPROC_VALUE )); then
+    LAUNCH_MAX_CORES="$NPROC_VALUE"
+  fi
+  if [[ -z "${LAUNCH_CPU_SET//[[:space:]]/}" ]]; then
+    if (( LAUNCH_MAX_CORES == 1 )); then
+      LAUNCH_CPU_SET="0"
+    else
+      LAUNCH_CPU_SET="0-$((LAUNCH_MAX_CORES - 1))"
+    fi
+  fi
+
+  if (( LAUNCH_THREAD_LIMIT < 1 )); then
+    LAUNCH_THREAD_LIMIT=1
+  fi
+  if (( LAUNCH_NICE > 19 )); then
+    LAUNCH_NICE=19
+  fi
+  if (( LAUNCH_IONICE_PRIORITY > 7 )); then
+    LAUNCH_IONICE_PRIORITY=7
+  fi
+
+  LAUNCH_MEMORY_LIMIT_KB=$((LAUNCH_MEMORY_LIMIT_MB * 1024))
+  if (( LAUNCH_MEMORY_LIMIT_MB > 0 )); then
+    LAUNCH_MEMORY_LIMIT_DISPLAY="${LAUNCH_MEMORY_LIMIT_MB} MB"
+  else
+    LAUNCH_MEMORY_LIMIT_DISPLAY="disabled"
+  fi
+}
+
+apply_resource_environment() {
+  export OMP_NUM_THREADS="$LAUNCH_THREAD_LIMIT"
+  export OPENBLAS_NUM_THREADS="$LAUNCH_THREAD_LIMIT"
+  export MKL_NUM_THREADS="$LAUNCH_THREAD_LIMIT"
+  export NUMEXPR_NUM_THREADS="$LAUNCH_THREAD_LIMIT"
+  export OPENCV_FOR_THREADS_NUM="$LAUNCH_THREAD_LIMIT"
+  export VECLIB_MAXIMUM_THREADS="$LAUNCH_THREAD_LIMIT"
+  export MALLOC_ARENA_MAX=2
+  export CUDA_MODULE_LOADING=LAZY
+}
+
+run_limited() {
+  (
+    apply_resource_environment
+    if (( LAUNCH_MEMORY_LIMIT_KB > 0 )); then
+      ulimit -v "$LAUNCH_MEMORY_LIMIT_KB"
+    fi
+    exec ionice -c 2 -n "$LAUNCH_IONICE_PRIORITY" \
+      nice -n "$LAUNCH_NICE" \
+      taskset -c "$LAUNCH_CPU_SET" \
+      "$@"
+  )
 }
 
 launch_arg() {
@@ -217,6 +335,14 @@ ZED wrapper:
   publish_map_tf=false
   param_overrides=$ZED_PARAM_OVERRIDES
 
+Resource limits:
+  build_parallel_workers=$BUILD_PARALLEL_WORKERS
+  launch_cpu_set=$LAUNCH_CPU_SET
+  launch_thread_limit=$LAUNCH_THREAD_LIMIT
+  launch_nice=$LAUNCH_NICE
+  launch_ionice_priority=$LAUNCH_IONICE_PRIORITY
+  launch_memory_limit=$LAUNCH_MEMORY_LIMIT_DISPLAY
+
 Optional upstream wrapper topics:
   $INPUT_POSE_COV_TOPIC
   $INPUT_IMAGE_TOPIC
@@ -309,8 +435,10 @@ wait_for_wrapper_topics() {
   return 1
 }
 
+configure_resource_limits
+
 cd "$WS_DIR"
-colcon build --cmake-args=-DCMAKE_BUILD_TYPE=Release --parallel-workers "$NPROC_VALUE"
+run_limited colcon build --cmake-args=-DCMAKE_BUILD_TYPE=Release --parallel-workers "$BUILD_PARALLEL_WORKERS"
 source_setup_file install/setup.bash
 
 if [[ ! -f "$INSTALL_SETUP" ]]; then

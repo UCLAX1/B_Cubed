@@ -12,20 +12,27 @@ The current launcher is designed around this sequence:
 1. Build the workspace.
 2. Start the ZED wrapper.
 3. Wait for the required ZED topics.
-4. Start the MediaPipe gesture recognition node.
-5. Launch the handheld mapping stack.
-6. Open an instructions terminal with the save commands for the current run.
+4. Launch the handheld mapping stack.
+5. Open an instructions terminal with the save commands for the current run.
+
+Gesture recognition and TensorRT person tracking are available as opt-in launch
+features. They are disabled by default to keep the Jetson from running out of
+CPU or memory during mapping.
 
 ## What it launches
 
 By default the script launches these pieces in separate terminals:
 
 - the ZED wrapper
-- `gesture_recognition gesture_recognition.launch.py`
-- `person_tracking person_tracking.launch.py`
 - `depth_processing zed_slam_nav.launch.py` in `mapping` mode
+- planner-only Nav2 inside `depth_processing zed_slam_nav.launch.py`
 - the standalone `nav_planning_console` web planning console
 - an instructions terminal
+
+Optional terminals can also be enabled for:
+
+- `gesture_recognition gesture_recognition.launch.py`
+- `person_tracking person_tracking.launch.py`
 
 The old TensorRT hand tracker is no longer started by this launcher.
 
@@ -91,16 +98,34 @@ running it.
   Default: `zedm`
 - `ZED_PARAM_OVERRIDES`
   Default:
-  `general.grab_resolution:=HD720;pos_tracking.pos_tracking_enabled:=true;pos_tracking.area_memory:=true;pos_tracking.two_d_mode:=true;debug.use_pub_timestamps:=true`
+  `general.grab_resolution:=VGA;general.grab_frame_rate:=15;pos_tracking.pos_tracking_enabled:=true;pos_tracking.area_memory:=true;pos_tracking.two_d_mode:=true;debug.use_pub_timestamps:=true`
 - `WRAPPER_LAUNCH`
   Full override for the wrapper launch command.
 - `TOPIC_WAIT_TIMEOUT_SEC`
   Default: `60`
 
+### Resource limits
+
+- `BUILD_PARALLEL_WORKERS`
+  Default: up to `4`, capped by detected CPU count.
+- `LAUNCH_MAX_CORES`
+  Default: up to `4`, capped by detected CPU count.
+- `LAUNCH_CPU_SET`
+  Default: derived from `LAUNCH_MAX_CORES`, for example `0-3`
+- `LAUNCH_THREAD_LIMIT`
+  Default: `2`
+- `LAUNCH_NICE`
+  Default: `10`
+- `LAUNCH_IONICE_PRIORITY`
+  Default: `7`
+- `LAUNCH_MEMORY_LIMIT_MB`
+  Default: `0`, disabled. Use with care because CUDA/ZED/TensorRT can reserve
+  large virtual address ranges.
+
 ### MediaPipe gesture recognition
 
 - `START_GESTURE_RECOGNITION`
-  Default: `true`
+  Default: `false`
 - `GESTURE_IMAGE_TOPIC`
   Default: same as `INPUT_IMAGE_TOPIC`
 - `GESTURE_IMAGE_IS_COMPRESSED`
@@ -110,7 +135,7 @@ running it.
 - `SHOW_GESTURE_WINDOW`
   Default: `false`
 - `PUBLISH_GESTURE_ANNOTATED_IMAGE`
-  Default: `true`
+  Default: `false`
 - `GESTURE_TOPIC`
   Default: `/gesture_recognition/result`
 - `GESTURE_ANNOTATED_IMAGE_TOPIC`
@@ -119,7 +144,7 @@ running it.
 ### Person tracking
 
 - `START_PERSON_TRACKING`
-  Default: `true`
+  Default: `false`
 - `PERSON_TRACKING_IMAGE_TOPIC`
   Default: same as `INPUT_IMAGE_TOPIC`
 - `PERSON_TRACKING_ENGINE_PATH`
@@ -127,7 +152,7 @@ running it.
 - `SHOW_PERSON_TRACKING_WINDOW`
   Default: `false`
 - `PUBLISH_PERSON_TRACKING_IMAGE`
-  Default: `true`
+  Default: `false`
 - `PERSON_TRACKING_TOPIC`
   Default: `/person_tracking/detections`
 - `PERSON_TRACKING_ANNOTATED_IMAGE_TOPIC`

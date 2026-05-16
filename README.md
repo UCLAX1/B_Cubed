@@ -118,9 +118,9 @@ See these docs for more detail:
 
 `ros2_ws/launch.sh` now runs the handheld ZED mapping workflow:
 - launches the ZED wrapper
-- waits for the ZED pose, odom, cloud, and gesture image topics
-- starts MediaPipe gesture recognition
-- starts TensorRT person tracking
+- waits for the ZED pose, odom, and cloud topics
+- optionally starts MediaPipe gesture recognition
+- optionally starts TensorRT person tracking
 - starts `zed_slam_nav.launch.py` in mapping mode
 - opens the web planning console and prints the save commands
 
@@ -133,6 +133,9 @@ Useful environment overrides before running `launch.sh`:
 - `MAP_OUTPUT_DIR=/home/jetson-nano-x1/Documents/B_Cubed/maps`
 - `BASE_TO_CAMERA_TRANSLATION=x,y,z`
 - `BASE_TO_CAMERA_RPY=roll,pitch,yaw`
-- `ZED_PARAM_OVERRIDES='general.grab_resolution:=HD720;pos_tracking.pos_tracking_enabled:=true;pos_tracking.area_memory:=true;pos_tracking.two_d_mode:=true;debug.use_pub_timestamps:=true'`
-- `START_GESTURE_RECOGNITION=false`
-- `START_PERSON_TRACKING=false`
+- `ZED_PARAM_OVERRIDES='general.grab_resolution:=VGA;general.grab_frame_rate:=15;pos_tracking.pos_tracking_enabled:=true;pos_tracking.area_memory:=true;pos_tracking.two_d_mode:=true;debug.use_pub_timestamps:=true'`
+- `START_GESTURE_RECOGNITION=true`
+- `START_PERSON_TRACKING=true`
+- `BUILD_PARALLEL_WORKERS=2`
+- `LAUNCH_MAX_CORES=1`
+- `LAUNCH_MEMORY_LIMIT_MB=3072`
