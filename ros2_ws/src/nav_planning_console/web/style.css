@@ -167,8 +167,9 @@ button:disabled:active {
 
 .workspace {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 320px;
+  grid-template-columns: 300px minmax(0, 1fr) 320px;
   height: calc(100% - 58px);
+  min-height: 0;
 }
 
 .map-surface {
@@ -204,10 +205,20 @@ button:disabled:active {
   backdrop-filter: blur(6px);
 }
 
+.control-panel,
 .side-panel {
   min-width: 0;
-  border-left: 1px solid var(--line);
+  min-height: 0;
+  overflow-y: auto;
   background: var(--panel);
+}
+
+.control-panel {
+  border-right: 1px solid var(--line);
+}
+
+.side-panel {
+  border-left: 1px solid var(--line);
 }
 
 .panel-section {
@@ -375,6 +386,39 @@ input {
   padding: 0 8px;
 }
 
+@media (max-width: 1100px) {
+  .workspace {
+    grid-template-columns: 280px minmax(0, 1fr);
+    grid-template-rows: minmax(0, 1fr) auto;
+  }
+
+  .map-surface {
+    grid-column: 2;
+    grid-row: 1;
+  }
+
+  .control-panel {
+    grid-column: 1;
+    grid-row: 1 / span 2;
+  }
+
+  .side-panel {
+    grid-column: 2;
+    grid-row: 2;
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    max-height: 240px;
+    border-top: 1px solid var(--line);
+    border-left: 0;
+    overflow-y: auto;
+  }
+
+  .side-panel .panel-section {
+    border-right: 1px solid var(--line);
+    border-bottom: 0;
+  }
+}
+
 @media (max-width: 840px) {
   .topbar {
     grid-template-columns: 1fr auto;
@@ -391,15 +435,36 @@ input {
 
   .workspace {
     grid-template-columns: 1fr;
-    grid-template-rows: minmax(0, 1fr) auto;
+    grid-template-rows: minmax(0, 1fr) auto auto;
     height: calc(100% - 96px);
   }
 
+  .map-surface {
+    grid-column: 1;
+    grid-row: 1;
+  }
+
+  .control-panel,
   .side-panel {
+    grid-column: 1;
     display: grid;
-    grid-template-columns: repeat(5, minmax(0, 1fr));
-    border-top: 1px solid var(--line);
+    grid-template-columns: repeat(2, minmax(0, 1fr));
     border-left: 0;
+    border-right: 0;
+    overflow-y: auto;
+  }
+
+  .control-panel {
+    grid-row: 2;
+    max-height: 330px;
+    border-top: 1px solid var(--line);
+  }
+
+  .side-panel {
+    grid-row: 3;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    max-height: 220px;
+    border-top: 1px solid var(--line);
   }
 
   .panel-section {
@@ -424,9 +489,16 @@ input {
     height: calc(100% - 150px);
   }
 
+  .control-panel,
   .side-panel {
     grid-template-columns: 1fr;
+  }
+
+  .control-panel {
+    max-height: 330px;
+  }
+
+  .side-panel {
     max-height: 250px;
-    overflow-y: auto;
   }
 }

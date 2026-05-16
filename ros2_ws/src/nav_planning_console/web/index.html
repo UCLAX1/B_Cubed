@@ -29,6 +29,52 @@
     </header>
 
     <main class="workspace">
+      <aside class="control-panel" aria-label="Person tracking and manual navigation controls">
+        <div class="panel-section">
+          <h2>People</h2>
+          <label class="toggle-row" for="personTrackingToggle">
+            <span>Tracker</span>
+            <input id="personTrackingToggle" type="checkbox">
+            <span class="toggle-track" aria-hidden="true"></span>
+          </label>
+          <div class="person-view">
+            <img id="personImage" alt="Person tracking view" hidden>
+            <div id="personImagePlaceholder">No frame</div>
+          </div>
+          <dl class="metric-list">
+            <div>
+              <dt>Count</dt>
+              <dd id="personCount">0</dd>
+            </div>
+            <div>
+              <dt>Frame</dt>
+              <dd id="personFrameAge">-</dd>
+            </div>
+          </dl>
+        </div>
+
+        <div class="panel-section">
+          <h2>Manual</h2>
+          <canvas id="manualCanvas" width="240" height="190"></canvas>
+          <div class="manual-controls">
+            <button type="button" id="manualCcwButton" title="Rotate counterclockwise">CCW</button>
+            <button type="button" id="manualStopButton" class="danger" title="Stop manual command">Stop</button>
+            <button type="button" id="manualCwButton" title="Rotate clockwise">CW</button>
+          </div>
+          <dl class="metric-list">
+            <div>
+              <dt>Cmd</dt>
+              <dd id="manualCommand">0.00, 0.00, 0.00</dd>
+            </div>
+            <div>
+              <dt>Wheels</dt>
+              <dd id="manualWheels">0.00, 0.00, 0.00</dd>
+            </div>
+          </dl>
+        </div>
+
+      </aside>
+
       <section class="map-surface">
         <canvas id="mapCanvas"></canvas>
         <div class="floating-readout" id="readout">x 0.00, y 0.00</div>
@@ -87,49 +133,6 @@
             <div>
               <dt>Z</dt>
               <dd id="robotZ">-</dd>
-            </div>
-          </dl>
-        </div>
-
-        <div class="panel-section">
-          <h2>People</h2>
-          <label class="toggle-row" for="personTrackingToggle">
-            <span>Tracker</span>
-            <input id="personTrackingToggle" type="checkbox">
-            <span class="toggle-track" aria-hidden="true"></span>
-          </label>
-          <div class="person-view">
-            <img id="personImage" alt="Person tracking view" hidden>
-            <div id="personImagePlaceholder">No frame</div>
-          </div>
-          <dl class="metric-list">
-            <div>
-              <dt>Count</dt>
-              <dd id="personCount">0</dd>
-            </div>
-            <div>
-              <dt>Frame</dt>
-              <dd id="personFrameAge">-</dd>
-            </div>
-          </dl>
-        </div>
-
-        <div class="panel-section">
-          <h2>Manual</h2>
-          <canvas id="manualCanvas" width="240" height="190"></canvas>
-          <div class="manual-controls">
-            <button type="button" id="manualCcwButton" title="Rotate counterclockwise">CCW</button>
-            <button type="button" id="manualStopButton" class="danger" title="Stop manual command">Stop</button>
-            <button type="button" id="manualCwButton" title="Rotate clockwise">CW</button>
-          </div>
-          <dl class="metric-list">
-            <div>
-              <dt>Cmd</dt>
-              <dd id="manualCommand">0.00, 0.00, 0.00</dd>
-            </div>
-            <div>
-              <dt>Wheels</dt>
-              <dd id="manualWheels">0.00, 0.00, 0.00</dd>
             </div>
           </dl>
         </div>
