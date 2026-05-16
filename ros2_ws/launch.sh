@@ -510,7 +510,7 @@ fi
 if bool_is_true "$START_KIWI_DRIVE_CONTROLLER"; then
   run_terminal \
     "kiwi drive controller" \
-    "ros2 launch lowlevelrunner kiwi_drive_controller.launch.py \
+    "ros2 launch low_level_runner kiwi_drive_controller.launch.py \
       hardware_enabled:='${KIWI_HARDWARE_ENABLED}' \
       nav_cmd_topic:='${KIWI_NAV_CMD_TOPIC}' \
       manual_cmd_topic:='${MANUAL_CMD_TOPIC}'"

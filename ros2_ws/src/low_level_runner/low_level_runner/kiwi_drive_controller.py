@@ -13,8 +13,8 @@ from rclpy.duration import Duration
 from rclpy.node import Node
 from std_msgs.msg import Float32MultiArray, String
 
-from lowlevelrunner.hardware_interface import CanBus, Motor
-from lowlevelrunner.kiwi_kinematics import WheelPowers, twist_to_wheel_powers
+from low_level_runner.hardware_interface import CanBus, Motor
+from low_level_runner.kiwi_kinematics import WheelPowers, twist_to_wheel_powers
 
 
 def _zero_twist() -> Twist:

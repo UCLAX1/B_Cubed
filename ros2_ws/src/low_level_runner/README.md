@@ -1,11 +1,11 @@
-# lowlevelrunner
+# low_level_runner
 
 ROS 2 low-level control package for the Kiwi drive base.
 
 The active controller is:
 
 ```bash
-ros2 launch lowlevelrunner kiwi_drive_controller.launch.py
+ros2 launch low_level_runner kiwi_drive_controller.launch.py
 ```
 
 It subscribes to:
@@ -20,8 +20,8 @@ enabled, sends those powers to the CAN motor controllers.
 For a dry run:
 
 ```bash
-ros2 launch lowlevelrunner kiwi_drive_controller.launch.py hardware_enabled:=false
+ros2 launch low_level_runner kiwi_drive_controller.launch.py hardware_enabled:=false
 ```
 
 The previous low-level runner implementation is preserved in
-`lowlevelrunner/legacy_low_level_runner.py` for reference.
+`low_level_runner/legacy_low_level_runner.py` for reference.

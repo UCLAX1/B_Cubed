@@ -11,7 +11,7 @@ from launch_ros.substitutions import FindPackageShare
 
 def generate_launch_description() -> LaunchDescription:
     """Create launch actions for the Kiwi drive controller."""
-    package_share = FindPackageShare("lowlevelrunner")
+    package_share = FindPackageShare("low_level_runner")
     default_params = PathJoinSubstitution(
         [package_share, "config", "kiwi_drive_controller.yaml"]
     )
@@ -28,7 +28,7 @@ def generate_launch_description() -> LaunchDescription:
             DeclareLaunchArgument("nav_cmd_topic", default_value="cmd_vel"),
             DeclareLaunchArgument("manual_cmd_topic", default_value="cmd_vel_manual"),
             Node(
-                package="lowlevelrunner",
+                package="low_level_runner",
                 executable="kiwi_drive_controller",
                 name="kiwi_drive_controller",
                 output="screen",

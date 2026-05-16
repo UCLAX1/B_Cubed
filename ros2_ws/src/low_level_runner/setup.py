@@ -1,7 +1,7 @@
 from glob import glob
 from setuptools import find_packages, setup
 
-package_name = 'lowlevelrunner'
+package_name = 'low_level_runner'
 
 setup(
     name=package_name,
@@ -27,8 +27,8 @@ setup(
     },
     entry_points={
         'console_scripts': [
-            'kiwi_drive_controller = lowlevelrunner.kiwi_drive_controller:main',
-            'low_level_runner = lowlevelrunner.low_level_runner:main',
+            'kiwi_drive_controller = low_level_runner.kiwi_drive_controller:main',
+            'low_level_runner = low_level_runner.low_level_runner:main',
         ],
     },
 )

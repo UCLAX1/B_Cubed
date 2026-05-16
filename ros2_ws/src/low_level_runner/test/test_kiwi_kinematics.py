@@ -6,7 +6,7 @@ import sys
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 twist_to_wheel_powers = import_module(
-    "lowlevelrunner.kiwi_kinematics"
+    "low_level_runner.kiwi_kinematics"
 ).twist_to_wheel_powers
 
 
