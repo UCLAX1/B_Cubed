@@ -187,7 +187,7 @@ def generate_launch_description() -> LaunchDescription:
                 }.items(),
             ),
             Node(
-                package="depth_processing",
+                package="nav_planning_console",
                 executable="nav_planning_console",
                 name="nav_planning_console",
                 output="screen",

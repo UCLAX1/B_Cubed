@@ -23,7 +23,7 @@ By default the script launches these pieces in separate terminals:
 - the ZED wrapper
 - `gesture_recognition gesture_recognition.launch.py`
 - `depth_processing zed_slam_nav.launch.py` in `mapping` mode
-- the web planning console
+- the standalone `nav_planning_console` web planning console
 - an instructions terminal
 
 The old TensorRT hand tracker is no longer started by this launcher.
@@ -118,6 +118,12 @@ running it.
   Default: `127.0.0.1`
 - `PLANNING_CONSOLE_PORT`
   Default: `8080`
+
+The console can also be launched independently:
+
+```bash
+ros2 launch nav_planning_console nav_planning_console.launch.py
+```
 - `START_RVIZ=true`
   Opens `rviz2` in another terminal.
 

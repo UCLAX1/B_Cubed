@@ -13,7 +13,6 @@ setup(
         ('share/' + package_name, ['package.xml']),
         ('share/' + package_name + '/launch', glob('launch/*.launch.py')),
         ('share/' + package_name + '/config', glob('config/*.yaml')),
-        ('share/' + package_name + '/web', glob('web/*')),
     ],
     install_requires=['setuptools'],
     zip_safe=True,
@@ -32,7 +31,6 @@ setup(
             'zed_tracking = depth_processing.zed_positional_tracking:main',
             'zed_base_adapter = depth_processing.zed_base_adapter:main',
             'twist_safety_gate = depth_processing.twist_safety_gate:main',
-            'nav_planning_console = depth_processing.nav_planning_console:main',
         ],
     },
 )

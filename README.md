@@ -123,6 +123,10 @@ See these docs for more detail:
 - starts `zed_slam_nav.launch.py` in mapping mode
 - opens the web planning console and prints the save commands
 
+The web planning console is now a standalone ROS package, separate from the
+ZED/depth nodes:
+`ros2 launch nav_planning_console nav_planning_console.launch.py`
+
 Useful environment overrides before running `launch.sh`:
 - `MAP_SESSION_NAME=my_env`
 - `MAP_OUTPUT_DIR=/home/jetson-nano-x1/Documents/B_Cubed/maps`
