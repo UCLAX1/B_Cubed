@@ -3,15 +3,21 @@ Low-level GPIO input test - monitor raw pin state while servo spins.
 """
 
 import time
-from gpiozero import DigitalInputDevice, Servo
+from gpiozero import DigitalInputDevice, DigitalOutputDevice, Servo
 
 SERVO_PIN = 18
 TEST_PINS = [27, 22]  # A and B encoder pins
+MOSFET_PIN = 16
 
 def main():
     print("Creating digital input devices for encoder pins...")
     inputs = {pin: DigitalInputDevice(pin, pull_up=True) for pin in TEST_PINS}
-    
+
+    print("Turning MOSFET on...")
+    mosfet = DigitalOutputDevice(MOSFET_PIN)
+    mosfet.on()
+    time.sleep(0.5)
+
     print("Initializing servo...")
     servo = Servo(SERVO_PIN)
     
@@ -43,6 +49,7 @@ def main():
     
     servo.value = 0.0
     servo.close()
+    mosfet.off()
     
     print("\n" + "="*60)
     print("RESULTS:")
