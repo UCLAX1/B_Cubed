@@ -1,0 +1,17 @@
+# Physical to BCM GPIO Conversion for B_Cubed Encoders
+
+## Encoder Group 1 (150kg Arm Servo - GPIO 13)
+Physical: A=37, B=31, ABS=29
+BCM:      A=26, B=6,  ABS=5
+
+## Encoder Group 2 (5.5kg Head Servo - GPIO 18)
+Physical: A=13, B=15, ABS=11
+BCM:      A=27, B=22, ABS=17
+
+Current test_5_5kg_encoder_spin.py uses: A=27, B=22, ABS=17 ✓
+
+Issue: Relative encoder (27, 22) reads 0 steps even though servo spins and ABS=17 works.
+Possible causes:
+1. A/B channels are physically swapped on the servo connector
+2. Encoder is broken/disconnected
+3. Need to try swapping: A=22, B=27
