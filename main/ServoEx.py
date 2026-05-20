@@ -68,9 +68,9 @@ class ServoEx(Servo):
     POSITION_CENTERING_DELAY: float = 0.25
 
     # check the one google sheet for what "servo_pin", "encoder_pin_a", etc. are
-    def __init__(self, servo_pin: int, encoder_pin_a: int, encoder_pin_b: int, absolute_encoder_pin: int):
+    def __init__(self, servo_pin: int, encoder_pin_a: int, encoder_pin_b: int, absolute_encoder_pin: int, initial_value=None):
         try:
-            super().__init__(servo_pin)
+            super().__init__(servo_pin, initial_value=initial_value)
             self.encoder = RotaryEncoder(a=encoder_pin_a, b=encoder_pin_b, max_steps=10000000000000)
         except Exception:
             print("ERROR: gpiozero servo could not initialize. Make sure the servos are plugged in to the right pins.")

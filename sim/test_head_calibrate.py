@@ -1,8 +1,8 @@
 """
-One-time calibration for the 70kg lazy susan (BCM 12).
+One-time calibration for the 5.5kg head servo (BCM 18).
 Spin it to the forward-facing position, then press 's' to save that as zero.
 
-Enc 0 pins (BCM): A=26 (physical 37), B=6 (physical 31), ABS=5 (physical 29)
+Enc 1 pins (BCM): A=4 (physical 7), B=22 (physical 15), ABS=17 (physical 11)
 
 Controls:
   RIGHT / d : spin clockwise
@@ -19,11 +19,11 @@ import termios
 from gpiozero import DigitalOutputDevice
 from ServoEx import ServoEx
 
-SERVO_PIN      = 12
+SERVO_PIN      = 18
 MOSFET_PIN     = 16
-ENCODER_PIN_A  = 26
-ENCODER_PIN_B  = 6
-ABS_PIN        = 5
+ENCODER_PIN_A  = 4
+ENCODER_PIN_B  = 22
+ABS_PIN        = 17
 SPIN_SPEED     = 0.15
 
 mosfet = DigitalOutputDevice(MOSFET_PIN)
@@ -38,7 +38,7 @@ enc = ServoEx(
     absolute_encoder_pin=ABS_PIN,
     initial_value=None,
 )
-servo = enc  # ServoEx extends Servo, use it directly
+servo = enc
 enc.reset_encoder_position()
 print("Encoder zeroed at current position.")
 print("\nSpin to forward-facing position, then press 's' to save.")
@@ -70,7 +70,7 @@ try:
         elif ch == 's':
             enc.save_encoder_position()
             print(f"\nSaved! Forward = {pos_deg:.1f} deg ({enc.get_position():.4f} rot)")
-            print("Run test_lazy_susan_reset.py to return here in future.")
+            print("Run test_head_reset.py to return here in future.")
             break
         elif ch in ('\x1b[C', 'd'):
             servo.value = SPIN_SPEED
