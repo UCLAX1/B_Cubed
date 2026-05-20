@@ -76,7 +76,7 @@ Every 0.25s, `update()` re-centers the relative encoder against the absolute to 
 |--------|----------|-----|
 | Power     | 1  | 3.3V |
 | Ground    | 39 | GND |
-| Encoder A | 13 | 27 |
+| Encoder A | 7  | 4  |
 | Encoder B | 15 | 22 |
 | Absolute  | 11 | 17 |
 

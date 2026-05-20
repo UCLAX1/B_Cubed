@@ -53,20 +53,20 @@ def main():
     servo_pin = 18
     abs_pin = 17
     
-    # Test original order
+    # Test original order (A on physical 7 / BCM 4, physical 13 is dead)
     result1 = test_channel_order(
         servo_pin=servo_pin,
-        a_pin=27, b_pin=22, abs_pin=abs_pin,
-        label="Original: A=27, B=22"
+        a_pin=4, b_pin=22, abs_pin=abs_pin,
+        label="A=4 (phys 7), B=22"
     )
-    
+
     time.sleep(1.0)
-    
+
     # Test swapped order
     result2 = test_channel_order(
         servo_pin=servo_pin,
-        a_pin=22, b_pin=27, abs_pin=abs_pin,
-        label="Swapped: A=22, B=27"
+        a_pin=22, b_pin=4, abs_pin=abs_pin,
+        label="Swapped: A=22, B=4"
     )
     
     print(f"\n{'='*60}")
