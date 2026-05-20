@@ -23,8 +23,8 @@ ABS_PIN       = 5
 NUDGE_DEG  = 10.0
 CPR        = 2048
 DEG_TO_STEPS = CPR / 360.0
-MOVE_SPEED = 0.1
-DEADBAND   = 3  # steps — stop when within this many steps of target
+MOVE_SPEED = 0.3
+DEADBAND   = 20  # steps — stop when within this many steps of target
 
 mosfet = DigitalOutputDevice(MOSFET_PIN)
 mosfet.on()
