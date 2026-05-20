@@ -23,9 +23,9 @@ IMU_INIT_TIMEOUT_S = 5.0
 SETTINGS_FILE = "RTIMULib"
 sys.path.append("/usr/lib/python3/dist-packages")
 
-ARM_MIN, ARM_MAX = -120.0, 120.0
+ARM_MIN, ARM_MAX = -30.0, 30.0
 LAZY_SUSAN_MIN, LAZY_SUSAN_MAX = -90.0, 90.0
-HEAD_MIN, HEAD_MAX = -90.0, 90.0
+HEAD_MIN, HEAD_MAX = -float('inf'), float('inf')
 
 # Lower alpha = smoother but more lag. Range is about 0.05 to 0.4.
 IMU_ALPHA = 0.15
