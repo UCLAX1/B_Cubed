@@ -6,7 +6,7 @@ import time
 from gpiozero import DigitalInputDevice, DigitalOutputDevice, Servo
 
 SERVO_PIN = 18
-TEST_PINS = [27, 22]  # A and B encoder pins
+TEST_PINS = [4, 22]  # A (moved to BCM 4 / physical 7 for testing) and B encoder pins
 MOSFET_PIN = 16
 
 def main():
