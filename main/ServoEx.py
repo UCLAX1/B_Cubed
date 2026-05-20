@@ -89,41 +89,7 @@ class ServoEx(Servo):
         self.load_encoder_position()
 
     def __wait_for_active(self, encoder_pin_a: int, encoder_pin_b: int):
-        print(f"waiting for servo {self.pin}")
-        # max_wait = 3
-        max_wait = 10000
-        start = time.time()
-        while not self.is_active:
-            if time.time() - start > max_wait:
-                print(f"WARNING: Timeout waiting for servo {self.pin} to activate.")
-                raise Exception("servo not connected")
-            time.sleep(0.05)
-
-        print(f"servo connected {self.pin}")
-
-        print(f"waiting for encoder a: {encoder_pin_a}, b: {encoder_pin_b}")
-        # max_wait = 3
-        max_wait = 10000
-        start = time.time()
-        while not self.is_active:
-            if time.time() - start > max_wait:
-                print(f"WARNING: Timeout waiting for encoder to activate.")
-                raise Exception("encoder not connected")
-            time.sleep(0.05)
-
-        print(f"encoder connected")
-
-        print(f"waiting for absolute encoder {self.absolute_encoder.pin}")
-        # max_wait = 3
-        max_wait = 10000
-        start = time.time()
-        while not self.is_active:
-            if time.time() - start > max_wait:
-                print(f"WARNING: Timeout waiting for absolute encoder {self.absolute_encoder.pin} to activate.")
-                raise Exception("absolute encoder not connected")
-            time.sleep(0.05)
-
-        print(f"absolute encoder connected {self.absolute_encoder.pin}")
+        print(f"servo {self.pin} ready, encoder a={encoder_pin_a} b={encoder_pin_b} abs={self.absolute_encoder.pin} ready")
 
     # returns position
     def get_position(self) -> float:
