@@ -1,15 +1,10 @@
 """
 One-time calibration for the 70kg lazy susan (BCM 12).
-Spin it to the forward-facing position, then press 's' to save that as zero.
+Uses encoder position (steps) for all movement — no time-based spinning.
+Press d/a to nudge by 10 degrees, s to save forward as zero, q to quit.
 
 Enc 0 pins (BCM): A=26 (physical 37), B=6 (physical 31), ABS=5 (physical 29)
-
-Controls:
-  RIGHT / d : spin clockwise
-  LEFT  / a : spin counter-clockwise
-  SPACE     : stop
-  s         : save current position as zero (forward) and quit
-  q         : quit without saving
+2048 counts per revolution -> 1 degree = 5.69 steps
 """
 
 import sys
@@ -19,12 +14,17 @@ import termios
 from gpiozero import DigitalOutputDevice
 from ServoEx import ServoEx
 
-SERVO_PIN      = 12
-MOSFET_PIN     = 16
-ENCODER_PIN_A  = 26
-ENCODER_PIN_B  = 6
-ABS_PIN        = 5
-SPIN_SPEED     = 0.15
+SERVO_PIN     = 12
+MOSFET_PIN    = 16
+ENCODER_PIN_A = 26
+ENCODER_PIN_B = 6
+ABS_PIN       = 5
+
+NUDGE_DEG  = 10.0
+CPR        = 2048
+DEG_TO_STEPS = CPR / 360.0
+MOVE_SPEED = 0.2
+DEADBAND   = 3  # steps — stop when within this many steps of target
 
 mosfet = DigitalOutputDevice(MOSFET_PIN)
 mosfet.on()
@@ -38,11 +38,23 @@ enc = ServoEx(
     absolute_encoder_pin=ABS_PIN,
     initial_value=None,
 )
-servo = enc  # ServoEx extends Servo, use it directly
 enc.reset_encoder_position()
-print("Encoder zeroed at current position.")
-print("\nSpin to forward-facing position, then press 's' to save.")
-print("RIGHT/d = clockwise  |  LEFT/a = counter-clockwise  |  SPACE = stop  |  s = save  |  q = quit\n")
+print("Ready. Current position = 0 steps (zero point here).")
+print("d/RIGHT = +10 deg  |  a/LEFT = -10 deg  |  s = save as forward  |  q = quit\n")
+
+
+def move_to(target_steps):
+    while True:
+        enc.update()
+        current = enc.encoder.steps
+        error = target_steps - current
+        if abs(error) <= DEADBAND:
+            enc.value = 0.0
+            break
+        enc.value = MOVE_SPEED if error > 0 else -MOVE_SPEED
+        time.sleep(0.005)
+    enc.value = 0.0
+
 
 def getch():
     fd = sys.stdin.fileno()
@@ -57,10 +69,14 @@ def getch():
     finally:
         termios.tcsetattr(fd, termios.TCSADRAIN, old)
 
+
+target = 0
+
 try:
     while True:
         enc.update()
-        pos_deg = enc.get_position() * 360.0
+        current_steps = enc.encoder.steps
+        current_deg = current_steps / DEG_TO_STEPS
 
         ch = getch()
 
@@ -69,22 +85,24 @@ try:
             break
         elif ch == 's':
             enc.save_encoder_position()
-            print(f"\nSaved! Forward = {pos_deg:.1f} deg ({enc.get_position():.4f} rot)")
-            print("Run test_lazy_susan_reset.py to return here in future.")
+            print(f"\nSaved! Forward = {current_deg:.1f} deg ({current_steps} steps)")
             break
         elif ch in ('\x1b[C', 'd'):
-            servo.value = SPIN_SPEED
+            target += int(NUDGE_DEG * DEG_TO_STEPS)
         elif ch in ('\x1b[D', 'a'):
-            servo.value = -SPIN_SPEED
-        elif ch == ' ':
-            servo.value = 0.0
+            target -= int(NUDGE_DEG * DEG_TO_STEPS)
+        else:
+            continue
 
-        print(f"pos = {pos_deg:+.1f} deg  ({enc.get_position():+.4f} rot)", flush=True)
+        print(f"Moving to {target / DEG_TO_STEPS:+.1f} deg ({target} steps)...")
+        move_to(target)
+        enc.update()
+        print(f"pos = {enc.encoder.steps / DEG_TO_STEPS:+.1f} deg  ({enc.encoder.steps} steps)", flush=True)
 
 except KeyboardInterrupt:
     pass
 finally:
-    servo.value = 0.0
+    enc.value = 0.0
     time.sleep(0.5)
     mosfet.off()
     print("Done.")
