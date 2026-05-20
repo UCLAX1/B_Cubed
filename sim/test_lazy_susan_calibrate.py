@@ -44,15 +44,14 @@ print("d/RIGHT = +10 deg  |  a/LEFT = -10 deg  |  s = save as forward  |  q = qu
 
 
 def move_to(target_steps):
-    # read enc.encoder.steps directly — do NOT call enc.update() here,
-    # as that triggers centering which corrupts steps mid-move
     while True:
         current = enc.encoder.steps
         error = target_steps - current
+        print(f"  steps={current}  target={target_steps}  error={error}", flush=True)
         if abs(error) <= DEADBAND:
             break
         enc.value = MOVE_SPEED if error > 0 else -MOVE_SPEED
-        time.sleep(0.005)
+        time.sleep(0.02)
     enc.value = 0.0
 
 
