@@ -23,7 +23,7 @@ ABS_PIN       = 5
 NUDGE_DEG  = 10.0
 CPR        = 2048
 DEG_TO_STEPS = CPR / 360.0
-MOVE_SPEED = 0.2
+MOVE_SPEED = 0.1
 DEADBAND   = 3  # steps — stop when within this many steps of target
 
 mosfet = DigitalOutputDevice(MOSFET_PIN)
@@ -44,12 +44,12 @@ print("d/RIGHT = +10 deg  |  a/LEFT = -10 deg  |  s = save as forward  |  q = qu
 
 
 def move_to(target_steps):
+    # read enc.encoder.steps directly — do NOT call enc.update() here,
+    # as that triggers centering which corrupts steps mid-move
     while True:
-        enc.update()
         current = enc.encoder.steps
         error = target_steps - current
         if abs(error) <= DEADBAND:
-            enc.value = 0.0
             break
         enc.value = MOVE_SPEED if error > 0 else -MOVE_SPEED
         time.sleep(0.005)
