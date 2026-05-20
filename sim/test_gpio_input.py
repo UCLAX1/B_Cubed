@@ -10,7 +10,7 @@ TEST_PINS = [27, 22]  # A and B encoder pins
 
 def main():
     print("Creating digital input devices for encoder pins...")
-    inputs = {pin: DigitalInputDevice(pin) for pin in TEST_PINS}
+    inputs = {pin: DigitalInputDevice(pin, pull_up=True) for pin in TEST_PINS}
     
     print("Initializing servo...")
     servo = Servo(SERVO_PIN)

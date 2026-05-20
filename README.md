@@ -62,19 +62,29 @@ Every 0.25s, `update()` re-centers the relative encoder against the absolute to 
 
 ## GPIO pin mapping
 
-### Arm Servo (150kg, servo_pin=13)
+### Arm Servo (70kg, servo_pin BCM=13, physical=33)
 | Signal | Physical | BCM |
 |--------|----------|-----|
+| Power     | 17 | 3.3V |
+| Ground    | 25 | GND |
 | Encoder A | 37 | 26 |
 | Encoder B | 31 | 6 |
 | Absolute  | 29 | 5 |
 
-### Head Servo (5.5kg, servo_pin=18)
+### Head Servo (5.5kg, servo_pin BCM=18, physical=12)
 | Signal | Physical | BCM |
 |--------|----------|-----|
+| Power     | 1  | 3.3V |
+| Ground    | 39 | GND |
 | Encoder A | 13 | 27 |
 | Encoder B | 15 | 22 |
 | Absolute  | 11 | 17 |
+
+### Other
+| Signal | Physical | BCM |
+|--------|----------|-----|
+| Servo 1 data | 32 | 12 |
+| MOSFET       | 36 | 16 |
 
 ## HOW TO TEST THE SERVOS:
 
