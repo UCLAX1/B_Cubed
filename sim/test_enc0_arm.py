@@ -8,7 +8,7 @@ Enc 0 pins (BCM): A=26 (physical 37), B=6 (physical 31), ABS=5 (physical 29)
 import time
 from gpiozero import DigitalInputDevice, DigitalOutputDevice, Servo
 
-SERVO_PIN = 13       # BCM 13, physical 33
+SERVO_PIN = 12       # BCM 12, physical 32 (70kg continuous servo)
 ENC_A_PIN = 26       # BCM 26, physical 37
 ENC_B_PIN = 6        # BCM 6,  physical 31
 ABS_PIN   = 5        # BCM 5,  physical 29
