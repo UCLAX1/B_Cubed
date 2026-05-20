@@ -17,6 +17,7 @@ import time
 import tty
 import termios
 from gpiozero import DigitalOutputDevice, Servo
+from gpiozero.pins.pigpio import PiGPIOFactory
 
 SERVO_PIN  = 13
 MOSFET_PIN = 16
@@ -28,7 +29,8 @@ mosfet = DigitalOutputDevice(MOSFET_PIN)
 mosfet.on()
 time.sleep(0.5)
 
-servo = Servo(SERVO_PIN, initial_value=None)
+factory = PiGPIOFactory()
+servo = Servo(SERVO_PIN, initial_value=None, pin_factory=factory)
 current = 0.0
 step = FINE_STEP
 
