@@ -42,7 +42,7 @@ def ramp(servo, from_val, to_val):
         current += step
         current = round(current, 4)
         servo.value = current
-        print(f"  {servo.pin.number if hasattr(servo.pin, 'number') else ''} -> {current:+.4f}", flush=True)
+        print(f"  -> {current:+.4f}", flush=True)
         time.sleep(STEP_DELAY)
     servo.value = to_val
 
