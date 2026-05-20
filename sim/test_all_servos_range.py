@@ -18,8 +18,9 @@ ARM_LIMIT     = 30 / 90  # 30 degrees in servo units
 
 LAZY_PIN      = 12
 HEAD_PIN      = 18
-CONT_SPEED    = 0.15  # slow spin speed for continuous servos
-CONT_DURATION = 2.0   # seconds to spin each direction
+CONT_SPEED    = 0.3   # spin speed for continuous servos
+HEAD_DURATION = 4.0   # seconds to spin head each direction
+LAZY_DURATION = 3.0   # seconds to spin lazy susan to ~90 degrees
 
 STEP       = 0.005
 STEP_DELAY = 0.04
@@ -53,14 +54,14 @@ def spin(servo, name, speed, duration):
     time.sleep(duration)
     servo.value = 0.0
     print(f"  {name} stopped.")
-    time.sleep(0.5)
+    time.sleep(1.0)
 
 
 # ── 150kg ARM ────────────────────────────────────────────────
 print("\n=== ARM SERVO (150kg) ===")
-print("Ramping to vertical...")
-ramp(arm, 0.0, ARM_VERTICAL)
-time.sleep(0.5)
+print("Setting to vertical (arm should already be there)...")
+arm.value = ARM_VERTICAL
+time.sleep(1.0)
 
 pos_limit = ARM_VERTICAL + ARM_LIMIT
 neg_limit = ARM_VERTICAL - ARM_LIMIT
@@ -83,14 +84,14 @@ time.sleep(1.0)
 
 # ── 70kg LAZY SUSAN ──────────────────────────────────────────
 print("\n=== LAZY SUSAN (70kg) ===")
-spin(lazy, "lazy susan", +CONT_SPEED, CONT_DURATION)
-spin(lazy, "lazy susan", -CONT_SPEED, CONT_DURATION)
+spin(lazy, "lazy susan", -CONT_SPEED, LAZY_DURATION)  # left ~90 degrees
+spin(lazy, "lazy susan", +CONT_SPEED, LAZY_DURATION)  # return to center
 print("  lazy susan centered (stopped).")
 
 # ── 5.5kg HEAD ───────────────────────────────────────────────
 print("\n=== HEAD SERVO (5.5kg) ===")
-spin(head, "head", +CONT_SPEED, CONT_DURATION)
-spin(head, "head", -CONT_SPEED, CONT_DURATION)
+spin(head, "head", +CONT_SPEED, HEAD_DURATION)
+spin(head, "head", -CONT_SPEED, HEAD_DURATION)
 print("  head centered (stopped).")
 
 # ── DONE ─────────────────────────────────────────────────────
