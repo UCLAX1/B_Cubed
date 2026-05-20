@@ -40,6 +40,57 @@ use REV Hardware Client to see if the motors spin
 
 
 
+-----------------------------------------------------
+
+
+# B_Cubed: Servo Testing
+
+## How to use the servos
+- STEP 1: look at `sim/servo_test.py` for an example
+- STEP 2: make a servo: `servo = ServoEx(servo_pin=16, encoder_pin_a=27, encoder_pin_b=22, absolute_encoder_pin=17)`
+(use BCM pin numbering — see `sim/pin_mapping.txt` for physical-to-BCM conversions)
+- STEP 3: in your while loop, call `servo.update()` to keep encoders in sync
+- STEP 4: use `servo.get_position()` (rotations) or `servo.get_position_radians()` to read position
+- STEP 5: on exit, call `servo.save_encoder_position()` to save calibration to `servo_init_pos.json`
+
+## How the encoder system works
+Two encoders are used together:
+- **Relative (quadrature)**: 2048 counts/rev, high resolution, but drifts
+- **Absolute**: reads 0.0–1.0 from PWM pulse width, never drifts, but has a deadzone near 0.0/1.0
+
+Every 0.25s, `update()` re-centers the relative encoder against the absolute to correct drift. Centering is skipped when either encoder is within 0.08 rotations of the deadzone boundary.
+
+## GPIO pin mapping
+
+### Arm Servo (150kg, servo_pin=13)
+| Signal | Physical | BCM |
+|--------|----------|-----|
+| Encoder A | 37 | 26 |
+| Encoder B | 31 | 6 |
+| Absolute  | 29 | 5 |
+
+### Head Servo (5.5kg, servo_pin=18)
+| Signal | Physical | BCM |
+|--------|----------|-----|
+| Encoder A | 13 | 27 |
+| Encoder B | 15 | 22 |
+| Absolute  | 11 | 17 |
+
+## HOW TO TEST THE SERVOS:
+
+1. connect the servo signal, encoder A/B, and absolute wires to the correct GPIO pins
+2. power the Pi and SSH in (e.g. via Tailscale)
+3. run `python3 sim/servo_test.py` on the Pi
+4. rotate the servo by hand — `normal` and `absolute` positions should update in the terminal
+
+if the relative encoder reads 0 while the servo spins but absolute works, try swapping A and B pins — the channels may be reversed on the connector (see `sim/pin_mapping.txt`)
+
+## What the heck are the files
+- `main/ServoEx.py` — the main servo class. Use this.
+- `sim/servo_test.py` — basic test: prints position in a loop
+- `sim/servo_control_filters.py` — PD damping filter to reduce jitter near a setpoint
+- `sim/pin_mapping.txt` — physical-to-BCM GPIO pin reference
+
 ## original readme description VVV
 
 UCLA X1 Robotics 2025-26 B^3 Project
