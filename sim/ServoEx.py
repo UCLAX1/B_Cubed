@@ -146,8 +146,8 @@ class ServoEx(Servo):
                 self.encoder.steps = data.get(str(self.pin), 0)
 
     def reset_encoder_position(self):
+        self.encoder.steps = 0
 
-        # update json file
         data = {}
         if os.path.exists(self.INIT_POS_FILE):
             with open(self.INIT_POS_FILE, "r") as f:

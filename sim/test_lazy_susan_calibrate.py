@@ -39,8 +39,20 @@ enc = ServoEx(
     initial_value=None,
 )
 enc.reset_encoder_position()
-print("Ready. Current position = 0 steps (zero point here).")
+print("Detecting motor direction...")
+enc.value = MOVE_SPEED
+time.sleep(0.2)
+enc.value = 0.0
+time.sleep(0.1)
+direction_sign = 1 if enc.encoder.steps > 0 else -1
+enc.encoder.steps = 0
+print(f"Direction sign: {direction_sign} ({'positive cmd = positive steps' if direction_sign == 1 else 'positive cmd = negative steps'})")
+print("Ready. Current position = 0 steps.")
 print("d/RIGHT = +10 deg  |  a/LEFT = -10 deg  |  s = save as forward  |  q = quit\n")
+
+
+def set_goal(degrees):
+    return int(degrees * DEG_TO_STEPS)
 
 
 def move_to(target_steps):
@@ -50,7 +62,7 @@ def move_to(target_steps):
         print(f"  steps={current}  target={target_steps}  error={error}", flush=True)
         if abs(error) <= DEADBAND:
             break
-        enc.value = MOVE_SPEED if error > 0 else -MOVE_SPEED
+        enc.value = direction_sign * MOVE_SPEED if error > 0 else -direction_sign * MOVE_SPEED
         time.sleep(0.02)
     enc.value = 0.0
 
@@ -87,9 +99,9 @@ try:
             print(f"\nSaved! Forward = {current_deg:.1f} deg ({current_steps} steps)")
             break
         elif ch in ('\x1b[C', 'd'):
-            target += int(NUDGE_DEG * DEG_TO_STEPS)
+            target += set_goal(NUDGE_DEG)
         elif ch in ('\x1b[D', 'a'):
-            target -= int(NUDGE_DEG * DEG_TO_STEPS)
+            target -= set_goal(NUDGE_DEG)
         else:
             continue
 
