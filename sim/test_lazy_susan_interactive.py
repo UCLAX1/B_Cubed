@@ -1,6 +1,6 @@
 """
-Interactive lazy susan movement with encoder feedback.
-Mimics head_balance proportional speed control.
+Interactive lazy susan movement with encoder feedback (encoder 0 = 70kg).
+Mimics head_balance proportional speed control. Outputs values continuously.
 
 Controls:
   + / d     : increase target (move left/positive)
@@ -18,8 +18,13 @@ from gpiozero import DigitalOutputDevice
 from gpiozero.pins.pigpio import PiGPIOFactory
 from ServoEx import ServoEx
 
-SERVO_PIN  = 12
+SERVO_PIN  = 12  # Lazy susan servo
 MOSFET_PIN = 16
+
+# Encoder 0 pins (70kg lazy susan)
+ENC_A = 26
+ENC_B = 6
+ENC_ABS = 5
 
 LAZY_CPR = 1493
 CONT_MAX_ANGLE_SPEED = 0.5
@@ -29,11 +34,11 @@ mosfet.on()
 time.sleep(0.5)
 
 factory = PiGPIOFactory()
-lazy = ServoEx(12, 26, 6, 5, initial_value=None, pin_factory=factory)
-print(f"Lazy susan initialized. Encoder: {lazy.encoder.steps} steps")
+lazy = ServoEx(SERVO_PIN, ENC_A, ENC_B, ENC_ABS, initial_value=None, pin_factory=factory)
+print(f"Lazy susan (enc 0) initialized. Encoder: {lazy.encoder.steps} steps")
 
 target_deg = 0.0
-current_deg = 0.0
+cmd_last = 0.0
 step_size = 5.0  # degrees per keypress
 
 print(f"Lazy susan ready. Starting at center (target={target_deg}°)")
@@ -55,13 +60,16 @@ def getch():
 def clamp(value, minimum, maximum):
     return max(min(value, maximum), minimum)
 
-def angle_to_servo_value(angle_deg, servo_type="standard"):
-    if servo_type == "standard":
-        return clamp(angle_deg / 90.0, -1.0, 1.0)
+def angle_to_servo_value(angle_deg):
     return clamp(angle_deg / CONT_MAX_ANGLE_SPEED, -1.0, 1.0)
+
+last_print = time.time()
+print_interval = 0.2  # Print every 0.2 seconds
 
 try:
     while True:
+        now = time.time()
+
         # Read current position from encoder
         current_deg = lazy.encoder.steps * 360.0 / LAZY_CPR
 
@@ -69,31 +77,41 @@ try:
         error_deg = target_deg - current_deg
 
         # Proportional speed control (like head_balance)
-        cmd = angle_to_servo_value(error_deg, "continuous")
+        cmd = angle_to_servo_value(error_deg)
 
         # Send to servo
         lazy.value = cmd
+        cmd_last = cmd
 
-        # Try to get keypress (non-blocking)
-        ch = getch()
+        # Print values periodically
+        if now - last_print >= print_interval:
+            print(
+                f"Tgt: {target_deg:+7.2f}°  "
+                f"Cur: {current_deg:+7.2f}°  "
+                f"Err: {error_deg:+7.2f}°  "
+                f"Cmd: {cmd:+.3f}  "
+                f"Steps: {lazy.encoder.steps}"
+            )
+            last_print = now
 
-        if ch in ('q', '\x03'):
-            break
-        elif ch in ('+', 'd'):
-            target_deg = min(90.0, target_deg + step_size)
-            print(f"Target: {target_deg:+.1f}°  Current: {current_deg:+.1f}°  Error: {error_deg:+.1f}°  Cmd: {cmd:+.3f}")
-        elif ch in ('-', 'a'):
-            target_deg = max(-90.0, target_deg - step_size)
-            print(f"Target: {target_deg:+.1f}°  Current: {current_deg:+.1f}°  Error: {error_deg:+.1f}°  Cmd: {cmd:+.3f}")
-        elif ch == '0':
-            target_deg = 0.0
-            print(f"Target reset to 0°")
-        elif ch == 'p':
-            print(f"Target: {target_deg:+.1f}°  Current: {current_deg:+.1f}°  Error: {error_deg:+.1f}°  Cmd: {cmd:+.3f}  Steps: {lazy.encoder.steps}")
-        else:
-            continue
+        # Non-blocking keypress
+        try:
+            ch = getch()
 
-        time.sleep(0.05)  # 20 Hz update rate
+            if ch in ('q', '\x03'):
+                break
+            elif ch in ('+', 'd'):
+                target_deg = min(90.0, target_deg + step_size)
+            elif ch in ('-', 'a'):
+                target_deg = max(-90.0, target_deg - step_size)
+            elif ch == '0':
+                target_deg = 0.0
+            elif ch == 'p':
+                print(f"\n[Manual print] Tgt: {target_deg:+7.2f}°  Cur: {current_deg:+7.2f}°  Err: {error_deg:+7.2f}°  Cmd: {cmd:+.3f}  Steps: {lazy.encoder.steps}\n")
+        except:
+            pass
+
+        time.sleep(0.02)  # 50 Hz control rate
 
 except KeyboardInterrupt:
     pass
@@ -103,5 +121,6 @@ finally:
     lazy.deactivate_and_save()
     time.sleep(0.5)
     mosfet.off()
+    current_deg = lazy.encoder.steps * 360.0 / LAZY_CPR
     print(f"Final position saved: {lazy.encoder.steps} steps ({current_deg:+.1f}°)")
     print("Done.")
