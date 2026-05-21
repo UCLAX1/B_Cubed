@@ -7,7 +7,7 @@ import time
 from gpiozero import DigitalOutputDevice, Servo
 from gpiozero.pins.pigpio import PiGPIOFactory
 
-LAZY_SUSAN_PIN = 18  # 70kg servo GPIO - using this as signal source
+LAZY_SUSAN_PIN = 27  # 70kg servo GPIO - using this as signal source
 MOSFET_PIN = 16
 SPIN_SPEED = 0.3
 DURATION = 2.0
