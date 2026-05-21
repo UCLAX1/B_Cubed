@@ -38,9 +38,9 @@ IMU_ALPHA = 0.5
 ARM_DEADBAND_DEG = 1.0
 CONT_DEADBAND_DEG = 2.0
 
-# Slew limit on the commanded servo value, in -1..1 units per second. (EXTREMELY SLOW)
-ARM_SLEW_PER_SEC = 0.005
-CONT_SLEW_PER_SEC = 0.005
+# Slew limit on the commanded servo value, in -1..1 units per second. Match calibrate speeds.
+ARM_SLEW_PER_SEC = 0.15
+CONT_SLEW_PER_SEC = 0.15
 
 # Continuous-servo speed scaling. Much bigger denominator = much gentler response.
 CONT_MAX_ANGLE_SPEED = 0.5
