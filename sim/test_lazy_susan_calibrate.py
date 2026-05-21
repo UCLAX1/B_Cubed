@@ -65,6 +65,23 @@ def set_goal(degrees):
     return int(degrees * DEG_TO_STEPS)
 
 
+def wait_for_stable():
+    """Block until the encoder stops drifting (servo fully coasted to rest)."""
+    prev = enc.encoder.steps
+    consec = 0
+    deadline = time.time() + 2.0
+    while time.time() < deadline:
+        time.sleep(0.05)
+        cur = enc.encoder.steps
+        if abs(cur - prev) <= 1:
+            consec += 1
+            if consec >= 4:  # stable for 4 reads = 0.2s
+                return
+        else:
+            consec = 0
+        prev = cur
+
+
 def move_to(target_steps):
     while True:
         current = enc.encoder.steps
@@ -79,6 +96,7 @@ def move_to(target_steps):
         enc.value = servo_cmd
         time.sleep(0.02)
     enc.value = 0.0
+    wait_for_stable()
 
 
 def getch():
@@ -120,6 +138,7 @@ try:
 
         print(f"Moving to {target / DEG_TO_STEPS:+.1f} deg ({target} steps)...")
         move_to(target)
+        target = enc.encoder.steps  # snap to actual resting position to avoid drift
         termios.tcflush(sys.stdin, termios.TCIFLUSH)  # discard keys pressed during move
         print(f"pos = {enc.encoder.steps / DEG_TO_STEPS:+.1f} deg  ({enc.encoder.steps} steps)", flush=True)
 
