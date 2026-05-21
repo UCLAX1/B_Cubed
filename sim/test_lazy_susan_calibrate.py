@@ -69,12 +69,14 @@ def move_to(target_steps):
     while True:
         current = enc.encoder.steps
         error = target_steps - current
-        print(f"  steps={current}  target={target_steps}  error={error}", flush=True)
         if abs(error) <= DEADBAND:
+            print(f"  STOP  steps={current}  target={target_steps}  error={error}", flush=True)
             break
         ratio = min(1.0, abs(error) / SLOW_ZONE)
         speed = MIN_SPEED + (MOVE_SPEED - MIN_SPEED) * ratio
-        enc.value = direction_sign * speed if error > 0 else -direction_sign * speed
+        servo_cmd = direction_sign * speed if error > 0 else -direction_sign * speed
+        print(f"  steps={current}  target={target_steps}  error={error:+d}  speed={speed:.3f}  cmd={servo_cmd:+.3f}", flush=True)
+        enc.value = servo_cmd
         time.sleep(0.02)
     enc.value = 0.0
 
