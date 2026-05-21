@@ -21,9 +21,8 @@ ENCODER_PIN_A = 26
 ENCODER_PIN_B = 6
 ABS_PIN       = 5
 
-NUDGE_DEG  = 10.0
-CPR        = 2048
-DEG_TO_STEPS = CPR / 360.0
+NUDGE_DEG    = 10.0
+DEG_TO_STEPS = 2048 / 360.0  # updated after calibration measurement
 MOVE_SPEED = 0.3
 DEADBAND   = 20  # steps — stop when within this many steps of target
 
@@ -42,20 +41,40 @@ enc = ServoEx(
     pin_factory=factory,
 )
 enc.reset_encoder_position()
+
+# ── detect direction ──────────────────────────────────────────
 print("Detecting motor direction (spinning briefly)...")
 enc.value = MOVE_SPEED
 time.sleep(0.5)
 enc.value = 0.0
 time.sleep(0.3)
 test_steps = enc.encoder.steps
-if abs(test_steps) < 5:
-    # not enough movement to detect — default to -1 and warn
-    direction_sign = -1
-    print(f"WARNING: Only {test_steps} steps detected, defaulting direction_sign=-1. Check wiring if movement is wrong.")
-else:
-    direction_sign = 1 if test_steps > 0 else -1
+direction_sign = 1 if test_steps >= 0 else -1
 enc.encoder.steps = 0
 print(f"Direction sign: {direction_sign} (detected from {test_steps} steps)")
+
+# ── measure counts per revolution ────────────────────────────
+input("Position the lazy susan at a clear reference mark, then press ENTER to start 1 full revolution measurement...")
+enc.encoder.steps = 0
+print("Spinning one full revolution — stop it manually when it returns to the mark, then press Ctrl+C.")
+enc.value = direction_sign * MOVE_SPEED
+try:
+    while True:
+        print(f"  steps={enc.encoder.steps}", end='\r', flush=True)
+        time.sleep(0.05)
+except KeyboardInterrupt:
+    pass
+enc.value = 0.0
+time.sleep(0.2)
+measured_cpr = abs(enc.encoder.steps)
+enc.encoder.steps = 0
+if measured_cpr < 10:
+    print(f"WARNING: Only {measured_cpr} steps measured, using default 2048 CPR")
+    measured_cpr = 2048
+else:
+    print(f"\nMeasured CPR: {measured_cpr} steps = 360 degrees")
+DEG_TO_STEPS = measured_cpr / 360.0
+print(f"1 degree = {DEG_TO_STEPS:.2f} steps")
 print("Ready. Current position = 0 steps.")
 print("d/RIGHT = +10 deg  |  a/LEFT = -10 deg  |  s = save as forward  |  q = quit\n")
 
@@ -94,7 +113,6 @@ target = 0
 
 try:
     while True:
-        enc.update()
         current_steps = enc.encoder.steps
         current_deg = current_steps / DEG_TO_STEPS
 
@@ -116,7 +134,6 @@ try:
 
         print(f"Moving to {target / DEG_TO_STEPS:+.1f} deg ({target} steps)...")
         move_to(target)
-        enc.update()
         print(f"pos = {enc.encoder.steps / DEG_TO_STEPS:+.1f} deg  ({enc.encoder.steps} steps)", flush=True)
 
 except KeyboardInterrupt:
