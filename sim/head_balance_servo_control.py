@@ -158,6 +158,7 @@ def initialize_imu(init_timeout_s=IMU_INIT_TIMEOUT_S):
 def initialize_servos():
     from gpiozero import DigitalOutputDevice, Servo  # type: ignore[import-not-found]
     from gpiozero.pins.pigpio import PiGPIOFactory  # type: ignore[import-not-found]
+    from ServoEx import ServoEx  # type: ignore[import-not-found]
 
     # Requires: sudo systemctl enable --now pigpiod
     log("Initializing servos...")
@@ -173,8 +174,8 @@ def initialize_servos():
 
     servos = (
         Servo(13, initial_value=None, pin_factory=pin_factory),
-        Servo(12, initial_value=None, pin_factory=pin_factory),
-        Servo(18, initial_value=None, pin_factory=pin_factory),
+        ServoEx(12, 26, 6, 5,  initial_value=None, pin_factory=pin_factory),
+        ServoEx(18,  4, 22, 17, initial_value=None),
         DigitalOutputDevice(16),
     )
     log("Servos initialized.")
@@ -343,8 +344,12 @@ def main(
                         angle_to_servo_value(damped_arm_tgt, "standard") + ARM_VERTICAL_OFFSET,
                         -1.0, 1.0
                     )
-                    lazy_cmd = angle_to_servo_value(lazy_tgt, "continuous")
-                    head_cmd = angle_to_servo_value(head_tgt, "continuous")
+
+                    lazy_actual = lazy_susan_servo.encoder.steps * 360.0 / LAZY_CPR
+                    lazy_cmd = angle_to_servo_value(lazy_tgt - lazy_actual, "continuous")
+
+                    head_actual = head_servo.encoder.steps * 360.0 / HEAD_CPR
+                    head_cmd = angle_to_servo_value(head_tgt - head_actual, "continuous")
 
                     arm_cmd = slew_limit(
                         arm_cmd_last, arm_cmd, ARM_SLEW_PER_SEC * dt
