@@ -43,7 +43,7 @@ enc = ServoEx(
     initial_value=None,
     pin_factory=factory,
 )
-enc.reset_encoder_position()
+enc.reset_encoder_position()  # sets current physical position as 0 for this session
 
 # ── detect direction ──────────────────────────────────────────
 print("Detecting motor direction (spinning briefly)...")

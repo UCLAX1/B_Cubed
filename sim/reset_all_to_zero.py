@@ -60,13 +60,14 @@ def wait_for_stable(enc):
 
 
 def detect_direction(servo):
+    pre = servo.encoder.steps
     servo.value = MOVE_SPEED
     time.sleep(0.5)
     servo.value = 0.0
     time.sleep(0.3)
-    steps = servo.encoder.steps
-    servo.encoder.steps = 0
-    return 1 if steps >= 0 else -1
+    delta = servo.encoder.steps - pre
+    servo.encoder.steps = pre  # restore — don't lose the loaded saved position
+    return 1 if delta >= 0 else -1
 
 
 def move_to_zero(servo, name, direction_sign):
