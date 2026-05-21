@@ -24,7 +24,9 @@ ABS_PIN       = 5
 NUDGE_DEG    = 10.0
 DEG_TO_STEPS = 2048 / 360.0  # updated after calibration measurement
 MOVE_SPEED = 0.3
-DEADBAND   = 2   # steps — stop when within this many steps of target
+MIN_SPEED  = 0.08  # minimum speed to overcome friction
+SLOW_ZONE  = 150   # steps — start scaling down speed within this range
+DEADBAND   = 8     # steps (~2 deg at 4 steps/deg)
 
 mosfet = DigitalOutputDevice(MOSFET_PIN)
 mosfet.on()
@@ -65,7 +67,7 @@ try:
 except KeyboardInterrupt:
     pass
 enc.value = 0.0
-time.sleep(0.2)
+time.sleep(1.5)  # wait for servo to fully coast to a stop before reading/reset
 measured_cpr = abs(enc.encoder.steps)
 enc.encoder.steps = 0
 if measured_cpr < 10:
@@ -90,7 +92,9 @@ def move_to(target_steps):
         print(f"  steps={current}  target={target_steps}  error={error}", flush=True)
         if abs(error) <= DEADBAND:
             break
-        enc.value = direction_sign * MOVE_SPEED if error > 0 else -direction_sign * MOVE_SPEED
+        ratio = min(1.0, abs(error) / SLOW_ZONE)
+        speed = MIN_SPEED + (MOVE_SPEED - MIN_SPEED) * ratio
+        enc.value = direction_sign * speed if error > 0 else -direction_sign * speed
         time.sleep(0.02)
     enc.value = 0.0
 
