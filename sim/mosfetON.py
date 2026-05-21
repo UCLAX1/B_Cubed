@@ -10,5 +10,5 @@ try:
     mosfet.on()
     print("turned on")
 
-finally:
+except:
     print("not on :(")
