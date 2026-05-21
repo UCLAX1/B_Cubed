@@ -68,9 +68,9 @@ class ServoEx(Servo):
     POSITION_CENTERING_DELAY: float = 0.25
 
     # check the one google sheet for what "servo_pin", "encoder_pin_a", etc. are
-    def __init__(self, servo_pin: int, encoder_pin_a: int, encoder_pin_b: int, absolute_encoder_pin: int, initial_value=None, pin_factory=None):
+    def __init__(self, servo_pin: int, encoder_pin_a: int, encoder_pin_b: int, absolute_encoder_pin: int):
         try:
-            super().__init__(servo_pin, initial_value=initial_value, pin_factory=pin_factory)
+            super().__init__(servo_pin)
             self.encoder = RotaryEncoder(a=encoder_pin_a, b=encoder_pin_b, max_steps=10000000000000)
         except Exception:
             print("ERROR: gpiozero servo could not initialize. Make sure the servos are plugged in to the right pins.")
@@ -89,7 +89,41 @@ class ServoEx(Servo):
         self.load_encoder_position()
 
     def __wait_for_active(self, encoder_pin_a: int, encoder_pin_b: int):
-        print(f"servo {self.pin} ready, encoder a={encoder_pin_a} b={encoder_pin_b} abs={self.absolute_encoder.pin} ready")
+        print(f"waiting for servo {self.pin}")
+        # max_wait = 3
+        max_wait = 10000
+        start = time.time()
+        while not self.is_active:
+            if time.time() - start > max_wait:
+                print(f"WARNING: Timeout waiting for servo {self.pin} to activate.")
+                raise Exception("servo not connected")
+            time.sleep(0.05)
+
+        print(f"servo connected {self.pin}")
+
+        print(f"waiting for encoder a: {encoder_pin_a}, b: {encoder_pin_b}")
+        # max_wait = 3
+        max_wait = 10000
+        start = time.time()
+        while not self.is_active:
+            if time.time() - start > max_wait:
+                print(f"WARNING: Timeout waiting for encoder to activate.")
+                raise Exception("encoder not connected")
+            time.sleep(0.05)
+
+        print(f"encoder connected")
+
+        print(f"waiting for absolute encoder {self.absolute_encoder.pin}")
+        # max_wait = 3
+        max_wait = 10000
+        start = time.time()
+        while not self.is_active:
+            if time.time() - start > max_wait:
+                print(f"WARNING: Timeout waiting for absolute encoder {self.absolute_encoder.pin} to activate.")
+                raise Exception("absolute encoder not connected")
+            time.sleep(0.05)
+
+        print(f"absolute encoder connected {self.absolute_encoder.pin}")
 
     # returns position
     def get_position(self) -> float:
@@ -147,8 +181,8 @@ class ServoEx(Servo):
                 self.encoder.steps = data.get(str(self.pin), 0)
 
     def reset_encoder_position(self):
-        self.encoder.steps = 0
 
+        # update json file
         data = {}
         if os.path.exists(self.INIT_POS_FILE):
             with open(self.INIT_POS_FILE, "r") as f:

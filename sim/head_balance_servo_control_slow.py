@@ -39,7 +39,7 @@ ARM_DEADBAND_DEG = 1.0
 CONT_DEADBAND_DEG = 2.0
 
 # Slew limit on the commanded servo value, in -1..1 units per second. Match calibrate speeds.
-ARM_SLEW_PER_SEC = 0.15
+ARM_SLEW_PER_SEC = 0.02
 CONT_SLEW_PER_SEC = 0.15
 
 # Continuous-servo speed scaling. Much bigger denominator = much gentler response.
@@ -378,6 +378,10 @@ def main(
                 if DEBUG and now - last_print >= print_interval:
                     print(
                         f"IMU(filt): R={roll:7.2f}  P={pitch:7.2f}  Y={yaw:7.2f}"
+                    )
+                    print(
+                        f"Tgt: arm={arm_tgt_last:+7.2f}°  "
+                        f"lazy={lazy_tgt_last:+7.2f}°  head={head_tgt_last:+7.2f}°"
                     )
                     print(
                         f"Cmd: arm={arm_cmd_last:+.3f}  "
