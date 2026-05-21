@@ -22,7 +22,8 @@ ENCODER_PIN_B = 6
 ABS_PIN       = 5
 
 NUDGE_DEG    = 10.0
-DEG_TO_STEPS = 2048 / 360.0  # updated after calibration measurement
+MEASURED_CPR = 1493
+DEG_TO_STEPS = MEASURED_CPR / 360.0
 MOVE_SPEED = 0.3
 MIN_SPEED  = 0.08  # minimum speed to overcome friction
 SLOW_ZONE  = 150   # steps — start scaling down speed within this range
@@ -55,28 +56,7 @@ direction_sign = 1 if test_steps >= 0 else -1
 enc.encoder.steps = 0
 print(f"Direction sign: {direction_sign} (detected from {test_steps} steps)")
 
-# ── measure counts per revolution ────────────────────────────
-input("Position the lazy susan at a clear reference mark, then press ENTER to start 1 full revolution measurement...")
-enc.encoder.steps = 0
-print("Spinning one full revolution — stop it manually when it returns to the mark, then press Ctrl+C.")
-enc.value = direction_sign * MOVE_SPEED
-try:
-    while True:
-        print(f"  steps={enc.encoder.steps}", end='\r', flush=True)
-        time.sleep(0.05)
-except KeyboardInterrupt:
-    pass
-enc.value = 0.0
-time.sleep(1.5)  # wait for servo to fully coast to a stop before reading/reset
-measured_cpr = abs(enc.encoder.steps)
-enc.encoder.steps = 0
-if measured_cpr < 10:
-    print(f"WARNING: Only {measured_cpr} steps measured, using default 2048 CPR")
-    measured_cpr = 2048
-else:
-    print(f"\nMeasured CPR: {measured_cpr} steps = 360 degrees")
-DEG_TO_STEPS = measured_cpr / 360.0
-print(f"1 degree = {DEG_TO_STEPS:.2f} steps")
+print(f"Using CPR={MEASURED_CPR} (hardcoded). 1 degree = {DEG_TO_STEPS:.2f} steps")
 print("Ready. Current position = 0 steps.")
 print("d/RIGHT = +10 deg  |  a/LEFT = -10 deg  |  s = save as forward  |  q = quit\n")
 
