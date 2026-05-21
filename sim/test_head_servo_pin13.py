@@ -10,7 +10,7 @@ from gpiozero.pins.pigpio import PiGPIOFactory
 SERVO_PIN = 18  # Physical pin 32 - previously working
 MOSFET_PIN = 16
 SPIN_SPEED = 0.3
-DURATION = 10.0
+DURATION = 60.0
 
 mosfet = DigitalOutputDevice(MOSFET_PIN, pin_factory = PiGPIOFactory())
 mosfet.on()
@@ -24,11 +24,6 @@ try:
 
     print(f"Spinning right at {SPIN_SPEED} for {DURATION}s...")
     servo.value = SPIN_SPEED
-    print(f"  Set servo.value to {servo.value}")
-    time.sleep(DURATION)
-
-    print(f"Spinning left at {-SPIN_SPEED} for {DURATION}s...")
-    servo.value = -SPIN_SPEED
     print(f"  Set servo.value to {servo.value}")
     time.sleep(DURATION)
 
