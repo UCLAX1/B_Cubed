@@ -83,11 +83,18 @@ def wait_for_stable():
 
 
 def move_to(target_steps):
+    initial_error_sign = None
     while True:
         current = enc.encoder.steps
         error = target_steps - current
         if abs(error) <= DEADBAND:
             print(f"  STOP  steps={current}  target={target_steps}  error={error}", flush=True)
+            break
+        if initial_error_sign is None:
+            initial_error_sign = 1 if error > 0 else -1
+        elif (1 if error > 0 else -1) != initial_error_sign:
+            # overshot — stop and accept rather than hunting back
+            print(f"  OVERSHOOT  steps={current}  target={target_steps}  error={error}", flush=True)
             break
         ratio = min(1.0, abs(error) / SLOW_ZONE)
         speed = MIN_SPEED + (MOVE_SPEED - MIN_SPEED) * ratio

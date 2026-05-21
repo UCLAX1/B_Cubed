@@ -29,6 +29,9 @@ HEAD_MIN, HEAD_MAX = -float('inf'), float('inf')
 
 ARM_VERTICAL_OFFSET = -0.66  # servo value at physical vertical (measured)
 
+LAZY_CPR = 1493   # measured counts per revolution for 70kg lazy susan
+HEAD_CPR  = 2048  # default; update after head encoder is calibrated
+
 # Lower alpha = smoother but more lag. Range is about 0.05 to 0.4.
 IMU_ALPHA = 0.15
 
