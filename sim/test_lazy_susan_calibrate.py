@@ -12,6 +12,7 @@ import time
 import tty
 import termios
 from gpiozero import DigitalOutputDevice
+from gpiozero.pins.pigpio import PiGPIOFactory
 from ServoEx import ServoEx
 
 SERVO_PIN     = 12
@@ -30,6 +31,7 @@ mosfet = DigitalOutputDevice(MOSFET_PIN)
 mosfet.on()
 time.sleep(0.5)
 
+factory = PiGPIOFactory()
 print("Initializing encoder...")
 enc = ServoEx(
     servo_pin=SERVO_PIN,
@@ -37,6 +39,7 @@ enc = ServoEx(
     encoder_pin_b=ENCODER_PIN_B,
     absolute_encoder_pin=ABS_PIN,
     initial_value=None,
+    pin_factory=factory,
 )
 enc.reset_encoder_position()
 print("Detecting motor direction...")
