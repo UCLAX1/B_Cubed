@@ -10,7 +10,7 @@ from gpiozero.pins.pigpio import PiGPIOFactory
 SERVO_PIN = 18  # Physical pin 32 - previously working
 MOSFET_PIN = 16
 SPIN_SPEED = 0.3
-DURATION = 2.0
+DURATION = 10.0
 
 mosfet = DigitalOutputDevice(MOSFET_PIN, pin_factory = PiGPIOFactory())
 mosfet.on()
