@@ -42,14 +42,20 @@ enc = ServoEx(
     pin_factory=factory,
 )
 enc.reset_encoder_position()
-print("Detecting motor direction...")
+print("Detecting motor direction (spinning briefly)...")
 enc.value = MOVE_SPEED
-time.sleep(0.2)
+time.sleep(0.5)
 enc.value = 0.0
-time.sleep(0.1)
-direction_sign = 1 if enc.encoder.steps > 0 else -1
+time.sleep(0.3)
+test_steps = enc.encoder.steps
+if abs(test_steps) < 5:
+    # not enough movement to detect — default to -1 and warn
+    direction_sign = -1
+    print(f"WARNING: Only {test_steps} steps detected, defaulting direction_sign=-1. Check wiring if movement is wrong.")
+else:
+    direction_sign = 1 if test_steps > 0 else -1
 enc.encoder.steps = 0
-print(f"Direction sign: {direction_sign} ({'positive cmd = positive steps' if direction_sign == 1 else 'positive cmd = negative steps'})")
+print(f"Direction sign: {direction_sign} (detected from {test_steps} steps)")
 print("Ready. Current position = 0 steps.")
 print("d/RIGHT = +10 deg  |  a/LEFT = -10 deg  |  s = save as forward  |  q = quit\n")
 
