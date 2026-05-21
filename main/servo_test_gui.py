@@ -26,6 +26,10 @@ def exit_gracefully():
     print("exception occurred")
     exit(1)
 
+# convert angle to -pi to pi
+def normalize_angle(angle: float) -> float:
+    return (angle + np.pi) % (2 * np.pi) - np.pi
+
 
 class InputHandler:
 
@@ -75,6 +79,16 @@ class App:
 
     TARGET_UPDATES_PER_SECOND: float = 240.0
     TARGET_SECONDS_PER_UPDATE: float = 1.0 / TARGET_UPDATES_PER_SECOND
+
+    DEAD_ZONE_MIDDLE_ANGLE = np.deg2rad(180)
+    SERVO_RANGE = np.deg2rad(270)
+    print("set servo range: ", np.rad2deg(SERVO_RANGE))
+    DEAD_ZONE_RANGE = 2 * np.pi - SERVO_RANGE
+    print("set dead-zone range: ", np.rad2deg(DEAD_ZONE_RANGE))
+    DEAD_ZONE_CW_ANGLE = normalize_angle(DEAD_ZONE_MIDDLE_ANGLE - DEAD_ZONE_RANGE / 2)
+    # print("set dead-zone cw angle: ", np.rad2deg(DEAD_ZONE_CW_ANGLE))
+    DEAD_ZONE_CCW_ANGLE = normalize_angle(DEAD_ZONE_MIDDLE_ANGLE + DEAD_ZONE_RANGE / 2)
+    # print("set dead-zone ccw angle: ", np.rad2deg(DEAD_ZONE_CCW_ANGLE))
 
     def __init__(self):
         # timer in seconds
@@ -161,7 +175,13 @@ class App:
             # change the zero
             self.requested_servo_angle -= np.pi / 2
             # wrap to -pi to pi
-            self.requested_servo_angle = (self.requested_servo_angle + np.pi) % (2 * np.pi) - np.pi
+            self.requested_servo_angle = normalize_angle(self.requested_servo_angle)
+
+            if self.requested_servo_angle > self.DEAD_ZONE_CW_ANGLE:
+                self.requested_servo_angle = self.DEAD_ZONE_CW_ANGLE
+            if self.requested_servo_angle < self.DEAD_ZONE_CCW_ANGLE:
+                self.requested_servo_angle = self.DEAD_ZONE_CCW_ANGLE
+
 
 
 
@@ -177,7 +197,10 @@ class App:
 
         pygame.draw.circle(self.screen, (255, 255, 255), self.CIRCLE_MIDDLE_COORD, self.DRAW_SCALE - 2, 2)
 
-        pygame.draw.line(self.screen, (255, 0, 0), self.CIRCLE_MIDDLE_COORD, self.flip_y(self.CIRCLE_MIDDLE_COORD + self.DRAW_SCALE * self.servo_vec, self.CIRCLE_MIDDLE_COORD[1]), 5)
+        # pygame.draw.line(self.screen, (255, 0, 0), self.CIRCLE_MIDDLE_COORD, self.flip_y(self.CIRCLE_MIDDLE_COORD + self.DRAW_SCALE * self.servo_vec, self.CIRCLE_MIDDLE_COORD[1]), 5)
+
+        requested_servo_vec = np.array([-np.sin(self.requested_servo_angle), np.cos(self.requested_servo_angle)])
+        pygame.draw.line(self.screen, (255, 0, 0), self.CIRCLE_MIDDLE_COORD, self.flip_y(self.CIRCLE_MIDDLE_COORD + self.DRAW_SCALE * requested_servo_vec, self.CIRCLE_MIDDLE_COORD[1]), 5)
         text_surface = self.FONT.render("requested angle: " + str(self.requested_servo_angle), False, (255, 255, 255))
         self.screen.blit(text_surface, (0,0))
         #

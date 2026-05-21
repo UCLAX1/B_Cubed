@@ -62,7 +62,7 @@ class ServoEx(Servo):
     # this constant represents the error at which the centering with the absolute position will not happen,
     # due to the absolute encoder having erroneous values in this "deadzone".
     # unit: rotations
-    POSITION_CENTERING_DEADZONE_ERROR: float = 0.08
+    POSITION_CENTERING_DEAD_ZONE_ERROR: float = 0.08
 
     # center position every x seconds
     POSITION_CENTERING_DELAY: float = 0.25
@@ -152,12 +152,12 @@ class ServoEx(Servo):
 
         # this if statement essentially just makes it so it doesn't do any centering
         # when the absolute position isn't found yet
-        if self.get_absolute_position() > (1.0 - self.POSITION_CENTERING_DEADZONE_ERROR) or self.get_absolute_position() < self.POSITION_CENTERING_DEADZONE_ERROR:
+        if self.get_absolute_position() > (1.0 - self.POSITION_CENTERING_DEAD_ZONE_ERROR) or self.get_absolute_position() < self.POSITION_CENTERING_DEAD_ZONE_ERROR:
             return
 
         mod_position = self.get_position() % 1.0
 
-        if mod_position > (1.0 - self.POSITION_CENTERING_DEADZONE_ERROR) or mod_position < self.POSITION_CENTERING_DEADZONE_ERROR:
+        if mod_position > (1.0 - self.POSITION_CENTERING_DEAD_ZONE_ERROR) or mod_position < self.POSITION_CENTERING_DEAD_ZONE_ERROR:
             return
 
         # how much greater absolute position is from encoder position

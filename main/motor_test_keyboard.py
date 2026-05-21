@@ -44,10 +44,10 @@ class InputHandler:
     def __init__(self):
         self.stop_pressed: bool = False
 
-        self.up_pressed: bool = False
-        self.down_pressed: bool = False
-        self.left_pressed: bool = False
-        self.right_pressed: bool = False
+        # self.up_pressed: bool = False
+        # self.down_pressed: bool = False
+        # self.left_pressed: bool = False
+        # self.right_pressed: bool = False
 
         self.cw_pressed: bool = False
         self.ccw_pressed: bool = False
