@@ -1,17 +1,16 @@
 """
-Temporary test: head servo (BCM 18) with encoder Channel A on physical pin 13 (BCM 27).
-Tests if physical pin 13 is dead or now working.
+Temporary test: Use 70kg servo GPIO pin (BCM 12) to control 5.5kg servo physically plugged in.
+Tests if the 70kg servo's GPIO signal source works by driving the head servo wired to it.
 """
 
 import time
-from gpiozero import DigitalInputDevice, DigitalOutputDevice, Servo
+from gpiozero import DigitalOutputDevice, Servo
 from gpiozero.pins.pigpio import PiGPIOFactory
 
-SERVO_PIN  = 18
+LAZY_SUSAN_PIN = 12  # 70kg servo GPIO - using this as signal source
 MOSFET_PIN = 16
-ENC_A_PIN  = 27  # Physical pin 13 - testing if dead
 SPIN_SPEED = 0.3
-DURATION   = 2.0
+DURATION = 2.0
 
 mosfet = DigitalOutputDevice(MOSFET_PIN)
 mosfet.on()
@@ -19,60 +18,22 @@ time.sleep(0.5)
 
 try:
     factory = PiGPIOFactory()
-    servo = Servo(SERVO_PIN, initial_value=None, pin_factory=factory)
-    print(f"Head servo (BCM {SERVO_PIN}) initialized.")
+    servo = Servo(LAZY_SUSAN_PIN, initial_value=None, pin_factory=factory)
+    print(f"Using 70kg GPIO pin (BCM {LAZY_SUSAN_PIN}) to control 5.5kg servo.")
 
-    # Try to read encoder pin 13 (BCM 27)
-    try:
-        enc_a = DigitalInputDevice(ENC_A_PIN, pull_up=True, pin_factory=factory)
-        print(f"Encoder Channel A on physical pin 13 (BCM {ENC_A_PIN}) initialized.")
-        pin13_ok = True
-    except Exception as e:
-        print(f"Failed to initialize pin 13 (BCM {ENC_A_PIN}): {e}")
-        pin13_ok = False
+    print(f"Spinning right at {SPIN_SPEED} for {DURATION}s...")
+    servo.value = SPIN_SPEED
+    time.sleep(DURATION)
 
-    if pin13_ok:
-        print("\nSpinning right, monitoring pin 13 transitions...")
-        enc_transitions = 0
-        servo.value = SPIN_SPEED
-        last_state = enc_a.value
-        start = time.time()
+    print(f"Spinning left at {-SPIN_SPEED} for {DURATION}s...")
+    servo.value = -SPIN_SPEED
+    time.sleep(DURATION)
 
-        while time.time() - start < DURATION:
-            if enc_a.value != last_state:
-                enc_transitions += 1
-                last_state = enc_a.value
-                print(f"  Transition #{enc_transitions}")
-            time.sleep(0.01)
-
-        print(f"Right spin: {enc_transitions} transitions detected on pin 13")
-
-        print(f"\nSpinning left, monitoring pin 13 transitions...")
-        enc_transitions = 0
-        servo.value = -SPIN_SPEED
-        last_state = enc_a.value
-        start = time.time()
-
-        while time.time() - start < DURATION:
-            if enc_a.value != last_state:
-                enc_transitions += 1
-                last_state = enc_a.value
-                print(f"  Transition #{enc_transitions}")
-            time.sleep(0.01)
-
-        print(f"Left spin: {enc_transitions} transitions detected on pin 13")
-
-        if enc_transitions > 5:
-            print("\n✓ Physical pin 13 is WORKING - encoder transitions detected!")
-        else:
-            print("\n✗ Physical pin 13 is DEAD or not responding - no/few encoder transitions")
-
-        enc_a.close()
-
-    print("\nStopping...")
+    print("Stopping...")
     servo.value = 0.0
     time.sleep(0.5)
-    print("Test complete.")
+
+    print("If servo moved, BCM 12 (70kg GPIO) is working!")
 
 finally:
     servo.value = None
