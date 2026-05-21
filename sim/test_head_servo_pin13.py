@@ -12,7 +12,7 @@ MOSFET_PIN = 16
 SPIN_SPEED = 0.3
 DURATION = 2.0
 
-mosfet = DigitalOutputDevice(MOSFET_PIN)
+mosfet = DigitalOutputDevice(MOSFET_PIN, pin_factory = PiGPIOFactory())
 mosfet.on()
 time.sleep(0.5)
 
