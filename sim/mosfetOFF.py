@@ -6,3 +6,5 @@ MOSFET_PIN = 16
 
 mosfet = DigitalOutputDevice(MOSFET_PIN)
 mosfet.off()
+
+orint("turned off")
