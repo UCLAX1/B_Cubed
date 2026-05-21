@@ -67,7 +67,7 @@ class ServoEx(Servo):
     # center position every x seconds
     POSITION_CENTERING_DELAY: float = 0.25
 
-    def __init__(self, servo_pin: int, encoder_pin_a: int, encoder_pin_b: int, absolute_encoder_pin: int, initial_value=None, pin_factory=None):
+    def __init__(self, servo_pin: int, encoder_pin_a: int, encoder_pin_b: int, absolute_encoder_pin: int, initial_value=None, pin_factory=None, save_on_deactivate=False):
         try:
             super().__init__(servo_pin, initial_value=initial_value, pin_factory=pin_factory)
             self.encoder = RotaryEncoder(a=encoder_pin_a, b=encoder_pin_b, max_steps=10000000000000)
@@ -78,6 +78,8 @@ class ServoEx(Servo):
         self.absolute_encoder = AbsoluteEncoder(pin=absolute_encoder_pin)
         self.pin = servo_pin
         self.time_position_last_centered: float = 0
+        self.save_on_deactivate = save_on_deactivate
+        self._last_value = None
 
         self.__wait_for_active(encoder_pin_a, encoder_pin_b)
 
@@ -89,6 +91,11 @@ class ServoEx(Servo):
 
     def __wait_for_active(self, encoder_pin_a: int, encoder_pin_b: int):
         print(f"servo {self.pin} ready, encoder a={encoder_pin_a} b={encoder_pin_b} abs={self.absolute_encoder.pin} ready")
+
+    def deactivate_and_save(self):
+        """Stop the servo and save current position as the new forward/center reference."""
+        self.value = None
+        self.save_encoder_position()
 
     # returns position
     def get_position(self) -> float:
@@ -130,16 +137,22 @@ class ServoEx(Servo):
         self.encoder.steps += position_difference * self.COUNTS_PER_REVOLUTION
 
     def save_encoder_position(self):
+        """Save current encoder position as the zero/forward reference.
+
+        The saved value is the offset from the current position.
+        On next startup, load_encoder_position() restores this so:
+          encoder.steps = 0 (current physical pos at startup)
+          load() sets encoder.steps = saved_offset
+        This only works correctly if the servo hasn't moved between power cycles.
+        """
         data = {}
-
         data[str(self.pin)] = self.encoder.steps
-
         with open(self.INIT_POS_FILE, "w") as f:
             json.dump(data, f, indent=2)
 
 
     def load_encoder_position(self):
-        # data = self.get_data_from_servo_init_pos_file()
+        """Restore the saved encoder offset from the last session."""
         if os.path.exists(self.INIT_POS_FILE):
             with open(self.INIT_POS_FILE, "r") as f:
                 data = json.load(f)

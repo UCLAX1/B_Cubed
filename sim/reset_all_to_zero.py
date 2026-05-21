@@ -110,10 +110,11 @@ head_dir = detect_direction(head)
 move_to_zero(head, "head", head_dir)
 
 print("\nAll servos at home position.")
+print("Saving final positions...")
 
 arm.value = None
-lazy.value = None
-head.value = None
+lazy.deactivate_and_save()
+head.deactivate_and_save()
 time.sleep(0.2)
 mosfet.off()
-print("Done.")
+print("Done. Lazy susan and head positions saved as new forward reference.")

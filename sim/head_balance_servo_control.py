@@ -397,12 +397,12 @@ def main(
         log("\nStopping...")
     finally:
         log("Centering servos and shutting down.")
-        arm_servo.value = ARM_VERTICAL_OFFSET
-        lazy_susan_servo.value = 0
-        head_servo.value = 0
+        arm_servo.value = 0
+        lazy_susan_servo.deactivate_and_save()
+        head_servo.deactivate_and_save()
         time.sleep(0.5)
         mosfet.off()
-        log("Done.")
+        log("Done. Servo positions saved.")
     return 0
 
 
