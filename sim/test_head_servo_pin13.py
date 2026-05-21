@@ -7,7 +7,7 @@ import time
 from gpiozero import DigitalOutputDevice, Servo
 from gpiozero.pins.pigpio import PiGPIOFactory
 
-SERVO_PIN = 4  # Physical pin 32 - previously working
+SERVO_PIN = 14  # Physical pin 32 - previously working
 MOSFET_PIN = 16
 SPIN_SPEED = 0.3
 DURATION = 60.0
