@@ -27,6 +27,8 @@ ARM_MIN, ARM_MAX = -30.0, 30.0
 LAZY_SUSAN_MIN, LAZY_SUSAN_MAX = -90.0, 90.0
 HEAD_MIN, HEAD_MAX = -float('inf'), float('inf')
 
+ARM_VERTICAL_OFFSET = -0.66  # servo value at physical vertical (measured)
+
 # Lower alpha = smoother but more lag. Range is about 0.05 to 0.4.
 IMU_ALPHA = 0.15
 
@@ -272,7 +274,7 @@ def main(
         time.sleep(0.5)
 
         log("Centering servos...")
-        arm_servo.value = 0
+        arm_servo.value = ARM_VERTICAL_OFFSET
         lazy_susan_servo.value = 0
         head_servo.value = 0
         arm_damper.reset(0.0)
@@ -334,7 +336,10 @@ def main(
 
                     damped_arm_tgt = arm_damper.update(arm_tgt, dt)
 
-                    arm_cmd = angle_to_servo_value(damped_arm_tgt, "standard")
+                    arm_cmd = clamp(
+                        angle_to_servo_value(damped_arm_tgt, "standard") + ARM_VERTICAL_OFFSET,
+                        -1.0, 1.0
+                    )
                     lazy_cmd = angle_to_servo_value(lazy_tgt, "continuous")
                     head_cmd = angle_to_servo_value(head_tgt, "continuous")
 
@@ -384,7 +389,7 @@ def main(
         log("\nStopping...")
     finally:
         log("Centering servos and shutting down.")
-        arm_servo.value = 0
+        arm_servo.value = ARM_VERTICAL_OFFSET
         lazy_susan_servo.value = 0
         head_servo.value = 0
         time.sleep(0.5)

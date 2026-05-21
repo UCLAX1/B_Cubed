@@ -24,7 +24,7 @@ ABS_PIN       = 5
 NUDGE_DEG    = 10.0
 DEG_TO_STEPS = 2048 / 360.0  # updated after calibration measurement
 MOVE_SPEED = 0.3
-DEADBAND   = 20  # steps — stop when within this many steps of target
+DEADBAND   = 2   # steps — stop when within this many steps of target
 
 mosfet = DigitalOutputDevice(MOSFET_PIN)
 mosfet.on()
