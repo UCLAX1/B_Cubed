@@ -7,7 +7,7 @@ import time
 from gpiozero import DigitalOutputDevice, Servo
 from gpiozero.pins.pigpio import PiGPIOFactory
 
-SERVO_PIN = 18  # Pin 12 - previously working, now testing
+SERVO_PIN = 18  # Physical pin 32 - previously working
 MOSFET_PIN = 16
 SPIN_SPEED = 0.3
 DURATION = 2.0
@@ -37,7 +37,7 @@ try:
     print(f"  Set servo.value to {servo.value}")
     time.sleep(0.5)
 
-    print("If servo moved, BCM {SERVO_PIN} is working!")
+    print(f"If servo moved, BCM {SERVO_PIN} is working!")
 
 finally:
     servo.value = None

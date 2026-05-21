@@ -32,24 +32,24 @@ LAZY_CPR = 1493   # measured counts per revolution for 70kg lazy susan
 HEAD_CPR  = 2048  # default; update after head encoder is calibrated
 
 # Much smoother, less responsive (slower movements)
-IMU_ALPHA = 0.35
+IMU_ALPHA = 0.5
 
 # Target deadband in degrees. This kills micro-buzz from tiny IMU changes.
 ARM_DEADBAND_DEG = 1.0
 CONT_DEADBAND_DEG = 2.0
 
 # Slew limit on the commanded servo value, in -1..1 units per second. (EXTREMELY SLOW)
-ARM_SLEW_PER_SEC = 0.02
-CONT_SLEW_PER_SEC = 0.02
+ARM_SLEW_PER_SEC = 0.005
+CONT_SLEW_PER_SEC = 0.005
 
 # Continuous-servo speed scaling. Much bigger denominator = much gentler response.
-CONT_MAX_ANGLE_SPEED = 2.0
+CONT_MAX_ANGLE_SPEED = 0.5
 
 # Arm jitter damping. Slower max velocity.
 ARM_PD_KP = 8.0
 ARM_PD_KI = 0.0
 ARM_PD_KD = 0.35
-ARM_PD_MAX_VELOCITY_DEG_S = 1.0
+ARM_PD_MAX_VELOCITY_DEG_S = 0.5
 ARM_PD_DEADBAND_DEG = 1.0
 ARM_TARGET_NOISE_DEG = 0.35
 ARM_TARGET_NOISE_RATE_DEG_S = 12.0
@@ -289,7 +289,7 @@ def main(
         start_time = time.time()
         servo_update_count = 0
         print_interval = 0.5
-        servo_update_interval = 0.05  # Much slower: ~20 Hz instead of 160 Hz
+        servo_update_interval = 0.1  # Very slow: ~10 Hz
 
         running = True
         while running:
