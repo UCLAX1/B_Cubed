@@ -7,33 +7,37 @@ import time
 from gpiozero import DigitalOutputDevice, Servo
 from gpiozero.pins.pigpio import PiGPIOFactory
 
-LAZY_SUSAN_PIN = 27  # 70kg servo GPIO - using this as signal source
+SERVO_PIN = 12  # Pin 12 - previously working, now testing
 MOSFET_PIN = 16
 SPIN_SPEED = 0.3
 DURATION = 2.0
 
 mosfet = DigitalOutputDevice(MOSFET_PIN)
 mosfet.on()
-time.sleep(3)
+time.sleep(0.5)
 
 try:
     factory = PiGPIOFactory()
-    servo = Servo(LAZY_SUSAN_PIN, initial_value=None, pin_factory=factory)
-    print(f"Using 70kg GPIO pin (BCM {LAZY_SUSAN_PIN}) to control 5.5kg servo.")
+    servo = Servo(SERVO_PIN, initial_value=None, pin_factory=factory)
+    print(f"Using GPIO pin BCM {SERVO_PIN} to control servo.")
+    print(f"Initial servo.value: {servo.value}")
 
     print(f"Spinning right at {SPIN_SPEED} for {DURATION}s...")
     servo.value = SPIN_SPEED
+    print(f"  Set servo.value to {servo.value}")
     time.sleep(DURATION)
 
     print(f"Spinning left at {-SPIN_SPEED} for {DURATION}s...")
     servo.value = -SPIN_SPEED
+    print(f"  Set servo.value to {servo.value}")
     time.sleep(DURATION)
 
     print("Stopping...")
     servo.value = 0.0
+    print(f"  Set servo.value to {servo.value}")
     time.sleep(0.5)
 
-    print("If servo moved, BCM 12 (70kg GPIO) is working!")
+    print("If servo moved, BCM {SERVO_PIN} is working!")
 
 finally:
     servo.value = None
