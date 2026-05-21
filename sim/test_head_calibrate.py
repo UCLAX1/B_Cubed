@@ -6,6 +6,8 @@ Press d/a to nudge by 10 degrees, s to save forward as zero, q to quit.
 Enc 1 pins (BCM): A=4 (physical 7), B=22 (physical 15), ABS=17 (physical 11)
 Run tools/test_head_measure_cpr.py first to get the correct CPR value.
 """
+# -0.225 most backwards
+# -0.95
 
 import sys
 import time

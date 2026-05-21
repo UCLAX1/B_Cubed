@@ -11,7 +11,7 @@ SETTINGS_FILE = "RTIMULib"
 sys.path.append("/usr/lib/python3/dist-packages")
 import RTIMU
 
-ARM_MIN, ARM_MAX = -30.0, 30.0
+ARM_MIN, ARM_MAX = -25.0, 25.0
 LAZY_SUSAN_MIN, LAZY_SUSAN_MAX = -90.0, 90.0
 HEAD_MIN, HEAD_MAX = -float('inf'), float('inf')
 
