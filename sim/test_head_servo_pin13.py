@@ -14,7 +14,7 @@ DURATION = 2.0
 
 mosfet = DigitalOutputDevice(MOSFET_PIN)
 mosfet.on()
-time.sleep(0.5)
+time.sleep(3)
 
 try:
     factory = PiGPIOFactory()
