@@ -25,7 +25,7 @@ NUDGE_DEG    = 10.0
 MEASURED_CPR = 1493
 DEG_TO_STEPS = MEASURED_CPR / 360.0
 MOVE_SPEED = 0.3
-MIN_SPEED  = 0.08  # minimum speed to overcome friction
+MIN_SPEED  = 0.15  # minimum speed to overcome friction
 SLOW_ZONE  = 150   # steps — start scaling down speed within this range
 DEADBAND   = 8     # steps (~2 deg at 4 steps/deg)
 
@@ -118,6 +118,7 @@ try:
 
         print(f"Moving to {target / DEG_TO_STEPS:+.1f} deg ({target} steps)...")
         move_to(target)
+        termios.tcflush(sys.stdin, termios.TCIFLUSH)  # discard keys pressed during move
         print(f"pos = {enc.encoder.steps / DEG_TO_STEPS:+.1f} deg  ({enc.encoder.steps} steps)", flush=True)
 
 except KeyboardInterrupt:
