@@ -38,9 +38,8 @@ IMU_ALPHA = 0.5
 ARM_DEADBAND_DEG = 1.0
 CONT_DEADBAND_DEG = 2.0
 
-# Slew limit on the commanded servo value, in -1..1 units per second. Match calibrate speeds.
-ARM_SLEW_PER_SEC = 0.02
-CONT_SLEW_PER_SEC = 0.15
+# Arm control: use small stepping instead of slew limiting
+ARM_STEP = 0.005  # Move by this much per update (like fine-tuning)
 
 # Continuous-servo speed scaling. Much bigger denominator = much gentler response.
 CONT_MAX_ANGLE_SPEED = 0.5
@@ -349,14 +348,16 @@ def main(
                     head_actual = head_servo.encoder.steps * 360.0 / HEAD_CPR
                     head_cmd = angle_to_servo_value(head_tgt - head_actual, "continuous")
 
-                    arm_cmd = slew_limit(
-                        arm_cmd_last, arm_cmd, ARM_SLEW_PER_SEC * dt
-                    )
+                    # Arm: step incrementally towards target (like fine-tuning)
+                    step_direction = 1.0 if arm_cmd > arm_cmd_last else (-1.0 if arm_cmd < arm_cmd_last else 0.0)
+                    arm_cmd = arm_cmd_last + step_direction * ARM_STEP
+                    arm_cmd = clamp(arm_cmd, -1.0, 1.0)
+
                     lazy_cmd = slew_limit(
-                        lazy_cmd_last, lazy_cmd, CONT_SLEW_PER_SEC * dt
+                        lazy_cmd_last, lazy_cmd, 0.15 * dt
                     )
                     head_cmd = slew_limit(
-                        head_cmd_last, head_cmd, CONT_SLEW_PER_SEC * dt
+                        head_cmd_last, head_cmd, 0.15 * dt
                     )
 
                     arm_servo.value = arm_cmd
