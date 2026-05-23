@@ -145,7 +145,7 @@ class App:
         self.top_right_wheel_velocity: float = 0.0
         self.bottom_wheel_velocity: float = 0.0
 
-        self.bus: CanBus = CanBus(channel='COM5', interface='slcan', bitrate=1000000)
+        self.bus: CanBus = CanBus(channel='can0', interface='socketcan', bitrate=1000000)
         self.bus.start()
 
         if not self.bus.started_successfully():
