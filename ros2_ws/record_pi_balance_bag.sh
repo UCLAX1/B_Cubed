@@ -20,6 +20,8 @@ MOTOR_POWERS_TOPIC="${MOTOR_POWERS_TOPIC:-/kiwi_drive/motor_powers}"
 MOTOR_STATUS_TOPIC="${MOTOR_STATUS_TOPIC:-/kiwi_drive/status}"
 BALANCE_STATUS_TOPIC="${BALANCE_STATUS_TOPIC:-/balance/status}"
 ODOM_TOPIC="${ODOM_TOPIC:-}"
+TOPIC_WAIT_TIMEOUT_SEC="${TOPIC_WAIT_TIMEOUT_SEC:-30}"
+REQUIRED_TOPICS="${REQUIRED_TOPICS:-$IMU_TOPIC $BALANCE_STATUS_TOPIC}"
 
 source_setup_file() {
   local setup_file="$1"
@@ -40,6 +42,22 @@ source_setup_file "$ROS_SETUP"
 if [[ -f "$INSTALL_SETUP" ]]; then
   source_setup_file "$INSTALL_SETUP"
 fi
+
+wait_for_topic_message() {
+  local topic="$1"
+
+  echo "Waiting for one message on $topic..."
+  if ! timeout "${TOPIC_WAIT_TIMEOUT_SEC}s" \
+    ros2 topic echo --once "$topic" >/dev/null 2>&1; then
+    echo "Timed out waiting for $topic." >&2
+    echo "Start ./launch_pi_balanced_drive.sh first, then run this recorder." >&2
+    exit 1
+  fi
+}
+
+for required_topic in $REQUIRED_TOPICS; do
+  wait_for_topic_message "$required_topic"
+done
 
 topics=(
   "$IMU_TOPIC"
