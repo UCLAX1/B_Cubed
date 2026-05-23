@@ -1,0 +1,42 @@
+sense_hat_imu:
+  ros__parameters:
+    imu_topic: "imu/data"
+    raw_tilt_topic: "sense_hat/raw"
+    frame_id: "sense_hat_imu_link"
+    publish_rate_hz: 50.0
+
+    compass_enabled: true
+    gyro_enabled: true
+    accel_enabled: true
+    accelerometer_in_g: true
+    raw_tilt_degrees: true
+
+    # Adjust these after physically tilting the robot and watching /imu/data.
+    # Values are Sense HAT orientation keys: roll, pitch, yaw.
+    roll_source: "roll"
+    pitch_source: "pitch"
+    yaw_source: "yaw"
+    gyro_x_source: "x"
+    gyro_y_source: "y"
+    gyro_z_source: "z"
+    accel_x_source: "x"
+    accel_y_source: "y"
+    accel_z_source: "z"
+
+    roll_sign: 1.0
+    pitch_sign: 1.0
+    yaw_sign: 1.0
+    gyro_x_sign: 1.0
+    gyro_y_sign: 1.0
+    gyro_z_sign: 1.0
+    accel_x_sign: 1.0
+    accel_y_sign: 1.0
+    accel_z_sign: 1.0
+
+    roll_offset_rad: 0.0
+    pitch_offset_rad: 0.0
+    yaw_offset_rad: 0.0
+
+    orientation_covariance_diagonal: [0.0025, 0.0025, 0.01]
+    angular_velocity_covariance_diagonal: [0.01, 0.01, 0.02]
+    linear_acceleration_covariance_diagonal: [0.25, 0.25, 0.25]

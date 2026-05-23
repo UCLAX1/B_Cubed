@@ -24,8 +24,8 @@ def _zero_twist() -> Twist:
 class KiwiDriveController(Node):
     """Subscribe to Nav2/manual velocity commands and drive the CAN motors."""
 
-    def __init__(self) -> None:
-        super().__init__("kiwi_drive_controller")
+    def __init__(self, node_name: str = "kiwi_drive_controller") -> None:
+        super().__init__(node_name)
         self._declare_parameters()
 
         self.nav_cmd_topic = str(self.get_parameter("nav_cmd_topic").value)
@@ -300,10 +300,10 @@ class KiwiDriveController(Node):
         return super().destroy_node()
 
 
-def main(args=None) -> None:
+def run_controller(args=None, *, node_name: str = "kiwi_drive_controller") -> None:
     """Run the Kiwi drive controller node."""
     rclpy.init(args=args)
-    node = KiwiDriveController()
+    node = KiwiDriveController(node_name=node_name)
     try:
         rclpy.spin(node)
     except KeyboardInterrupt:
@@ -312,6 +312,11 @@ def main(args=None) -> None:
         node.destroy_node()
         if rclpy.ok():
             rclpy.shutdown()
+
+
+def main(args=None) -> None:
+    """Run the Kiwi drive controller node."""
+    run_controller(args=args)
 
 
 if __name__ == "__main__":

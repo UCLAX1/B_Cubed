@@ -174,14 +174,27 @@ Current decisions in that file:
 
 Those values are intended to be safe starting points, not final field tuning.
 
-## Important boundary
+## Hardware Drive Boundary
 
-The repo now brings the full software stack up to `/cmd_vel`.
+The repo now brings the full software stack up to `/cmd_vel`, and
+`low_level_runner` contains the Pi-facing motor-control launch:
 
-What it still does not contain is the robot-specific hardware drive node that
-consumes `/cmd_vel` and turns it into motor motion. If your base controller
-already subscribes to `/cmd_vel`, this stack can sit directly on top of it. If
-not, that final hardware interface still has to exist outside this repo.
+```bash
+ros2 launch low_level_runner pi_low_level_motor_control.launch.py
+```
+
+That node consumes `/cmd_vel` plus `/cmd_vel_manual` and sends CAN commands to
+the Kiwi drive motor controllers. Hardware-specific motor IDs, CAN settings, and
+power limits still need to match the physical robot before field testing.
+
+For the first balanced BB-8-style hardware pass on the Raspberry Pi, use:
+
+```bash
+./launch_pi_balanced_drive.sh
+```
+
+That starts Sense HAT IMU publishing, the learned balance controller, and the
+Pi low-level motor controller wired to consume `cmd_vel_balanced`.
 
 ## Camera-only testing
 

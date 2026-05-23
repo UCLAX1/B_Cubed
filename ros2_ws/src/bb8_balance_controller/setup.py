@@ -29,6 +29,7 @@ setup(
     entry_points={
         "console_scripts": [
             "balance_controller = bb8_balance_controller.node:main",
+            "sense_hat_imu = bb8_balance_controller.sense_hat_imu:main",
         ],
     },
 )

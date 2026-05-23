@@ -1,0 +1,258 @@
+"""Publish Raspberry Pi Sense HAT attitude as sensor_msgs/Imu."""
+
+from __future__ import annotations
+
+import math
+from typing import Mapping
+
+import rclpy
+from rclpy.node import Node
+from sensor_msgs.msg import Imu
+from std_msgs.msg import Float32MultiArray
+
+from bb8_balance_controller.math_utils import rpy_to_quat, wrap_pi
+
+try:
+    from sense_hat import SenseHat
+except ImportError:  # pragma: no cover - only available on the Raspberry Pi.
+    SenseHat = None
+
+
+GRAVITY_M_S2 = 9.80665
+
+
+def _diag_covariance(values: list[float]) -> list[float]:
+    covariance = [0.0] * 9
+    for index, value in enumerate(values[:3]):
+        covariance[index * 4] = float(value)
+    return covariance
+
+
+class SenseHatImuNode(Node):
+    """Bridge Sense HAT fused orientation and gyro readings into ROS IMU data."""
+
+    def __init__(self) -> None:
+        super().__init__("sense_hat_imu")
+        self._declare_parameters()
+        self._read_parameters()
+
+        if SenseHat is None:
+            raise RuntimeError(
+                "sense_hat is not installed. Install python3-sense-hat on the Pi."
+            )
+
+        self.sense = SenseHat()
+        self.sense.set_imu_config(
+            self.compass_enabled,
+            self.gyro_enabled,
+            self.accel_enabled,
+        )
+
+        self.imu_pub = self.create_publisher(Imu, self.imu_topic, 10)
+        self.raw_tilt_pub = None
+        if self.raw_tilt_topic:
+            self.raw_tilt_pub = self.create_publisher(
+                Float32MultiArray,
+                self.raw_tilt_topic,
+                10,
+            )
+
+        self.create_timer(1.0 / self.publish_rate_hz, self._publish_imu)
+        self.get_logger().info(
+            f"Publishing Sense HAT IMU on {self.imu_topic} at "
+            f"{self.publish_rate_hz:.1f} Hz."
+        )
+
+    def _declare_parameters(self) -> None:
+        self.declare_parameter("imu_topic", "imu/data")
+        self.declare_parameter("raw_tilt_topic", "sense_hat/raw")
+        self.declare_parameter("frame_id", "sense_hat_imu_link")
+        self.declare_parameter("publish_rate_hz", 50.0)
+
+        self.declare_parameter("compass_enabled", True)
+        self.declare_parameter("gyro_enabled", True)
+        self.declare_parameter("accel_enabled", True)
+        self.declare_parameter("accelerometer_in_g", True)
+        self.declare_parameter("raw_tilt_degrees", True)
+
+        self.declare_parameter("roll_source", "roll")
+        self.declare_parameter("pitch_source", "pitch")
+        self.declare_parameter("yaw_source", "yaw")
+        self.declare_parameter("gyro_x_source", "x")
+        self.declare_parameter("gyro_y_source", "y")
+        self.declare_parameter("gyro_z_source", "z")
+        self.declare_parameter("accel_x_source", "x")
+        self.declare_parameter("accel_y_source", "y")
+        self.declare_parameter("accel_z_source", "z")
+
+        self.declare_parameter("roll_sign", 1.0)
+        self.declare_parameter("pitch_sign", 1.0)
+        self.declare_parameter("yaw_sign", 1.0)
+        self.declare_parameter("gyro_x_sign", 1.0)
+        self.declare_parameter("gyro_y_sign", 1.0)
+        self.declare_parameter("gyro_z_sign", 1.0)
+        self.declare_parameter("accel_x_sign", 1.0)
+        self.declare_parameter("accel_y_sign", 1.0)
+        self.declare_parameter("accel_z_sign", 1.0)
+
+        self.declare_parameter("roll_offset_rad", 0.0)
+        self.declare_parameter("pitch_offset_rad", 0.0)
+        self.declare_parameter("yaw_offset_rad", 0.0)
+
+        self.declare_parameter("orientation_covariance_diagonal", [0.0025] * 3)
+        self.declare_parameter("angular_velocity_covariance_diagonal", [0.01] * 3)
+        self.declare_parameter("linear_acceleration_covariance_diagonal", [0.25] * 3)
+
+    def _read_parameters(self) -> None:
+        self.imu_topic = str(self.get_parameter("imu_topic").value)
+        self.raw_tilt_topic = str(self.get_parameter("raw_tilt_topic").value)
+        self.frame_id = str(self.get_parameter("frame_id").value)
+        self.publish_rate_hz = max(
+            1.0,
+            float(self.get_parameter("publish_rate_hz").value),
+        )
+
+        self.compass_enabled = bool(self.get_parameter("compass_enabled").value)
+        self.gyro_enabled = bool(self.get_parameter("gyro_enabled").value)
+        self.accel_enabled = bool(self.get_parameter("accel_enabled").value)
+        self.accelerometer_in_g = bool(
+            self.get_parameter("accelerometer_in_g").value
+        )
+        self.raw_tilt_degrees = bool(self.get_parameter("raw_tilt_degrees").value)
+
+        self.roll_source = str(self.get_parameter("roll_source").value)
+        self.pitch_source = str(self.get_parameter("pitch_source").value)
+        self.yaw_source = str(self.get_parameter("yaw_source").value)
+        self.gyro_sources = [
+            str(self.get_parameter("gyro_x_source").value),
+            str(self.get_parameter("gyro_y_source").value),
+            str(self.get_parameter("gyro_z_source").value),
+        ]
+        self.accel_sources = [
+            str(self.get_parameter("accel_x_source").value),
+            str(self.get_parameter("accel_y_source").value),
+            str(self.get_parameter("accel_z_source").value),
+        ]
+
+        self.roll_sign = float(self.get_parameter("roll_sign").value)
+        self.pitch_sign = float(self.get_parameter("pitch_sign").value)
+        self.yaw_sign = float(self.get_parameter("yaw_sign").value)
+        self.gyro_signs = [
+            float(self.get_parameter("gyro_x_sign").value),
+            float(self.get_parameter("gyro_y_sign").value),
+            float(self.get_parameter("gyro_z_sign").value),
+        ]
+        self.accel_signs = [
+            float(self.get_parameter("accel_x_sign").value),
+            float(self.get_parameter("accel_y_sign").value),
+            float(self.get_parameter("accel_z_sign").value),
+        ]
+
+        self.roll_offset = float(self.get_parameter("roll_offset_rad").value)
+        self.pitch_offset = float(self.get_parameter("pitch_offset_rad").value)
+        self.yaw_offset = float(self.get_parameter("yaw_offset_rad").value)
+
+        self.orientation_covariance = _diag_covariance(
+            list(self.get_parameter("orientation_covariance_diagonal").value)
+        )
+        self.angular_velocity_covariance = _diag_covariance(
+            list(self.get_parameter("angular_velocity_covariance_diagonal").value)
+        )
+        self.linear_acceleration_covariance = _diag_covariance(
+            list(self.get_parameter("linear_acceleration_covariance_diagonal").value)
+        )
+
+    def _publish_imu(self) -> None:
+        orientation = self.sense.get_orientation_radians()
+        gyro = self.sense.get_gyroscope_raw()
+        accel = self.sense.get_accelerometer_raw()
+
+        roll = self._mapped_angle(
+            orientation,
+            self.roll_source,
+            self.roll_sign,
+            self.roll_offset,
+        )
+        pitch = self._mapped_angle(
+            orientation,
+            self.pitch_source,
+            self.pitch_sign,
+            self.pitch_offset,
+        )
+        yaw = self._mapped_angle(
+            orientation,
+            self.yaw_source,
+            self.yaw_sign,
+            self.yaw_offset,
+        )
+        quat = rpy_to_quat(roll, pitch, yaw)
+
+        msg = Imu()
+        msg.header.stamp = self.get_clock().now().to_msg()
+        msg.header.frame_id = self.frame_id
+        msg.orientation.x = quat[0]
+        msg.orientation.y = quat[1]
+        msg.orientation.z = quat[2]
+        msg.orientation.w = quat[3]
+        msg.orientation_covariance = self.orientation_covariance
+
+        angular_velocity = self._mapped_vector(gyro, self.gyro_sources, self.gyro_signs)
+        msg.angular_velocity.x = angular_velocity[0]
+        msg.angular_velocity.y = angular_velocity[1]
+        msg.angular_velocity.z = angular_velocity[2]
+        msg.angular_velocity_covariance = self.angular_velocity_covariance
+
+        linear_acceleration = self._mapped_vector(
+            accel,
+            self.accel_sources,
+            self.accel_signs,
+        )
+        if self.accelerometer_in_g:
+            linear_acceleration = [value * GRAVITY_M_S2 for value in linear_acceleration]
+        msg.linear_acceleration.x = linear_acceleration[0]
+        msg.linear_acceleration.y = linear_acceleration[1]
+        msg.linear_acceleration.z = linear_acceleration[2]
+        msg.linear_acceleration_covariance = self.linear_acceleration_covariance
+
+        self.imu_pub.publish(msg)
+        self._publish_raw_tilt(roll, pitch)
+
+    def _mapped_angle(
+        self,
+        values: Mapping[str, float],
+        key: str,
+        sign: float,
+        offset: float,
+    ) -> float:
+        return wrap_pi(sign * float(values[key]) - offset)
+
+    def _mapped_vector(
+        self,
+        values: Mapping[str, float],
+        keys: list[str],
+        signs: list[float],
+    ) -> list[float]:
+        return [sign * float(values[key]) for key, sign in zip(keys, signs)]
+
+    def _publish_raw_tilt(self, roll: float, pitch: float) -> None:
+        if self.raw_tilt_pub is None:
+            return
+        scale = 180.0 / math.pi if self.raw_tilt_degrees else 1.0
+        msg = Float32MultiArray()
+        msg.data = [roll * scale, pitch * scale]
+        self.raw_tilt_pub.publish(msg)
+
+
+def main(args=None) -> None:
+    """Run the Sense HAT IMU publisher."""
+    rclpy.init(args=args)
+    node = SenseHatImuNode()
+    try:
+        rclpy.spin(node)
+    finally:
+        node.destroy_node()
+        rclpy.shutdown()
+
+
+if __name__ == "__main__":
+    main()

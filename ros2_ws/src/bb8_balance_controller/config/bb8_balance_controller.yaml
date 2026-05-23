@@ -1,6 +1,7 @@
 bb8_balance_controller:
   ros__parameters:
     nav_cmd_topic: "cmd_vel"
+    manual_cmd_topic: "cmd_vel_manual"
     output_twist_topic: "cmd_vel_balanced"
     jet_cmd_topic: "jet_cmd"
     status_topic: "balance/status"
@@ -15,6 +16,7 @@ bb8_balance_controller:
     # Prefer .npz exports on the Jetson. .onnx is also supported if ONNX Runtime
     # is installed.
     policy_path: ""
+    allow_pd_fallback: false
     prefer_cuda: false
 
     control_rate_hz: 50.0
@@ -23,6 +25,7 @@ bb8_balance_controller:
     zero_on_stale_nav: true
     attitude_timeout_sec: 0.25
     nav_timeout_sec: 0.5
+    manual_timeout_sec: 0.30
     odom_timeout_sec: 0.5
 
     roll_offset_rad: 0.0
@@ -30,7 +33,9 @@ bb8_balance_controller:
     roll_correction_sign: -1.0
     pitch_correction_sign: 1.0
 
-    # Conservative fallback settings for first hardware bring-up.
+    # Conservative authority limits for first learned-policy hardware bring-up.
+    # PD fallback is intentionally disabled by default because it has not been
+    # good enough on this robot.
     pd_kp: 3.0
     pd_kd: 0.45
     max_nav_speed_m_s: 1.0

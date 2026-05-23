@@ -1,6 +1,7 @@
 import numpy as np
+import pytest
 
-from bb8_balance_controller.policy import NumpyMLPPolicy, PDPolicy
+from bb8_balance_controller.policy import NumpyMLPPolicy, PDPolicy, load_policy_or_pd
 
 
 def test_numpy_mlp_policy_runs_exported_arrays(tmp_path):
@@ -38,3 +39,16 @@ def test_pd_policy_is_clipped():
     assert np.all(action <= 1.0)
     assert np.all(action >= -1.0)
 
+
+def test_policy_loader_can_refuse_pd_fallback():
+    with pytest.raises(RuntimeError):
+        load_policy_or_pd(
+            "",
+            False,
+            3.0,
+            0.45,
+            0.8,
+            -1.0,
+            1.0,
+            allow_pd_fallback=False,
+        )

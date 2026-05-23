@@ -110,7 +110,8 @@ Z-axis handling:
 
 What still needs field validation:
 
-- the real robot drive node that consumes `/cmd_vel`
+- `ros2_ws/launch_pi_balanced_drive.sh` against the real robot drivetrain and
+  Sense HAT mounting orientation
 - final footprint, velocity, and costmap tuning on hardware
 - the operator workflow for deciding when to stay in mapping mode versus switching to localization mode
 

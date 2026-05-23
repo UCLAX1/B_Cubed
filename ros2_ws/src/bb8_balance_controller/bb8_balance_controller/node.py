@@ -38,6 +38,7 @@ class BalanceControllerNode(Node):
             self.max_balance_accel,
             self.roll_correction_sign,
             self.pitch_correction_sign,
+            self.allow_pd_fallback,
         )
 
         self.roll = 0.0
@@ -49,9 +50,11 @@ class BalanceControllerNode(Node):
         self.previous_tilt = None
 
         self.nav_command = np.zeros(3, dtype=np.float32)
-        self.previous_nav_xy = np.zeros(2, dtype=np.float32)
-        self.nav_accel = np.zeros(2, dtype=np.float32)
+        self.manual_command = np.zeros(3, dtype=np.float32)
+        self.previous_command_xy = np.zeros(2, dtype=np.float32)
+        self.command_accel = np.zeros(2, dtype=np.float32)
         self.last_nav_rx = None
+        self.last_manual_rx = None
 
         self.odom_velocity = np.zeros(2, dtype=np.float32)
         self.last_odom_rx = None
@@ -60,6 +63,7 @@ class BalanceControllerNode(Node):
         self.filtered_action = np.zeros(2, dtype=np.float32)
         self.balance_velocity = np.zeros(2, dtype=np.float32)
         self.output_velocity = np.zeros(2, dtype=np.float32)
+        self.last_command_source = "idle"
         self.last_control_time = self.get_clock().now()
         self.last_status_summary = ""
 
@@ -68,6 +72,13 @@ class BalanceControllerNode(Node):
         self.status_pub = self.create_publisher(String, self.status_topic, 10)
 
         self.create_subscription(Twist, self.nav_cmd_topic, self._nav_callback, 10)
+        if self.manual_cmd_topic:
+            self.create_subscription(
+                Twist,
+                self.manual_cmd_topic,
+                self._manual_callback,
+                10,
+            )
         if self.imu_topic:
             self.create_subscription(Imu, self.imu_topic, self._imu_callback, 10)
         if self.tilt_topic:
@@ -84,11 +95,13 @@ class BalanceControllerNode(Node):
             "Balance controller ready: "
             f"policy_backend={self.policy_backend}, "
             f"nav_cmd_topic={self.nav_cmd_topic}, "
+            f"manual_cmd_topic={self.manual_cmd_topic}, "
             f"jet_cmd_topic={self.jet_cmd_topic}."
         )
 
     def _declare_parameters(self) -> None:
         self.declare_parameter("nav_cmd_topic", "cmd_vel")
+        self.declare_parameter("manual_cmd_topic", "cmd_vel_manual")
         self.declare_parameter("output_twist_topic", "cmd_vel_balanced")
         self.declare_parameter("jet_cmd_topic", "jet_cmd")
         self.declare_parameter("status_topic", "balance/status")
@@ -98,6 +111,7 @@ class BalanceControllerNode(Node):
         self.declare_parameter("odom_topic", "")
 
         self.declare_parameter("policy_path", "")
+        self.declare_parameter("allow_pd_fallback", False)
         self.declare_parameter("prefer_cuda", False)
         self.declare_parameter("control_rate_hz", 50.0)
         self.declare_parameter("status_rate_hz", 2.0)
@@ -105,6 +119,7 @@ class BalanceControllerNode(Node):
         self.declare_parameter("zero_on_stale_nav", True)
         self.declare_parameter("attitude_timeout_sec", 0.25)
         self.declare_parameter("nav_timeout_sec", 0.5)
+        self.declare_parameter("manual_timeout_sec", 0.30)
         self.declare_parameter("odom_timeout_sec", 0.5)
 
         self.declare_parameter("roll_offset_rad", 0.0)
@@ -130,6 +145,7 @@ class BalanceControllerNode(Node):
 
     def _read_parameters(self) -> None:
         self.nav_cmd_topic = str(self.get_parameter("nav_cmd_topic").value)
+        self.manual_cmd_topic = str(self.get_parameter("manual_cmd_topic").value)
         self.output_twist_topic = str(self.get_parameter("output_twist_topic").value)
         self.jet_cmd_topic = str(self.get_parameter("jet_cmd_topic").value)
         self.status_topic = str(self.get_parameter("status_topic").value)
@@ -139,6 +155,7 @@ class BalanceControllerNode(Node):
         self.odom_topic = str(self.get_parameter("odom_topic").value)
 
         self.policy_path = str(self.get_parameter("policy_path").value)
+        self.allow_pd_fallback = bool(self.get_parameter("allow_pd_fallback").value)
         self.prefer_cuda = bool(self.get_parameter("prefer_cuda").value)
         self.control_rate_hz = max(1.0, float(self.get_parameter("control_rate_hz").value))
         self.status_rate_hz = max(0.5, float(self.get_parameter("status_rate_hz").value))
@@ -149,6 +166,9 @@ class BalanceControllerNode(Node):
         )
         self.nav_timeout = Duration(
             seconds=float(self.get_parameter("nav_timeout_sec").value)
+        )
+        self.manual_timeout = Duration(
+            seconds=float(self.get_parameter("manual_timeout_sec").value)
         )
         self.odom_timeout = Duration(
             seconds=float(self.get_parameter("odom_timeout_sec").value)
@@ -197,19 +217,20 @@ class BalanceControllerNode(Node):
         self.stopped_state_value = float(self.get_parameter("stopped_state_value").value)
 
     def _nav_callback(self, msg: Twist) -> None:
-        now = self.get_clock().now()
-        nav_xy = np.array([msg.linear.x, msg.linear.y], dtype=np.float32)
-        nav_xy = clip_norm(nav_xy, self.max_nav_speed)
+        self.nav_command = self._twist_to_command(msg)
+        self.last_nav_rx = self.get_clock().now()
 
-        dt = self._seconds_since(self.last_nav_rx, now)
-        if dt > 1e-4:
-            self.nav_accel = (nav_xy - self.previous_nav_xy) / dt
-        self.previous_nav_xy = nav_xy.copy()
-        self.nav_command = np.array(
-            [nav_xy[0], nav_xy[1], msg.angular.z],
+    def _manual_callback(self, msg: Twist) -> None:
+        self.manual_command = self._twist_to_command(msg)
+        self.last_manual_rx = self.get_clock().now()
+
+    def _twist_to_command(self, msg: Twist) -> np.ndarray:
+        command_xy = np.array([msg.linear.x, msg.linear.y], dtype=np.float32)
+        command_xy = clip_norm(command_xy, self.max_nav_speed)
+        return np.array(
+            [command_xy[0], command_xy[1], msg.angular.z],
             dtype=np.float32,
         )
-        self.last_nav_rx = now
 
     def _imu_callback(self, msg: Imu) -> None:
         if msg.orientation_covariance[0] == -1.0:
@@ -265,7 +286,10 @@ class BalanceControllerNode(Node):
             self._publish_stop(reason)
             return
 
-        nav_xy = self.nav_command[:2]
+        command, source = self._select_command(now)
+        command_xy = command[:2]
+        self.command_accel = (command_xy - self.previous_command_xy) / dt
+        self.previous_command_xy = command_xy.copy()
         measured_velocity = self._measured_body_velocity(now)
         obs = np.array(
             [
@@ -275,10 +299,10 @@ class BalanceControllerNode(Node):
                 self.pitch_rate,
                 measured_velocity[0],
                 measured_velocity[1],
-                nav_xy[0],
-                nav_xy[1],
-                self.nav_accel[0],
-                self.nav_accel[1],
+                command_xy[0],
+                command_xy[1],
+                self.command_accel[0],
+                self.command_accel[1],
                 self.previous_action[0],
                 self.previous_action[1],
             ],
@@ -288,7 +312,7 @@ class BalanceControllerNode(Node):
         action = np.asarray(self.policy(obs), dtype=np.float32)
         action = np.clip(action, -1.0, 1.0)
         alpha = min(0.98, max(0.0, self.action_filter_alpha))
-        if self._is_stable_idle(nav_xy):
+        if self._is_stable_idle(command_xy):
             action = np.zeros(2, dtype=np.float32)
             self.filtered_action[:] = 0.0
         else:
@@ -302,7 +326,7 @@ class BalanceControllerNode(Node):
         self.balance_velocity = clip_norm(self.balance_velocity, self.max_correction_speed)
 
         target_velocity = clip_norm(
-            nav_xy + self.balance_velocity,
+            command_xy + self.balance_velocity,
             self.max_nav_speed + self.max_correction_speed,
         )
         max_delta = self.max_output_accel * dt
@@ -311,22 +335,35 @@ class BalanceControllerNode(Node):
 
         self._publish_command(
             self.output_velocity,
-            float(self.nav_command[2]),
+            float(command[2]),
             self.active_state_value,
         )
+        self.last_command_source = source
 
     def _safety_state(self, now) -> tuple[bool, str]:
         if self.require_attitude and not self._fresh(
             self.last_attitude_rx, self.attitude_timeout, now
         ):
             return False, "stale_attitude"
-        if self.zero_on_stale_nav and not self._fresh(
-            self.last_nav_rx, self.nav_timeout, now
-        ):
-            return False, "stale_nav"
+        if self.zero_on_stale_nav and not self._has_fresh_command(now):
+            return False, "stale_command"
         if np.linalg.norm([self.roll, self.pitch]) > self.tilt_cutoff:
             return False, "tilt_cutoff"
         return True, "ready"
+
+    def _select_command(self, now) -> tuple[np.ndarray, str]:
+        if self._fresh(self.last_manual_rx, self.manual_timeout, now):
+            return self.manual_command, "manual"
+        if self._fresh(self.last_nav_rx, self.nav_timeout, now):
+            return self.nav_command, "nav"
+        return np.zeros(3, dtype=np.float32), "idle"
+
+    def _has_fresh_command(self, now) -> bool:
+        return self._fresh(
+            self.last_manual_rx,
+            self.manual_timeout,
+            now,
+        ) or self._fresh(self.last_nav_rx, self.nav_timeout, now)
 
     def _measured_body_velocity(self, now) -> np.ndarray:
         if self._fresh(self.last_odom_rx, self.odom_timeout, now):
@@ -345,8 +382,11 @@ class BalanceControllerNode(Node):
     def _publish_stop(self, reason: str) -> None:
         self.filtered_action[:] = 0.0
         self.previous_action[:] = 0.0
+        self.previous_command_xy[:] = 0.0
+        self.command_accel[:] = 0.0
         self.balance_velocity[:] = 0.0
         self.output_velocity[:] = 0.0
+        self.last_command_source = "idle"
         self._publish_command(np.zeros(2, dtype=np.float32), 0.0, self.stopped_state_value)
         self.last_status_summary = reason
 
@@ -379,6 +419,7 @@ class BalanceControllerNode(Node):
         safe, reason = self._safety_state(now)
         status = (
             f"safe={safe}, reason={reason}, backend={self.policy_backend}, "
+            f"command_source={self.last_command_source}, "
             f"roll={self.roll:.3f}, pitch={self.pitch:.3f}, "
             f"balance_v=({self.balance_velocity[0]:.3f},{self.balance_velocity[1]:.3f}), "
             f"out_v=({self.output_velocity[0]:.3f},{self.output_velocity[1]:.3f})"

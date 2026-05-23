@@ -28,6 +28,7 @@ setup(
     entry_points={
         'console_scripts': [
             'kiwi_drive_controller = low_level_runner.kiwi_drive_controller:main',
+            'low_level_motor_control = low_level_runner.low_level_motor_control:main',
             'low_level_runner = low_level_runner.low_level_runner:main',
         ],
     },

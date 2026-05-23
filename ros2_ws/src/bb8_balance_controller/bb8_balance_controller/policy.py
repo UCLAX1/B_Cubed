@@ -100,8 +100,9 @@ def load_policy_or_pd(
     max_balance_accel: float,
     roll_correction_sign: float,
     pitch_correction_sign: float,
+    allow_pd_fallback: bool = True,
 ):
-    """Load ONNX when configured, otherwise return the PD fallback."""
+    """Load a learned policy, optionally falling back to PD."""
     if model_path:
         path = Path(model_path).expanduser()
         if path.exists():
@@ -115,6 +116,14 @@ def load_policy_or_pd(
                 print(f"Failed to load policy at {path}: {exc}")
         else:
             print(f"Configured policy_path does not exist: {path}")
+    elif not allow_pd_fallback:
+        raise RuntimeError("policy_path is required when allow_pd_fallback is false.")
+
+    if not allow_pd_fallback:
+        raise RuntimeError(
+            f"Failed to load learned balance policy from '{model_path}'. "
+            "Set allow_pd_fallback:=true only for explicit PD bring-up."
+        )
 
     return (
         PDPolicy(

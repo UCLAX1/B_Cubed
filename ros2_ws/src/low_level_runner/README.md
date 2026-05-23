@@ -8,6 +8,22 @@ The active controller is:
 ros2 launch low_level_runner kiwi_drive_controller.launch.py
 ```
 
+For the Raspberry Pi motor-control host, use the Pi-facing launch file:
+
+```bash
+ros2 launch low_level_runner pi_low_level_motor_control.launch.py
+```
+
+Or use the workspace helper script:
+
+```bash
+./launch_pi_motor_control.sh
+```
+
+That launch starts the `low_level_motor_control` ROS node, which uses the same
+Kiwi drive controller implementation and the Pi hardware defaults in
+`config/pi_low_level_motor_control.yaml`.
+
 It subscribes to:
 
 - `cmd_vel` for gated Nav2 velocity commands
@@ -20,7 +36,7 @@ enabled, sends those powers to the CAN motor controllers.
 For a dry run:
 
 ```bash
-ros2 launch low_level_runner kiwi_drive_controller.launch.py hardware_enabled:=false
+HARDWARE_ENABLED=false ./launch_pi_motor_control.sh
 ```
 
 The previous low-level runner implementation is preserved in

@@ -1,0 +1,27 @@
+low_level_motor_control:
+  ros__parameters:
+    nav_cmd_topic: cmd_vel
+    manual_cmd_topic: cmd_vel_manual
+    motor_command_topic: kiwi_drive/motor_powers
+    status_topic: kiwi_drive/status
+    control_rate_hz: 50.0
+    nav_cmd_timeout_sec: 0.50
+    manual_cmd_timeout_sec: 0.30
+
+    linear_to_power_scale: 1.0
+    angular_to_power_scale: 1.0
+    max_power: 1.0
+    normalize_over_limit: false
+
+    hardware_enabled: true
+    can_channel: can0
+    can_interface: socketcan
+    can_bitrate: 1000000
+    max_duty_cycle: 0.5
+    motor_wait_timeout_sec: 2.0
+    reset_encoders_on_start: false
+    init_pos_path: ~/.ros/b_cubed_motor_init_pos.json
+
+    top_left_motor_id: 3
+    top_right_motor_id: 9
+    bottom_motor_id: 7
