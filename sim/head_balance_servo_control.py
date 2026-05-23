@@ -216,7 +216,7 @@ def parse_args():
         default=IMU_INIT_TIMEOUT_S,
         help="Seconds to wait for IMUInit before exiting. Use 0 to disable.",
     )
-    parser.add_argument(
+    parser.add_argument(-
         "--servo-self-test",
         action="store_true",
         help="Move each servo briefly, then exit without starting IMU balance.",
