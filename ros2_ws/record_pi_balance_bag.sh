@@ -44,15 +44,26 @@ if [[ -f "$INSTALL_SETUP" ]]; then
 fi
 
 wait_for_topic_message() {
-  local topic="$1"
+  local topic="/${1#/}"
+  local deadline=$((SECONDS + TOPIC_WAIT_TIMEOUT_SEC))
+  local topic_type=""
 
-  echo "Waiting for one message on $topic..."
-  if ! timeout "${TOPIC_WAIT_TIMEOUT_SEC}s" \
-    ros2 topic echo --once "$topic" >/dev/null 2>&1; then
-    echo "Timed out waiting for $topic." >&2
-    echo "Start ./launch_pi_balanced_drive.sh first, then run this recorder." >&2
-    exit 1
-  fi
+  echo "Waiting for $topic to be discovered..."
+  while (( SECONDS < deadline )); do
+    topic_type="$(ros2 topic type "$topic" 2>/dev/null || true)"
+    if [[ -n "${topic_type//[[:space:]]/}" ]]; then
+      echo "Discovered $topic as $topic_type."
+      echo "Waiting for one message on $topic..."
+      timeout "${TOPIC_WAIT_TIMEOUT_SEC}s" \
+        ros2 topic echo --once "$topic" >/dev/null 2>&1
+      return $?
+    fi
+    sleep 1
+  done
+
+  echo "Timed out waiting for $topic." >&2
+  echo "Start ./launch_pi_balanced_drive.sh first, then run this recorder." >&2
+  exit 1
 }
 
 for required_topic in $REQUIRED_TOPICS; do

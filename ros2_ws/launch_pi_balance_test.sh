@@ -41,9 +41,30 @@ build_test_stack() {
 }
 
 wait_for_imu() {
-  echo "Waiting for one message on $IMU_TOPIC..."
-  timeout "${IMU_STARTUP_TIMEOUT_SEC}s" \
-    ros2 topic echo --once "$IMU_TOPIC" >/dev/null
+  local topic="/${IMU_TOPIC#/}"
+  local deadline=$((SECONDS + IMU_STARTUP_TIMEOUT_SEC))
+  local topic_type=""
+
+  echo "Waiting for $topic to be discovered..."
+  while (( SECONDS < deadline )); do
+    if [[ -n "$imu_pid" ]] && ! kill -0 "$imu_pid" >/dev/null 2>&1; then
+      echo "IMU launcher exited before publishing $topic." >&2
+      return 1
+    fi
+
+    topic_type="$(ros2 topic type "$topic" 2>/dev/null || true)"
+    if [[ -n "${topic_type//[[:space:]]/}" ]]; then
+      echo "Discovered $topic as $topic_type."
+      echo "Waiting for one message on $topic..."
+      timeout "${IMU_STARTUP_TIMEOUT_SEC}s" \
+        ros2 topic echo --once "$topic" >/dev/null
+      return $?
+    fi
+    sleep 1
+  done
+
+  echo "Timed out waiting for $topic discovery." >&2
+  return 1
 }
 
 trap cleanup EXIT INT TERM
