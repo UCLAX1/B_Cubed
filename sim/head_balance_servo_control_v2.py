@@ -4,6 +4,7 @@ import math
 
 from head_balance_math import find_motor_angles
 
+DEBUG = True
 DESIRED_ANGLE = 0.0
 
 SETTINGS_FILE = "RTIMULib"
@@ -37,9 +38,10 @@ try:
 
             arm_tgt, lazy_tgt, head_tgt = find_motor_angles(pitch, roll, DESIRED_ANGLE)
 
-            print(f"IMU: R={roll:7.1f}° P={pitch:7.1f}° Y={yaw:7.1f}°")
-            print(f"Targets: arm={arm_tgt:+7.2f}° lazy={lazy_tgt:+7.2f}° head={head_tgt:+7.2f}°")
-            print("-" * 60)
+            if DEBUG:
+                print(f"IMU: R={roll:7.1f}° P={pitch:7.1f}° Y={yaw:7.1f}°")
+                print(f"Targets: arm={arm_tgt:+7.2f}° lazy={lazy_tgt:+7.2f}° head={head_tgt:+7.2f}°")
+                print("-" * 60)
 
         time.sleep(poll_interval)
 
