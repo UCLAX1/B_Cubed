@@ -2,6 +2,10 @@ import sys
 import time
 import math
 
+from head_balance_math import find_motor_angles
+
+DESIRED_ANGLE = 0.0
+
 SETTINGS_FILE = "RTIMULib"
 sys.path.append("/usr/lib/python3/dist-packages")
 import RTIMU
@@ -27,8 +31,15 @@ try:
             fusion_pose = data["fusionPose"]
 
             r2d = math.degrees
+            roll = r2d(fusion_pose[0])
+            pitch = r2d(fusion_pose[1])
+            yaw = r2d(fusion_pose[2])
 
-            print(f"R={r2d(fusion_pose[0]):.1f} P={r2d(fusion_pose[1]):.1f} Y={r2d(fusion_pose[2]):.1f}")
+            arm_tgt, lazy_tgt, head_tgt = find_motor_angles(pitch, roll, DESIRED_ANGLE)
+
+            print(f"IMU: R={roll:7.1f}° P={pitch:7.1f}° Y={yaw:7.1f}°")
+            print(f"Targets: arm={arm_tgt:+7.2f}° lazy={lazy_tgt:+7.2f}° head={head_tgt:+7.2f}°")
+            print("-" * 60)
 
         time.sleep(poll_interval)
 
