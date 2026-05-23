@@ -1,5 +1,10 @@
 sense_hat_imu:
   ros__parameters:
+    # Use RTIMU directly. This avoids SenseHat(), which requires the LED
+    # framebuffer device even when we only need IMU data.
+    backend: "rtimu"
+    rtimu_settings_file: "RTIMULib"
+
     imu_topic: "imu/data"
     raw_tilt_topic: "sense_hat/raw"
     frame_id: "sense_hat_imu_link"
@@ -9,7 +14,7 @@ sense_hat_imu:
     gyro_enabled: true
     accel_enabled: true
     orientation_in_degrees: true
-    gyro_in_degrees_per_second: true
+    gyro_in_degrees_per_second: false
     accelerometer_in_g: true
     raw_tilt_degrees: true
 

@@ -1,8 +1,9 @@
-"""Publish Raspberry Pi Sense HAT attitude as sensor_msgs/Imu."""
+"""Publish Raspberry Pi IMU attitude as sensor_msgs/Imu."""
 
 from __future__ import annotations
 
 import math
+import sys
 from typing import Mapping
 
 import rclpy
@@ -11,6 +12,14 @@ from sensor_msgs.msg import Imu
 from std_msgs.msg import Float32MultiArray
 
 from bb8_balance_controller.math_utils import rpy_to_quat, wrap_pi
+
+if "/usr/lib/python3/dist-packages" not in sys.path:
+    sys.path.append("/usr/lib/python3/dist-packages")
+
+try:
+    import RTIMU
+except ImportError:  # pragma: no cover - only available on the Raspberry Pi.
+    RTIMU = None
 
 try:
     from sense_hat import SenseHat
@@ -29,24 +38,19 @@ def _diag_covariance(values: list[float]) -> list[float]:
 
 
 class SenseHatImuNode(Node):
-    """Bridge Sense HAT fused orientation and gyro readings into ROS IMU data."""
+    """Bridge Raspberry Pi IMU readings into ROS IMU data."""
 
     def __init__(self) -> None:
         super().__init__("sense_hat_imu")
         self._declare_parameters()
         self._read_parameters()
 
-        if SenseHat is None:
-            raise RuntimeError(
-                "sense_hat is not installed. Install python3-sense-hat on the Pi."
-            )
-
-        self.sense = SenseHat()
-        self.sense.set_imu_config(
-            self.compass_enabled,
-            self.gyro_enabled,
-            self.accel_enabled,
-        )
+        self.backend_name = ""
+        self.sense = None
+        self.rtimu = None
+        self.rtimu_poll_interval_sec = 0.0
+        self._start_backend()
+        self._last_rtimu_not_ready_log = self.get_clock().now()
 
         self.imu_pub = self.create_publisher(Imu, self.imu_topic, 10)
         self.raw_tilt_pub = None
@@ -59,11 +63,13 @@ class SenseHatImuNode(Node):
 
         self.create_timer(1.0 / self.publish_rate_hz, self._publish_imu)
         self.get_logger().info(
-            f"Publishing Sense HAT IMU on {self.imu_topic} at "
-            f"{self.publish_rate_hz:.1f} Hz."
+            f"Publishing {self.backend_name} IMU on {self.imu_topic} "
+            f"at {self.publish_rate_hz:.1f} Hz."
         )
 
     def _declare_parameters(self) -> None:
+        self.declare_parameter("backend", "rtimu")
+        self.declare_parameter("rtimu_settings_file", "RTIMULib")
         self.declare_parameter("imu_topic", "imu/data")
         self.declare_parameter("raw_tilt_topic", "sense_hat/raw")
         self.declare_parameter("frame_id", "sense_hat_imu_link")
@@ -106,6 +112,10 @@ class SenseHatImuNode(Node):
         self.declare_parameter("linear_acceleration_covariance_diagonal", [0.25] * 3)
 
     def _read_parameters(self) -> None:
+        self.backend = str(self.get_parameter("backend").value)
+        self.rtimu_settings_file = str(
+            self.get_parameter("rtimu_settings_file").value
+        )
         self.imu_topic = str(self.get_parameter("imu_topic").value)
         self.raw_tilt_topic = str(self.get_parameter("raw_tilt_topic").value)
         self.frame_id = str(self.get_parameter("frame_id").value)
@@ -170,14 +180,70 @@ class SenseHatImuNode(Node):
             list(self.get_parameter("linear_acceleration_covariance_diagonal").value)
         )
 
+    def _start_backend(self) -> None:
+        backend = self.backend.lower()
+        if backend in ("rtimu", "auto") and RTIMU is not None:
+            self._start_rtimu_backend()
+            return
+
+        if backend == "rtimu":
+            raise RuntimeError("RTIMU is not installed; cannot start IMU backend.")
+
+        if backend in ("sense_hat", "sensehat", "auto") and SenseHat is not None:
+            self._start_sense_hat_backend()
+            return
+
+        if backend in ("sense_hat", "sensehat"):
+            raise RuntimeError(
+                "sense_hat is not installed. Install python3-sense-hat on the Pi."
+            )
+
+        raise RuntimeError(
+            "No IMU backend available. Install RTIMU or set backend:=sense_hat."
+        )
+
+    def _start_rtimu_backend(self) -> None:
+        settings = RTIMU.Settings(self.rtimu_settings_file)
+        imu = RTIMU.RTIMU(settings)
+        if not imu.IMUInit():
+            raise RuntimeError("RTIMU IMUInit failed.")
+
+        imu.setSlerpPower(0.02)
+        imu.setGyroEnable(self.gyro_enabled)
+        imu.setAccelEnable(self.accel_enabled)
+        imu.setCompassEnable(self.compass_enabled)
+
+        self.rtimu = imu
+        self.backend_name = "RTIMU"
+        if hasattr(imu, "IMUGetPollInterval"):
+            self.rtimu_poll_interval_sec = max(
+                0.0,
+                float(imu.IMUGetPollInterval()) / 1000.0,
+            )
+
+    def _start_sense_hat_backend(self) -> None:
+        self.sense = SenseHat()
+        self.sense.set_imu_config(
+            self.compass_enabled,
+            self.gyro_enabled,
+            self.accel_enabled,
+        )
+        self.backend_name = "Sense HAT"
+
     def _publish_imu(self) -> None:
         try:
-            orientation = self._read_orientation_radians()
-            gyro = self.sense.get_gyroscope_raw()
-            accel = self.sense.get_accelerometer_raw()
+            orientation, gyro, accel = self._read_sample()
+        except RuntimeError as exc:
+            if str(exc) == "RTIMU sample is not ready yet.":
+                return
+            self.get_logger().error(
+                f"Failed to read IMU: {exc}",
+                throttle_duration_sec=2.0,
+            )
+            return
         except Exception as exc:  # noqa: BLE001 - keep ROS node alive for retry.
             self.get_logger().error(
-                f"Failed to read Sense HAT IMU: {exc}",
+                f"Failed to read IMU: {exc}",
                 throttle_duration_sec=2.0,
             )
             return
@@ -234,19 +300,63 @@ class SenseHatImuNode(Node):
         self.imu_pub.publish(msg)
         self._publish_raw_tilt(roll, pitch)
 
-    def _read_orientation_radians(self) -> Mapping[str, float]:
+    def _read_sample(
+        self,
+    ) -> tuple[Mapping[str, float], Mapping[str, float], Mapping[str, float]]:
+        if self.rtimu is not None:
+            return self._read_rtimu_sample()
+        if self.sense is not None:
+            return self._read_sense_hat_sample()
+        raise RuntimeError("IMU backend is not initialized.")
+
+    def _read_rtimu_sample(
+        self,
+    ) -> tuple[Mapping[str, float], Mapping[str, float], Mapping[str, float]]:
+        if not self.rtimu.IMURead():
+            raise RuntimeError("RTIMU sample is not ready yet.")
+
+        data = self.rtimu.getIMUData()
+        roll, pitch, yaw = data["fusionPose"]
+        gyro_x, gyro_y, gyro_z = data.get("gyro", (0.0, 0.0, 0.0))
+        accel_x, accel_y, accel_z = data.get("accel", (0.0, 0.0, 0.0))
+
+        orientation = {
+            "roll": float(roll),
+            "pitch": float(pitch),
+            "yaw": float(yaw),
+        }
+        gyro = {"x": float(gyro_x), "y": float(gyro_y), "z": float(gyro_z)}
+        accel = {"x": float(accel_x), "y": float(accel_y), "z": float(accel_z)}
+        return orientation, gyro, accel
+
+    def _read_sense_hat_sample(
+        self,
+    ) -> tuple[Mapping[str, float], Mapping[str, float], Mapping[str, float]]:
+        return (
+            self._read_sense_hat_orientation_radians(),
+            self.sense.get_gyroscope_raw(),
+            self.sense.get_accelerometer_raw(),
+        )
+
+    def _read_sense_hat_orientation_radians(self) -> Mapping[str, float]:
         if self.orientation_in_degrees:
             if hasattr(self.sense, "get_orientation_degrees"):
                 orientation = self.sense.get_orientation_degrees()
             else:
                 orientation = self.sense.get_orientation()
-            return {key: math.radians(float(value)) for key, value in orientation.items()}
+            return {
+                key: math.radians(float(value))
+                for key, value in orientation.items()
+            }
 
         if hasattr(self.sense, "get_orientation_radians"):
             return self.sense.get_orientation_radians()
 
         orientation = self.sense.get_orientation()
-        return {key: math.radians(float(value)) for key, value in orientation.items()}
+        return {
+            key: math.radians(float(value))
+            for key, value in orientation.items()
+        }
 
     def _mapped_angle(
         self,
