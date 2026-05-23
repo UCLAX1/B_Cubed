@@ -8,6 +8,8 @@ sense_hat_imu:
     compass_enabled: true
     gyro_enabled: true
     accel_enabled: true
+    orientation_in_degrees: true
+    gyro_in_degrees_per_second: true
     accelerometer_in_g: true
     raw_tilt_degrees: true
 

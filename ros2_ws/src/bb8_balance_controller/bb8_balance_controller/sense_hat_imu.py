@@ -72,6 +72,8 @@ class SenseHatImuNode(Node):
         self.declare_parameter("compass_enabled", True)
         self.declare_parameter("gyro_enabled", True)
         self.declare_parameter("accel_enabled", True)
+        self.declare_parameter("orientation_in_degrees", True)
+        self.declare_parameter("gyro_in_degrees_per_second", True)
         self.declare_parameter("accelerometer_in_g", True)
         self.declare_parameter("raw_tilt_degrees", True)
 
@@ -115,6 +117,12 @@ class SenseHatImuNode(Node):
         self.compass_enabled = bool(self.get_parameter("compass_enabled").value)
         self.gyro_enabled = bool(self.get_parameter("gyro_enabled").value)
         self.accel_enabled = bool(self.get_parameter("accel_enabled").value)
+        self.orientation_in_degrees = bool(
+            self.get_parameter("orientation_in_degrees").value
+        )
+        self.gyro_in_degrees_per_second = bool(
+            self.get_parameter("gyro_in_degrees_per_second").value
+        )
         self.accelerometer_in_g = bool(
             self.get_parameter("accelerometer_in_g").value
         )
@@ -163,9 +171,16 @@ class SenseHatImuNode(Node):
         )
 
     def _publish_imu(self) -> None:
-        orientation = self.sense.get_orientation_radians()
-        gyro = self.sense.get_gyroscope_raw()
-        accel = self.sense.get_accelerometer_raw()
+        try:
+            orientation = self._read_orientation_radians()
+            gyro = self.sense.get_gyroscope_raw()
+            accel = self.sense.get_accelerometer_raw()
+        except Exception as exc:  # noqa: BLE001 - keep ROS node alive for retry.
+            self.get_logger().error(
+                f"Failed to read Sense HAT IMU: {exc}",
+                throttle_duration_sec=2.0,
+            )
+            return
 
         roll = self._mapped_angle(
             orientation,
@@ -197,6 +212,8 @@ class SenseHatImuNode(Node):
         msg.orientation_covariance = self.orientation_covariance
 
         angular_velocity = self._mapped_vector(gyro, self.gyro_sources, self.gyro_signs)
+        if self.gyro_in_degrees_per_second:
+            angular_velocity = [math.radians(value) for value in angular_velocity]
         msg.angular_velocity.x = angular_velocity[0]
         msg.angular_velocity.y = angular_velocity[1]
         msg.angular_velocity.z = angular_velocity[2]
@@ -216,6 +233,20 @@ class SenseHatImuNode(Node):
 
         self.imu_pub.publish(msg)
         self._publish_raw_tilt(roll, pitch)
+
+    def _read_orientation_radians(self) -> Mapping[str, float]:
+        if self.orientation_in_degrees:
+            if hasattr(self.sense, "get_orientation_degrees"):
+                orientation = self.sense.get_orientation_degrees()
+            else:
+                orientation = self.sense.get_orientation()
+            return {key: math.radians(float(value)) for key, value in orientation.items()}
+
+        if hasattr(self.sense, "get_orientation_radians"):
+            return self.sense.get_orientation_radians()
+
+        orientation = self.sense.get_orientation()
+        return {key: math.radians(float(value)) for key, value in orientation.items()}
 
     def _mapped_angle(
         self,
