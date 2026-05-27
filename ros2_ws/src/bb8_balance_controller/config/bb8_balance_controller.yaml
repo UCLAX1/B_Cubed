@@ -28,6 +28,9 @@ bb8_balance_controller:
     manual_timeout_sec: 0.30
     odom_timeout_sec: 0.5
 
+    # Robot physical center-of-gravity zero. Keep these at the measured
+    # upright/resting attitude; launch_pi_balanced_drive.sh can override them
+    # with ROLL_OFFSET_RAD and PITCH_OFFSET_RAD during drivetrain calibration.
     roll_offset_rad: 0.0
     pitch_offset_rad: 0.0
     roll_correction_sign: -1.0

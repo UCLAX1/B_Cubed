@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import math
 import sys
+import time
 from typing import Mapping
 
 import rclpy
@@ -48,7 +49,11 @@ class SenseHatImuNode(Node):
         self.backend_name = ""
         self.sense = None
         self.rtimu = None
+        self.rtimu_settings = None
         self.rtimu_poll_interval_sec = 0.0
+        self.rtimu_read_attempts = 1
+        self.callback_count = 0
+        self.publish_count = 0
         self._start_backend()
         self._last_rtimu_not_ready_log = self.get_clock().now()
 
@@ -61,7 +66,10 @@ class SenseHatImuNode(Node):
                 10,
             )
 
-        self.create_timer(1.0 / self.publish_rate_hz, self._publish_imu)
+        self.publish_timer = self.create_timer(
+            1.0 / self.publish_rate_hz,
+            self._publish_imu,
+        )
         self.get_logger().info(
             f"Publishing {self.backend_name} IMU on {self.imu_topic} "
             f"at {self.publish_rate_hz:.1f} Hz."
@@ -203,8 +211,14 @@ class SenseHatImuNode(Node):
         )
 
     def _start_rtimu_backend(self) -> None:
-        settings = RTIMU.Settings(self.rtimu_settings_file)
-        imu = RTIMU.RTIMU(settings)
+        self.rtimu_settings = RTIMU.Settings(self.rtimu_settings_file)
+        self.backend_name = "RTIMU"
+
+    def _ensure_rtimu_started(self) -> None:
+        if self.rtimu is not None:
+            return
+
+        imu = RTIMU.RTIMU(self.rtimu_settings)
         if not imu.IMUInit():
             raise RuntimeError("RTIMU IMUInit failed.")
 
@@ -214,11 +228,16 @@ class SenseHatImuNode(Node):
         imu.setCompassEnable(self.compass_enabled)
 
         self.rtimu = imu
-        self.backend_name = "RTIMU"
         if hasattr(imu, "IMUGetPollInterval"):
             self.rtimu_poll_interval_sec = max(
                 0.0,
                 float(imu.IMUGetPollInterval()) / 1000.0,
+            )
+        if self.rtimu_poll_interval_sec > 0.0:
+            publish_period = 1.0 / self.publish_rate_hz
+            self.rtimu_read_attempts = max(
+                1,
+                int(math.ceil(publish_period / self.rtimu_poll_interval_sec)),
             )
 
     def _start_sense_hat_backend(self) -> None:
@@ -231,10 +250,16 @@ class SenseHatImuNode(Node):
         self.backend_name = "Sense HAT"
 
     def _publish_imu(self) -> None:
+        self.callback_count += 1
+        if self.callback_count == 1:
+            self.get_logger().info("IMU publish loop started.")
+
         try:
             orientation, gyro, accel = self._read_sample()
         except RuntimeError as exc:
             if str(exc) == "RTIMU sample is not ready yet.":
+                if self.callback_count == 1:
+                    self.get_logger().warn("RTIMU sample was not ready on first timer.")
                 return
             self.get_logger().error(
                 f"Failed to read IMU: {exc}",
@@ -298,12 +323,20 @@ class SenseHatImuNode(Node):
         msg.linear_acceleration_covariance = self.linear_acceleration_covariance
 
         self.imu_pub.publish(msg)
+        self.publish_count += 1
+        if self.publish_count == 1:
+            self.get_logger().info(
+                "First IMU sample published: "
+                f"roll={math.degrees(roll):.2f} deg, "
+                f"pitch={math.degrees(pitch):.2f} deg."
+            )
         self._publish_raw_tilt(roll, pitch)
 
     def _read_sample(
         self,
     ) -> tuple[Mapping[str, float], Mapping[str, float], Mapping[str, float]]:
-        if self.rtimu is not None:
+        if self.backend_name == "RTIMU":
+            self._ensure_rtimu_started()
             return self._read_rtimu_sample()
         if self.sense is not None:
             return self._read_sense_hat_sample()
@@ -312,10 +345,21 @@ class SenseHatImuNode(Node):
     def _read_rtimu_sample(
         self,
     ) -> tuple[Mapping[str, float], Mapping[str, float], Mapping[str, float]]:
-        if not self.rtimu.IMURead():
+        for attempt in range(self.rtimu_read_attempts):
+            if self.rtimu.IMURead():
+                break
+            if attempt + 1 < self.rtimu_read_attempts:
+                time.sleep(self.rtimu_poll_interval_sec)
+        else:
             raise RuntimeError("RTIMU sample is not ready yet.")
 
         data = self.rtimu.getIMUData()
+        return self._rtimu_data_to_sample(data)
+
+    @staticmethod
+    def _rtimu_data_to_sample(
+        data,
+    ) -> tuple[Mapping[str, float], Mapping[str, float], Mapping[str, float]]:
         roll, pitch, yaw = data["fusionPose"]
         gyro_x, gyro_y, gyro_z = data.get("gyro", (0.0, 0.0, 0.0))
         accel_x, accel_y, accel_z = data.get("accel", (0.0, 0.0, 0.0))

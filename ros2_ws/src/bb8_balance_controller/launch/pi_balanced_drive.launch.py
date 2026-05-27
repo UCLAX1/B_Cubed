@@ -37,6 +37,8 @@ def generate_launch_description() -> LaunchDescription:
     manual_cmd_topic = LaunchConfiguration("manual_cmd_topic")
     balanced_cmd_topic = LaunchConfiguration("balanced_cmd_topic")
     imu_topic = LaunchConfiguration("imu_topic")
+    roll_offset_rad = LaunchConfiguration("roll_offset_rad")
+    pitch_offset_rad = LaunchConfiguration("pitch_offset_rad")
     can_channel = LaunchConfiguration("can_channel")
     can_interface = LaunchConfiguration("can_interface")
     can_bitrate = LaunchConfiguration("can_bitrate")
@@ -58,6 +60,8 @@ def generate_launch_description() -> LaunchDescription:
             DeclareLaunchArgument("manual_cmd_topic", default_value="cmd_vel_manual"),
             DeclareLaunchArgument("balanced_cmd_topic", default_value="cmd_vel_balanced"),
             DeclareLaunchArgument("imu_topic", default_value="imu/data"),
+            DeclareLaunchArgument("roll_offset_rad", default_value="0.0"),
+            DeclareLaunchArgument("pitch_offset_rad", default_value="0.0"),
             DeclareLaunchArgument("can_channel", default_value="can0"),
             DeclareLaunchArgument("can_interface", default_value="socketcan"),
             DeclareLaunchArgument("can_bitrate", default_value="1000000"),
@@ -89,6 +93,14 @@ def generate_launch_description() -> LaunchDescription:
                         "manual_cmd_topic": manual_cmd_topic,
                         "output_twist_topic": balanced_cmd_topic,
                         "imu_topic": imu_topic,
+                        "roll_offset_rad": ParameterValue(
+                            roll_offset_rad,
+                            value_type=float,
+                        ),
+                        "pitch_offset_rad": ParameterValue(
+                            pitch_offset_rad,
+                            value_type=float,
+                        ),
                         "tilt_topic": "",
                     },
                 ],
