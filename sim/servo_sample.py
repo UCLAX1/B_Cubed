@@ -29,6 +29,5 @@ try:
     print("Turning MOSFET OFF (pin 36)")
     MOSFET.off()
 
-    
 except KeyboardInterrupt:
     print("Program stopped.")
