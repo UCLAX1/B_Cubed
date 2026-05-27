@@ -1,0 +1,32 @@
+[Unit]
+Description=B_Cubed Raspberry Pi balance and drivetrain
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=simple
+User=ubuntu
+Group=ubuntu
+WorkingDirectory=/home/ubuntu/B_Cubed/ros2_ws
+PermissionsStartOnly=true
+Environment=ROS_DOMAIN_ID=0
+Environment=RMW_IMPLEMENTATION=rmw_cyclonedds_cpp
+Environment=CYCLONEDDS_URI=file:///home/ubuntu/cyclonedds.xml
+Environment=START_SENSE_HAT=true
+Environment=START_MOTOR_CONTROL=true
+Environment=HARDWARE_ENABLED=false
+Environment=ALLOW_PD_FALLBACK=false
+Environment=SETUP_CAN=false
+Environment=CAN_CHANNEL=can0
+Environment=CAN_BITRATE=1000000
+ExecStartPre=-/usr/sbin/ip link set can0 down
+ExecStartPre=/usr/sbin/ip link set can0 type can bitrate 1000000
+ExecStartPre=/usr/sbin/ip link set can0 up
+ExecStart=/home/ubuntu/B_Cubed/ros2_ws/launch_pi_balanced_drive.sh
+Restart=on-failure
+RestartSec=5
+KillSignal=SIGINT
+TimeoutStopSec=30
+
+[Install]
+WantedBy=multi-user.target

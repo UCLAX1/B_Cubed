@@ -1,0 +1,25 @@
+[Unit]
+Description=B_Cubed Jetson ZED SLAM/Nav2 headless core
+Wants=network-online.target
+After=network-online.target tailscaled.service
+
+[Service]
+Type=simple
+User=jetson-nano-x1
+Group=jetson-nano-x1
+WorkingDirectory=/home/jetson-nano-x1/Documents/B_Cubed/ros2_ws
+Environment=ROS_DOMAIN_ID=0
+Environment=RMW_IMPLEMENTATION=rmw_cyclonedds_cpp
+Environment=CYCLONEDDS_URI=file:///home/jetson-nano-x1/cyclonedds.xml
+Environment=ENABLE_NAV2=true
+Environment=ENABLE_PLANNING_CONSOLE=true
+Environment=PLANNING_CONSOLE_HOST=0.0.0.0
+Environment=START_WRAPPER=true
+ExecStart=/home/jetson-nano-x1/Documents/B_Cubed/ros2_ws/launch_headless.sh
+Restart=on-failure
+RestartSec=5
+KillSignal=SIGINT
+TimeoutStopSec=30
+
+[Install]
+WantedBy=multi-user.target
