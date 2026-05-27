@@ -13,18 +13,18 @@ try:
     MOSFET.on()
 
     print("Testing Standard Servo (150KG)")
-    annimos_150kg.value = 0 # Move to center position
+    annimos_150kg.value = 0.5 # Move to center position
     sleep(2)
     
-    print("Testing Continuous Servo (70KG)")
-    diymall_70kg.value = 0.1 # Spin forward at 50% speed
-    sleep(2)
-    diymall_70kg.value = 0 # Stop
+    # print("Testing Continuous Servo (70KG)")
+    # diymall_70kg.value = 0.1 # Spin forward at 50% speed
+    # sleep(2)
+    # diymall_70kg.value = 0 # Stop
     
-    print("Testing Continuous Servo (5.5KG)")
-    garosa_5kg.value = 0.1 # Spin in reverse at 100% speed
-    sleep(2)
-    garosa_5kg.value = 0 # Stop
+    # print("Testing Continuous Servo (5.5KG)")
+    # garosa_5kg.value = 0.1 # Spin in reverse at 100% speed
+    # sleep(2)
+    # garosa_5kg.value = 0 # Stop
 
     print("Turning MOSFET OFF (pin 36)")
     MOSFET.off()
