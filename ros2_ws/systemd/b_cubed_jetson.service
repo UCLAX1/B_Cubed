@@ -11,7 +11,8 @@ WorkingDirectory=/home/jetson-nano-x1/Documents/B_Cubed/ros2_ws
 Environment=ROS_DOMAIN_ID=0
 Environment=RMW_IMPLEMENTATION=rmw_cyclonedds_cpp
 Environment=CYCLONEDDS_URI=file:///home/jetson-nano-x1/cyclonedds.xml
-Environment=ENABLE_NAV2=true
+Environment=ENABLE_NAV2=false
+Environment=ENABLE_PLANNER_ONLY=true
 Environment=ENABLE_PLANNING_CONSOLE=true
 Environment=PLANNING_CONSOLE_HOST=0.0.0.0
 Environment=START_WRAPPER=true

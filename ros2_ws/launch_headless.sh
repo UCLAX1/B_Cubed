@@ -13,10 +13,26 @@ INSTALL_SETUP="${INSTALL_SETUP:-$WS_DIR/install/setup.bash}"
 BUILD_FIRST="${BUILD_FIRST:-false}"
 ROS_DOMAIN_ID="${ROS_DOMAIN_ID:-0}"
 ROS_LOG_DIR="${ROS_LOG_DIR:-$WS_DIR/log/headless}"
+NPROC_VALUE="$(command -v nproc >/dev/null 2>&1 && nproc || echo 4)"
+
+DEFAULT_LAUNCH_MAX_CORES="$NPROC_VALUE"
+if (( DEFAULT_LAUNCH_MAX_CORES > 4 )); then
+  DEFAULT_LAUNCH_MAX_CORES=4
+fi
+DEFAULT_BUILD_PARALLEL_WORKERS="$DEFAULT_LAUNCH_MAX_CORES"
+
+BUILD_PARALLEL_WORKERS="${BUILD_PARALLEL_WORKERS:-$DEFAULT_BUILD_PARALLEL_WORKERS}"
+LAUNCH_MAX_CORES="${LAUNCH_MAX_CORES:-$DEFAULT_LAUNCH_MAX_CORES}"
+LAUNCH_CPU_SET="${LAUNCH_CPU_SET:-}"
+LAUNCH_THREAD_LIMIT="${LAUNCH_THREAD_LIMIT:-2}"
+LAUNCH_NICE="${LAUNCH_NICE:-10}"
+LAUNCH_IONICE_PRIORITY="${LAUNCH_IONICE_PRIORITY:-7}"
+LAUNCH_MEMORY_LIMIT_MB="${LAUNCH_MEMORY_LIMIT_MB:-0}"
+LAUNCH_MEMORY_LIMIT_KB=0
 
 SESSION_STAMP="$(date +%Y%m%d_%H%M%S)"
 MAP_OUTPUT_DIR="${MAP_OUTPUT_DIR:-$WS_DIR/maps}"
-MAP_SESSION_NAME="${MAP_SESSION_NAME:-drive_${SESSION_STAMP}}"
+MAP_SESSION_NAME="${MAP_SESSION_NAME:-handheld_${SESSION_STAMP}}"
 MAP_PREFIX="${MAP_PREFIX:-$MAP_OUTPUT_DIR/$MAP_SESSION_NAME}"
 LOCALIZATION_FLAG_FILE="${LOCALIZATION_FLAG_FILE:-$WS_DIR/.b_cubed_localization}"
 MAP_FILE_NAME="${MAP_FILE_NAME:-$MAP_PREFIX}"
@@ -35,16 +51,17 @@ INPUT_IMAGE_TOPIC="${INPUT_IMAGE_TOPIC:-/zed/zed_node/rgb/color/rect/image/compr
 INPUT_IMAGE_IS_COMPRESSED="${INPUT_IMAGE_IS_COMPRESSED:-true}"
 CLOUD_TOPIC="${CLOUD_TOPIC:-/zed/zed_node/point_cloud/cloud_registered}"
 SCAN_TOPIC="${SCAN_TOPIC:-/scan}"
-TOPIC_WAIT_TIMEOUT_SEC="${TOPIC_WAIT_TIMEOUT_SEC:-90}"
+REQUIRE_POSE_COV_TOPIC="${REQUIRE_POSE_COV_TOPIC:-false}"
+TOPIC_WAIT_TIMEOUT_SEC="${TOPIC_WAIT_TIMEOUT_SEC:-60}"
 
-BASE_FRAME="${BASE_FRAME:-base_link}"
-BASE_TO_CAMERA_TRANSLATION="${BASE_TO_CAMERA_TRANSLATION:-0.0,0.0,0.381}"
+BASE_FRAME="${BASE_FRAME:-zed_camera_link}"
+BASE_TO_CAMERA_TRANSLATION="${BASE_TO_CAMERA_TRANSLATION:-0.0,0.0,0.0}"
 BASE_TO_CAMERA_RPY="${BASE_TO_CAMERA_RPY:-0.0,0.0,0.0}"
 FLATTEN_NAVIGATION_TO_2D="${FLATTEN_NAVIGATION_TO_2D:-true}"
 NAVIGATION_PLANE_Z="${NAVIGATION_PLANE_Z:-0.0}"
 
-ENABLE_NAV2="${ENABLE_NAV2:-true}"
-ENABLE_PLANNER_ONLY="${ENABLE_PLANNER_ONLY:-false}"
+ENABLE_NAV2="${ENABLE_NAV2:-false}"
+ENABLE_PLANNER_ONLY="${ENABLE_PLANNER_ONLY:-true}"
 ENABLE_PLANNING_CONSOLE="${ENABLE_PLANNING_CONSOLE:-true}"
 PLANNING_CONSOLE_HOST="${PLANNING_CONSOLE_HOST:-0.0.0.0}"
 PLANNING_CONSOLE_PORT="${PLANNING_CONSOLE_PORT:-8080}"
@@ -113,38 +130,213 @@ launch_background() {
   echo "Starting $name; log: $log_file"
   (
     cd "$WS_DIR"
+    apply_resource_environment
+    if (( LAUNCH_MEMORY_LIMIT_KB > 0 )); then
+      ulimit -v "$LAUNCH_MEMORY_LIMIT_KB"
+    fi
     exec "$@"
   ) >>"$log_file" 2>&1 &
   child_pids+=("$!")
 }
 
-wait_for_topic() {
-  local topic="$1"
-  local deadline=$((SECONDS + TOPIC_WAIT_TIMEOUT_SEC))
+sanitize_nonnegative_int() {
+  local variable_name="$1"
+  local default_value="$2"
+  local value="${!variable_name}"
 
-  echo "Waiting for $topic ..."
+  if ! [[ "$value" =~ ^[0-9]+$ ]]; then
+    printf -v "$variable_name" '%s' "$default_value"
+  fi
+}
+
+configure_resource_limits() {
+  sanitize_nonnegative_int BUILD_PARALLEL_WORKERS "$DEFAULT_BUILD_PARALLEL_WORKERS"
+  sanitize_nonnegative_int LAUNCH_MAX_CORES "$DEFAULT_LAUNCH_MAX_CORES"
+  sanitize_nonnegative_int LAUNCH_THREAD_LIMIT 2
+  sanitize_nonnegative_int LAUNCH_NICE 10
+  sanitize_nonnegative_int LAUNCH_IONICE_PRIORITY 7
+  sanitize_nonnegative_int LAUNCH_MEMORY_LIMIT_MB 0
+
+  if (( BUILD_PARALLEL_WORKERS < 1 )); then
+    BUILD_PARALLEL_WORKERS=1
+  fi
+  if (( BUILD_PARALLEL_WORKERS > NPROC_VALUE )); then
+    BUILD_PARALLEL_WORKERS="$NPROC_VALUE"
+  fi
+
+  if (( LAUNCH_MAX_CORES < 1 )); then
+    LAUNCH_MAX_CORES=1
+  fi
+  if (( LAUNCH_MAX_CORES > NPROC_VALUE )); then
+    LAUNCH_MAX_CORES="$NPROC_VALUE"
+  fi
+  if [[ -z "${LAUNCH_CPU_SET//[[:space:]]/}" ]]; then
+    if (( LAUNCH_MAX_CORES == 1 )); then
+      LAUNCH_CPU_SET="0"
+    else
+      LAUNCH_CPU_SET="0-$((LAUNCH_MAX_CORES - 1))"
+    fi
+  fi
+
+  if (( LAUNCH_THREAD_LIMIT < 1 )); then
+    LAUNCH_THREAD_LIMIT=1
+  fi
+  if (( LAUNCH_NICE > 19 )); then
+    LAUNCH_NICE=19
+  fi
+  if (( LAUNCH_IONICE_PRIORITY > 7 )); then
+    LAUNCH_IONICE_PRIORITY=7
+  fi
+
+  LAUNCH_MEMORY_LIMIT_KB=$((LAUNCH_MEMORY_LIMIT_MB * 1024))
+}
+
+apply_resource_environment() {
+  export OMP_NUM_THREADS="$LAUNCH_THREAD_LIMIT"
+  export OPENBLAS_NUM_THREADS="$LAUNCH_THREAD_LIMIT"
+  export MKL_NUM_THREADS="$LAUNCH_THREAD_LIMIT"
+  export NUMEXPR_NUM_THREADS="$LAUNCH_THREAD_LIMIT"
+  export OPENCV_FOR_THREADS_NUM="$LAUNCH_THREAD_LIMIT"
+  export VECLIB_MAXIMUM_THREADS="$LAUNCH_THREAD_LIMIT"
+  export MALLOC_ARENA_MAX=2
+  export CUDA_MODULE_LOADING=LAZY
+}
+
+run_limited() {
+  (
+    apply_resource_environment
+    if (( LAUNCH_MEMORY_LIMIT_KB > 0 )); then
+      ulimit -v "$LAUNCH_MEMORY_LIMIT_KB"
+    fi
+    exec ionice -c 2 -n "$LAUNCH_IONICE_PRIORITY" \
+      nice -n "$LAUNCH_NICE" \
+      taskset -c "$LAUNCH_CPU_SET" \
+      "$@"
+  )
+}
+
+missing_ros_packages() {
+  local missing=()
+  local package_name
+
+  for package_name in "$@"; do
+    if ! ros2 pkg prefix "$package_name" >/dev/null 2>&1; then
+      missing+=("$package_name")
+    fi
+  done
+
+  if (( ${#missing[@]} > 0 )); then
+    printf '%s\n' "${missing[@]}"
+  fi
+}
+
+configure_nav2_launch() {
+  if ! bool_is_true "$ENABLE_NAV2"; then
+    return 0
+  fi
+
+  local required_packages=(
+    nav2_planner
+    nav2_controller
+    nav2_behaviors
+    nav2_bt_navigator
+    nav2_lifecycle_manager
+    nav2_navfn_planner
+    nav2_regulated_pure_pursuit_controller
+    nav2_costmap_2d
+  )
+  local missing=()
+  mapfile -t missing < <(missing_ros_packages "${required_packages[@]}")
+
+  if (( ${#missing[@]} == 0 )); then
+    return 0
+  fi
+
+  echo "Nav2 planning packages are missing:" >&2
+  printf '  %s\n' "${missing[@]}" >&2
+  echo "Continuing with ENABLE_NAV2=false so mapping and the web console can still start." >&2
+  ENABLE_NAV2="false"
+}
+
+configure_planner_only_launch() {
+  if bool_is_true "$ENABLE_NAV2"; then
+    ENABLE_PLANNER_ONLY="false"
+    return 0
+  fi
+  if ! bool_is_true "$ENABLE_PLANNER_ONLY"; then
+    return 0
+  fi
+
+  local required_packages=(
+    nav2_planner
+    nav2_lifecycle_manager
+    nav2_navfn_planner
+    nav2_costmap_2d
+  )
+  local missing=()
+  mapfile -t missing < <(missing_ros_packages "${required_packages[@]}")
+
+  if (( ${#missing[@]} == 0 )); then
+    return 0
+  fi
+
+  echo "Nav2 planner-only packages are missing:" >&2
+  printf '  %s\n' "${missing[@]}" >&2
+  echo "Continuing with ENABLE_PLANNER_ONLY=false." >&2
+  ENABLE_PLANNER_ONLY="false"
+}
+
+missing_topics() {
+  local available_topics="$1"
+  local missing=()
+  local topic
+
+  for topic in \
+    "$INPUT_POSE_TOPIC" \
+    "$INPUT_ODOM_TOPIC" \
+    "$CLOUD_TOPIC"; do
+    if ! grep -Fxq "$topic" <<<"$available_topics"; then
+      missing+=("$topic")
+    fi
+  done
+
+  if bool_is_true "$REQUIRE_POSE_COV_TOPIC"; then
+    if ! grep -Fxq "$INPUT_POSE_COV_TOPIC" <<<"$available_topics"; then
+      missing+=("$INPUT_POSE_COV_TOPIC")
+    fi
+  fi
+
+  if bool_is_true "$START_PERSON_TRACKING"; then
+    if ! grep -Fxq "$PERSON_TRACKING_IMAGE_TOPIC" <<<"$available_topics"; then
+      missing+=("$PERSON_TRACKING_IMAGE_TOPIC")
+    fi
+  fi
+
+  if (( ${#missing[@]} > 0 )); then
+    printf '%s\n' "${missing[@]}"
+  fi
+}
+
+wait_for_wrapper_topics() {
+  local deadline=$((SECONDS + TOPIC_WAIT_TIMEOUT_SEC))
+  local available_topics=""
+  local missing=()
+
   while (( SECONDS < deadline )); do
-    if ros2 topic list 2>/dev/null | grep -Fxq "$topic"; then
-      echo "$topic is visible."
+    available_topics="$(ros2 topic list 2>/dev/null || true)"
+    mapfile -t missing < <(missing_topics "$available_topics")
+
+    if (( ${#missing[@]} == 0 )); then
       return 0
     fi
+
     sleep 2
   done
 
-  echo "Timed out waiting for $topic after ${TOPIC_WAIT_TIMEOUT_SEC}s." >&2
+  echo "Timed out waiting for required ZED wrapper topics." >&2
+  echo "Still missing:" >&2
+  printf '  %s\n' "${missing[@]}" >&2
   return 1
-}
-
-wait_for_required_zed_topics() {
-  wait_for_topic "$INPUT_POSE_TOPIC"
-  if [[ -n "${WAIT_FOR_EXTRA_TOPICS:-}" ]]; then
-    local topic
-    IFS=',' read -r -a extra_topics <<<"$WAIT_FOR_EXTRA_TOPICS"
-    for topic in "${extra_topics[@]}"; do
-      topic="${topic//[[:space:]]/}"
-      [[ -n "$topic" ]] && wait_for_topic "$topic"
-    done
-  fi
 }
 
 while (($#)); do
@@ -197,9 +389,11 @@ trap cleanup EXIT INT TERM
 
 source_setup_file "$ROS_SETUP"
 cd "$WS_DIR"
+configure_resource_limits
 
 if bool_is_true "$BUILD_FIRST" || [[ ! -f "$INSTALL_SETUP" ]]; then
-  colcon build --cmake-args=-DCMAKE_BUILD_TYPE=Release
+  run_limited colcon build --cmake-args=-DCMAKE_BUILD_TYPE=Release \
+    --parallel-workers "$BUILD_PARALLEL_WORKERS"
 fi
 
 if [[ ! -f "$INSTALL_SETUP" ]]; then
@@ -207,6 +401,8 @@ if [[ ! -f "$INSTALL_SETUP" ]]; then
   exit 1
 fi
 source_setup_file "$INSTALL_SETUP"
+configure_nav2_launch
+configure_planner_only_launch
 
 echo "B_Cubed headless launch"
 echo "  mode=$SLAM_MODE"
@@ -217,9 +413,12 @@ echo "  web_console=http://${PLANNING_CONSOLE_HOST}:${PLANNING_CONSOLE_PORT}/"
 
 if bool_is_true "$START_WRAPPER"; then
   launch_background "zed_wrapper" bash -lc "$WRAPPER_LAUNCH"
+  sleep 5
 fi
 
-wait_for_required_zed_topics
+echo "Waiting for ZED wrapper topics..."
+wait_for_wrapper_topics
+echo "Wrapper topics are available."
 
 nav_args=(
   "slam_mode:=$SLAM_MODE"
