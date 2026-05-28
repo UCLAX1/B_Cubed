@@ -73,6 +73,8 @@ SCAN_TOPIC="${SCAN_TOPIC:-/scan}"
 REQUIRE_POSE_COV_TOPIC="${REQUIRE_POSE_COV_TOPIC:-false}"
 TOPIC_WAIT_TIMEOUT_SEC="${TOPIC_WAIT_TIMEOUT_SEC:-180}"
 STATUS_INTERVAL_SEC="${STATUS_INTERVAL_SEC:-30}"
+COMMAND_MONITOR_ENABLED="${COMMAND_MONITOR_ENABLED:-true}"
+COMMAND_MONITOR_SAMPLE_TIMEOUT_SEC="${COMMAND_MONITOR_SAMPLE_TIMEOUT_SEC:-2}"
 
 BASE_FRAME="${BASE_FRAME:-zed_camera_link}"
 BASE_TO_CAMERA_TRANSLATION="${BASE_TO_CAMERA_TRANSLATION:-0.0,0.0,0.0}"
@@ -87,6 +89,7 @@ PLANNING_CONSOLE_HOST="${PLANNING_CONSOLE_HOST:-0.0.0.0}"
 PLANNING_CONSOLE_PORT="${PLANNING_CONSOLE_PORT:-8080}"
 KILL_STALE_PLANNING_CONSOLE="${KILL_STALE_PLANNING_CONSOLE:-true}"
 MANUAL_CMD_TOPIC="${MANUAL_CMD_TOPIC:-cmd_vel_manual}"
+COMMAND_MONITOR_TOPICS="${COMMAND_MONITOR_TOPICS:-$MANUAL_CMD_TOPIC /cmd_vel /cmd_vel_balanced /jet_cmd /kiwi_drive/motor_powers /balance/status /kiwi_drive/status}"
 
 START_PERSON_TRACKING="${START_PERSON_TRACKING:-false}"
 PERSON_TRACKING_IMAGE_TOPIC="${PERSON_TRACKING_IMAGE_TOPIC:-$INPUT_IMAGE_TOPIC}"
@@ -115,6 +118,7 @@ Environment overrides:
   ROS_DOMAIN_ID, MAP_PREFIX, LOCALIZATION_FLAG_FILE, ENABLE_NAV2,
   ENABLE_PLANNING_CONSOLE, PLANNING_CONSOLE_HOST, PLANNING_CONSOLE_PORT.
   KILL_STALE_ZED_WRAPPER, TOPIC_WAIT_TIMEOUT_SEC, STATUS_INTERVAL_SEC.
+  COMMAND_MONITOR_ENABLED, COMMAND_MONITOR_TOPICS.
   NETWORK_MODE=tailscale|hotspot, HOTSPOT_CONNECTION, WIFI_CONNECTION.
 EOF
 }
@@ -706,6 +710,53 @@ topic_missing() {
   ! topic_visible "$topic"
 }
 
+print_command_samples() {
+  local topic
+  local sample
+
+  if ! bool_is_true "$COMMAND_MONITOR_ENABLED"; then
+    return 0
+  fi
+
+  echo "Command monitor:"
+  for topic in $COMMAND_MONITOR_TOPICS; do
+    if ! topic_visible "$topic"; then
+      echo "  $topic: not visible"
+      continue
+    fi
+
+    sample="$(
+      timeout "$COMMAND_MONITOR_SAMPLE_TIMEOUT_SEC" \
+        ros2 topic echo "$topic" --once 2>/dev/null || true
+    )"
+    if [[ -n "${sample//[[:space:]]/}" ]]; then
+      echo "  $topic:"
+      sed 's/^/    /' <<<"$sample" | head -20
+    else
+      echo "  $topic: visible, no sample within ${COMMAND_MONITOR_SAMPLE_TIMEOUT_SEC}s"
+    fi
+  done
+}
+
+print_command_topic_info() {
+  local topic
+  local info
+
+  if ! bool_is_true "$COMMAND_MONITOR_ENABLED"; then
+    return 0
+  fi
+
+  echo "Command topic endpoints:"
+  for topic in $COMMAND_MONITOR_TOPICS; do
+    if ! topic_visible "$topic"; then
+      echo "  $topic: not visible"
+      continue
+    fi
+    info="$(ros2 topic info "$topic" 2>/dev/null | tr '\n' '; ' || true)"
+    echo "  $topic: $info"
+  done
+}
+
 print_nav_diagnostics() {
   local nav_log="$ROS_LOG_DIR/zed_slam_nav.log"
   local nodes
@@ -975,6 +1026,8 @@ echo "  wrapper_log=$ROS_LOG_DIR/zed_wrapper.log"
 echo "  nav_log=$ROS_LOG_DIR/zed_slam_nav.log"
 echo "  required_zed_topics=$INPUT_POSE_TOPIC $INPUT_ODOM_TOPIC $CLOUD_TOPIC"
 echo "  topic_wait_timeout_sec=$TOPIC_WAIT_TIMEOUT_SEC"
+echo "  command_monitor_enabled=$COMMAND_MONITOR_ENABLED"
+echo "  command_monitor_topics=$COMMAND_MONITOR_TOPICS"
 
 if bool_is_true "$START_WRAPPER"; then
   stop_stale_zed_wrapper_processes
@@ -1039,6 +1092,8 @@ report_topic_status "Initial navigation topic status:" \
   "/balance/status"
 print_next_blocker_hint
 print_nav_diagnostics
+print_command_topic_info
+print_command_samples
 
 next_status_report=$((SECONDS + STATUS_INTERVAL_SEC))
 while :; do
@@ -1067,6 +1122,8 @@ while :; do
       "/balance/status"
     print_next_blocker_hint
     print_nav_diagnostics
+    print_command_topic_info
+    print_command_samples
     next_status_report=$((SECONDS + STATUS_INTERVAL_SEC))
   fi
 
