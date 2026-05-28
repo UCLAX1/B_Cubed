@@ -53,7 +53,7 @@ CLOUD_TOPIC="${CLOUD_TOPIC:-/zed/zed_node/point_cloud/cloud_registered}"
 SCAN_TOPIC="${SCAN_TOPIC:-/scan}"
 REQUIRE_POSE_COV_TOPIC="${REQUIRE_POSE_COV_TOPIC:-false}"
 TOPIC_WAIT_TIMEOUT_SEC="${TOPIC_WAIT_TIMEOUT_SEC:-60}"
-STATUS_INTERVAL_SEC="${STATUS_INTERVAL_SEC:-10}"
+STATUS_INTERVAL_SEC="${STATUS_INTERVAL_SEC:-30}"
 
 BASE_FRAME="${BASE_FRAME:-zed_camera_link}"
 BASE_TO_CAMERA_TRANSLATION="${BASE_TO_CAMERA_TRANSLATION:-0.0,0.0,0.0}"
@@ -356,6 +356,74 @@ report_topic_status() {
   fi
 }
 
+topic_missing() {
+  local topic="$1"
+
+  ! topic_visible "$topic"
+}
+
+print_nav_diagnostics() {
+  local nav_log="$ROS_LOG_DIR/zed_slam_nav.log"
+  local nodes
+  local actions
+  local recent_signal
+
+  echo "Navigation diagnostics:"
+  nodes="$(ros2 node list 2>/dev/null | sort | tr '\n' ' ' || true)"
+  if [[ -n "${nodes//[[:space:]]/}" ]]; then
+    echo "  nodes: $nodes"
+  else
+    echo "  nodes: none visible"
+  fi
+
+  actions="$(ros2 action list 2>/dev/null | sort | tr '\n' ' ' || true)"
+  if [[ -n "${actions//[[:space:]]/}" ]]; then
+    echo "  actions: $actions"
+  else
+    echo "  actions: none visible"
+  fi
+
+  if [[ -f "$nav_log" ]]; then
+    recent_signal="$(
+      grep -E "ERROR|WARN|gate_open|localized=|Serving Nav2 planning console|process has died|lifecycle|Planner Server|Controller Server" "$nav_log" \
+        | tail -12 || true
+    )"
+    if [[ -n "${recent_signal//[[:space:]]/}" ]]; then
+      echo "  recent nav log signal:"
+      sed 's/^/    /' <<<"$recent_signal"
+    else
+      echo "  recent nav log signal: no warnings/errors/readiness messages yet"
+    fi
+  else
+    echo "  nav log not created yet: $nav_log"
+  fi
+}
+
+print_next_blocker_hint() {
+  if topic_missing "$SCAN_TOPIC"; then
+    echo "Blocking readiness: $SCAN_TOPIC is missing. Check pointcloud_to_laserscan TF input from $CLOUD_TOPIC to $BASE_FRAME."
+    return 0
+  fi
+  if topic_missing "/map"; then
+    echo "Blocking readiness: /map is missing. Check slam_toolbox startup in $ROS_LOG_DIR/zed_slam_nav.log."
+    return 0
+  fi
+  if topic_missing "/zed/is_localized"; then
+    echo "Blocking readiness: /zed/is_localized is missing. Check zed_tracking subscriptions to ZED pose/odom topics."
+    return 0
+  fi
+  if bool_is_true "$ENABLE_PLANNING_CONSOLE" && ! topic_visible "$MANUAL_CMD_TOPIC"; then
+    echo "Waiting for manual command topic $MANUAL_CMD_TOPIC. It may appear after the web console starts."
+    return 0
+  fi
+  if topic_missing "/balance/status"; then
+    echo "Pi balance status is not visible yet. Check CycloneDDS peer config and b_cubed_pi.service."
+    return 0
+  fi
+
+  echo "Core topics are visible; if the robot does not move, check /balance/status and hardware gating."
+}
+
 report_child_status() {
   local i
   local pid
@@ -551,6 +619,8 @@ report_topic_status "Initial navigation topic status:" \
   "$MANUAL_CMD_TOPIC" \
   "/cmd_vel" \
   "/balance/status"
+print_next_blocker_hint
+print_nav_diagnostics
 
 next_status_report=$((SECONDS + STATUS_INTERVAL_SEC))
 while :; do
@@ -577,6 +647,8 @@ while :; do
       "$MANUAL_CMD_TOPIC" \
       "/cmd_vel" \
       "/balance/status"
+    print_next_blocker_hint
+    print_nav_diagnostics
     next_status_report=$((SECONDS + STATUS_INTERVAL_SEC))
   fi
 
