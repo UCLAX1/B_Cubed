@@ -32,6 +32,7 @@ ROS_LOG_DIR="${ROS_LOG_DIR:-$WS_DIR/log/pi_balanced_drive}"
 STATUS_INTERVAL_SEC="${STATUS_INTERVAL_SEC:-10}"
 COMMAND_MONITOR_ENABLED="${COMMAND_MONITOR_ENABLED:-true}"
 COMMAND_MONITOR_SAMPLE_TIMEOUT_SEC="${COMMAND_MONITOR_SAMPLE_TIMEOUT_SEC:-2}"
+COMMAND_MONITOR_SHOW_MISSING="${COMMAND_MONITOR_SHOW_MISSING:-summary}"
 COMMAND_MONITOR_TOPICS="${COMMAND_MONITOR_TOPICS:-$MANUAL_CMD_TOPIC $NAV_CMD_TOPIC $BALANCED_CMD_TOPIC /jet_cmd /kiwi_drive/motor_powers /balance/status /kiwi_drive/status}"
 launch_pid=""
 
@@ -96,34 +97,48 @@ topic_visible() {
 print_command_topic_info() {
   local topic
   local info
+  local available_topics
+  local missing=()
 
   if ! bool_is_true "$COMMAND_MONITOR_ENABLED"; then
     return 0
   fi
 
+  available_topics="$(ros2 topic list 2>/dev/null || true)"
   echo "Pi command topic endpoints:"
   for topic in $COMMAND_MONITOR_TOPICS; do
-    if ! topic_visible "$topic"; then
-      echo "  $topic: not visible"
+    if ! grep -Fxq "$topic" <<<"$available_topics"; then
+      missing+=("$topic")
       continue
     fi
     info="$(ros2 topic info "$topic" 2>/dev/null | tr '\n' '; ' || true)"
     echo "  $topic: $info"
   done
+
+  if (( ${#missing[@]} > 0 )); then
+    case "${COMMAND_MONITOR_SHOW_MISSING,,}" in
+      true|yes|on|summary)
+        echo "  missing: ${missing[*]}"
+        ;;
+    esac
+  fi
 }
 
 print_command_samples() {
   local topic
   local sample
+  local available_topics
+  local missing=()
 
   if ! bool_is_true "$COMMAND_MONITOR_ENABLED"; then
     return 0
   fi
 
+  available_topics="$(ros2 topic list 2>/dev/null || true)"
   echo "Pi command monitor:"
   for topic in $COMMAND_MONITOR_TOPICS; do
-    if ! topic_visible "$topic"; then
-      echo "  $topic: not visible"
+    if ! grep -Fxq "$topic" <<<"$available_topics"; then
+      missing+=("$topic")
       continue
     fi
 
@@ -138,6 +153,14 @@ print_command_samples() {
       echo "  $topic: visible, no sample within ${COMMAND_MONITOR_SAMPLE_TIMEOUT_SEC}s"
     fi
   done
+
+  if (( ${#missing[@]} > 0 )); then
+    case "${COMMAND_MONITOR_SHOW_MISSING,,}" in
+      true|yes|on|summary)
+        echo "  missing: ${missing[*]}"
+        ;;
+    esac
+  fi
 }
 
 if [[ ! -f "$ROS_SETUP" ]]; then
@@ -200,6 +223,7 @@ echo "  can_channel=$CAN_CHANNEL"
 echo "  can_interface=$CAN_INTERFACE"
 echo "  can_bitrate=$CAN_BITRATE"
 echo "  command_monitor_enabled=$COMMAND_MONITOR_ENABLED"
+echo "  command_monitor_show_missing=$COMMAND_MONITOR_SHOW_MISSING"
 echo "  command_monitor_topics=$COMMAND_MONITOR_TOPICS"
 
 ros2 launch bb8_balance_controller pi_balanced_drive.launch.py \
