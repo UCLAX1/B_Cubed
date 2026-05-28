@@ -83,6 +83,7 @@ ENABLE_PLANNING_CONSOLE="${ENABLE_PLANNING_CONSOLE:-true}"
 MANUAL_CMD_TOPIC="${MANUAL_CMD_TOPIC:-cmd_vel_manual}"
 PLANNING_CONSOLE_HOST="${PLANNING_CONSOLE_HOST:-10.42.0.1}"
 PLANNING_CONSOLE_PORT="${PLANNING_CONSOLE_PORT:-8080}"
+KILL_STALE_PLANNING_CONSOLE="${KILL_STALE_PLANNING_CONSOLE:-true}"
 PLANNING_CONSOLE_URL_HOST="$PLANNING_CONSOLE_HOST"
 if [[ "$PLANNING_CONSOLE_URL_HOST" == "0.0.0.0" ]]; then
   PLANNING_CONSOLE_URL_HOST="10.42.0.1"
@@ -245,6 +246,54 @@ missing_ros_packages() {
 
   if (( ${#missing[@]} > 0 )); then
     printf '%s\n' "${missing[@]}"
+  fi
+}
+
+planning_console_pids_on_port() {
+  local port="$1"
+  local pid
+
+  if ! command -v ss >/dev/null 2>&1; then
+    return 0
+  fi
+
+  while IFS= read -r pid; do
+    if [[ -r "/proc/$pid/cmdline" ]] &&
+      tr '\0' ' ' <"/proc/$pid/cmdline" | grep -q "nav_planning_console"; then
+      printf '%s\n' "$pid"
+    fi
+  done < <(
+    ss -ltnp "sport = :$port" 2>/dev/null |
+      sed -n 's/.*pid=\([0-9]\+\).*/\1/p' |
+      sort -u
+  )
+}
+
+ensure_planning_console_port_available() {
+  if ! bool_is_true "$ENABLE_PLANNING_CONSOLE"; then
+    return 0
+  fi
+
+  local pids=()
+  mapfile -t pids < <(planning_console_pids_on_port "$PLANNING_CONSOLE_PORT")
+
+  if (( ${#pids[@]} > 0 )); then
+    if bool_is_true "$KILL_STALE_PLANNING_CONSOLE"; then
+      echo "Stopping stale nav_planning_console on port $PLANNING_CONSOLE_PORT: ${pids[*]}"
+      kill "${pids[@]}" >/dev/null 2>&1 || true
+      sleep 1
+    else
+      echo "nav_planning_console is already listening on port $PLANNING_CONSOLE_PORT: ${pids[*]}" >&2
+      echo "Set PLANNING_CONSOLE_PORT to another port or KILL_STALE_PLANNING_CONSOLE=true." >&2
+      exit 1
+    fi
+  fi
+
+  if command -v ss >/dev/null 2>&1 &&
+    ss -ltn "sport = :$PLANNING_CONSOLE_PORT" 2>/dev/null | grep -q "LISTEN"; then
+    echo "Port $PLANNING_CONSOLE_PORT is already in use by a non-console process." >&2
+    echo "Set PLANNING_CONSOLE_PORT to an open port before launching." >&2
+    exit 1
   fi
 }
 
@@ -461,6 +510,7 @@ fi
 
 configure_nav2_launch
 configure_planner_only_launch
+ensure_planning_console_port_available
 
 if bool_is_true "$START_WRAPPER"; then
   run_terminal "zed wrapper" "$WRAPPER_LAUNCH"
