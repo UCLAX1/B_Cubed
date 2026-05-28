@@ -38,6 +38,8 @@ LOCALIZATION_FLAG_FILE="${LOCALIZATION_FLAG_FILE:-$WS_DIR/.b_cubed_localization}
 MAP_FILE_NAME="${MAP_FILE_NAME:-$MAP_PREFIX}"
 
 START_WRAPPER="${START_WRAPPER:-true}"
+KILL_STALE_ZED_WRAPPER="${KILL_STALE_ZED_WRAPPER:-true}"
+ZED_STARTUP_GRACE_SEC="${ZED_STARTUP_GRACE_SEC:-8}"
 CAMERA_MODEL="${CAMERA_MODEL:-zedm}"
 ZED_GRAB_RESOLUTION="${ZED_GRAB_RESOLUTION:-VGA}"
 ZED_GRAB_FRAME_RATE="${ZED_GRAB_FRAME_RATE:-30}"
@@ -52,7 +54,7 @@ INPUT_IMAGE_IS_COMPRESSED="${INPUT_IMAGE_IS_COMPRESSED:-true}"
 CLOUD_TOPIC="${CLOUD_TOPIC:-/zed/zed_node/point_cloud/cloud_registered}"
 SCAN_TOPIC="${SCAN_TOPIC:-/scan}"
 REQUIRE_POSE_COV_TOPIC="${REQUIRE_POSE_COV_TOPIC:-false}"
-TOPIC_WAIT_TIMEOUT_SEC="${TOPIC_WAIT_TIMEOUT_SEC:-60}"
+TOPIC_WAIT_TIMEOUT_SEC="${TOPIC_WAIT_TIMEOUT_SEC:-180}"
 STATUS_INTERVAL_SEC="${STATUS_INTERVAL_SEC:-30}"
 
 BASE_FRAME="${BASE_FRAME:-zed_camera_link}"
@@ -95,6 +97,7 @@ Usage: $0 [--mapping|--localization] [--map-file /path/to/map_prefix] [--no-wrap
 Environment overrides:
   ROS_DOMAIN_ID, MAP_PREFIX, LOCALIZATION_FLAG_FILE, ENABLE_NAV2,
   ENABLE_PLANNING_CONSOLE, PLANNING_CONSOLE_HOST, PLANNING_CONSOLE_PORT.
+  KILL_STALE_ZED_WRAPPER, TOPIC_WAIT_TIMEOUT_SEC, STATUS_INTERVAL_SEC.
 EOF
 }
 
@@ -258,6 +261,63 @@ planning_console_pids_on_port() {
       sed -n 's/.*pid=\([0-9]\+\).*/\1/p' |
       sort -u
   )
+}
+
+zed_wrapper_candidate_pids() {
+  local self_pid="$$"
+  local parent_pid="${PPID:-}"
+  local pid
+  local args
+
+  while read -r pid args; do
+    [[ -n "$pid" ]] || continue
+    if [[ "$pid" == "$self_pid" || "$pid" == "$parent_pid" ]]; then
+      continue
+    fi
+
+    case "$args" in
+      *"ros2 launch zed_wrapper zed_camera.launch.py"*|\
+      *"/component_container_isolated "*"zed_container"*|\
+      *"/robot_state_publisher "*"__node:=zed_state_publisher"*|\
+      *"/zed_wrapper/"*"zed_camera.launch.py"*)
+        printf '%s\n' "$pid"
+        ;;
+    esac
+  done < <(ps -eo pid=,args=)
+}
+
+stop_stale_zed_wrapper_processes() {
+  local pids=()
+  local still_running=()
+  local pid
+
+  if ! bool_is_true "$KILL_STALE_ZED_WRAPPER"; then
+    return 0
+  fi
+
+  mapfile -t pids < <(zed_wrapper_candidate_pids | sort -u)
+  if (( ${#pids[@]} == 0 )); then
+    return 0
+  fi
+
+  echo "Stopping stale ZED wrapper processes before launch: ${pids[*]}"
+  kill "${pids[@]}" >/dev/null 2>&1 || true
+
+  for _ in 1 2 3 4 5; do
+    still_running=()
+    for pid in "${pids[@]}"; do
+      if kill -0 "$pid" >/dev/null 2>&1; then
+        still_running+=("$pid")
+      fi
+    done
+    if (( ${#still_running[@]} == 0 )); then
+      return 0
+    fi
+    sleep 1
+  done
+
+  echo "Force-stopping stale ZED wrapper processes: ${still_running[*]}"
+  kill -9 "${still_running[@]}" >/dev/null 2>&1 || true
 }
 
 ensure_planning_console_port_available() {
@@ -448,6 +508,39 @@ print_nav_diagnostics() {
   fi
 }
 
+print_zed_log_signal() {
+  local wrapper_log="$ROS_LOG_DIR/zed_wrapper.log"
+  local recent_signal
+
+  if [[ ! -f "$wrapper_log" ]]; then
+    echo "  zed wrapper log not created yet: $wrapper_log"
+    return 0
+  fi
+
+  recent_signal="$(
+    grep -E "Camera successfully opened|Advertised on topic|zed started|Starting Positional Tracking|ERROR|WARN|WARNING|FAILED|Failed|timeout|TIMEOUT" "$wrapper_log" \
+      | tail -14 || true
+  )"
+  if [[ -n "${recent_signal//[[:space:]]/}" ]]; then
+    echo "  recent ZED wrapper log signal:"
+    sed 's/^/    /' <<<"$recent_signal"
+  else
+    echo "  recent ZED wrapper log signal: no camera/topic/errors messages yet"
+  fi
+}
+
+print_visible_zed_topics() {
+  local zed_topics
+
+  zed_topics="$(ros2 topic list 2>/dev/null | grep -E '^/zed(/|$)' | sort || true)"
+  if [[ -n "${zed_topics//[[:space:]]/}" ]]; then
+    echo "Visible ZED topics:"
+    sed 's/^/  /' <<<"$zed_topics"
+  else
+    echo "Visible ZED topics: none"
+  fi
+}
+
 print_next_blocker_hint() {
   if topic_missing "$SCAN_TOPIC"; then
     echo "Blocking readiness: $SCAN_TOPIC is missing. Check pointcloud_to_laserscan TF input from $CLOUD_TOPIC to $BASE_FRAME."
@@ -520,6 +613,8 @@ wait_for_wrapper_topics() {
     if (( SECONDS >= next_report )); then
       echo "Still waiting for ZED wrapper topics:"
       printf '  %s\n' "${missing[@]}"
+      print_visible_zed_topics
+      print_zed_log_signal
       next_report=$((SECONDS + STATUS_INTERVAL_SEC))
     fi
 
@@ -529,6 +624,9 @@ wait_for_wrapper_topics() {
   echo "Timed out waiting for required ZED wrapper topics." >&2
   echo "Still missing:" >&2
   printf '  %s\n' "${missing[@]}" >&2
+  print_visible_zed_topics >&2
+  print_zed_log_signal >&2
+  tail_log_on_failure "$ROS_LOG_DIR/zed_wrapper.log"
   return 1
 }
 
@@ -609,10 +707,13 @@ echo "  web_console=http://${PLANNING_CONSOLE_HOST}:${PLANNING_CONSOLE_PORT}/"
 echo "  wrapper_log=$ROS_LOG_DIR/zed_wrapper.log"
 echo "  nav_log=$ROS_LOG_DIR/zed_slam_nav.log"
 echo "  required_zed_topics=$INPUT_POSE_TOPIC $INPUT_ODOM_TOPIC $CLOUD_TOPIC"
+echo "  topic_wait_timeout_sec=$TOPIC_WAIT_TIMEOUT_SEC"
 
 if bool_is_true "$START_WRAPPER"; then
+  stop_stale_zed_wrapper_processes
   launch_background "zed_wrapper" bash -lc "$WRAPPER_LAUNCH"
-  sleep 5
+  echo "Allowing ZED wrapper ${ZED_STARTUP_GRACE_SEC}s to initialize before topic checks..."
+  sleep "$ZED_STARTUP_GRACE_SEC"
 fi
 
 echo "Waiting for ZED wrapper topics..."
