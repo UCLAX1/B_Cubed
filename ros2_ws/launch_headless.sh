@@ -15,6 +15,23 @@ ROS_DOMAIN_ID="${ROS_DOMAIN_ID:-0}"
 ROS_LOG_DIR="${ROS_LOG_DIR:-$WS_DIR/log/headless}"
 NPROC_VALUE="$(command -v nproc >/dev/null 2>&1 && nproc || echo 4)"
 
+NETWORK_MODE="${NETWORK_MODE:-tailscale}"
+HOTSPOT_CONNECTION="${HOTSPOT_CONNECTION:-Hotspot}"
+WIFI_CONNECTION="${WIFI_CONNECTION:-eduroam}"
+JETSON_TAILSCALE_IP="${JETSON_TAILSCALE_IP:-100.86.7.33}"
+JETSON_HOTSPOT_IP="${JETSON_HOTSPOT_IP:-10.42.0.1}"
+PI_TAILSCALE_IP="${PI_TAILSCALE_IP:-100.80.7.37}"
+PI_HOTSPOT_IP="${PI_HOTSPOT_IP:-10.42.0.166}"
+NETWORK_SWITCH_TIMEOUT_SEC="${NETWORK_SWITCH_TIMEOUT_SEC:-30}"
+RESTORE_WIFI_ON_EXIT="${RESTORE_WIFI_ON_EXIT:-true}"
+WRITE_CYCLONEDDS_CONFIG="${WRITE_CYCLONEDDS_CONFIG:-true}"
+CYCLONEDDS_CONFIG_PATH="${CYCLONEDDS_CONFIG_PATH:-$HOME/cyclonedds.xml}"
+if [[ "${CYCLONEDDS_URI:-}" == file://* ]]; then
+  CYCLONEDDS_CONFIG_PATH="${CYCLONEDDS_URI#file://}"
+fi
+CYCLONEDDS_URI="${CYCLONEDDS_URI:-file://$CYCLONEDDS_CONFIG_PATH}"
+RMW_IMPLEMENTATION="${RMW_IMPLEMENTATION:-rmw_cyclonedds_cpp}"
+
 DEFAULT_LAUNCH_MAX_CORES="$NPROC_VALUE"
 if (( DEFAULT_LAUNCH_MAX_CORES > 4 )); then
   DEFAULT_LAUNCH_MAX_CORES=4
@@ -98,6 +115,7 @@ Environment overrides:
   ROS_DOMAIN_ID, MAP_PREFIX, LOCALIZATION_FLAG_FILE, ENABLE_NAV2,
   ENABLE_PLANNING_CONSOLE, PLANNING_CONSOLE_HOST, PLANNING_CONSOLE_PORT.
   KILL_STALE_ZED_WRAPPER, TOPIC_WAIT_TIMEOUT_SEC, STATUS_INTERVAL_SEC.
+  NETWORK_MODE=tailscale|hotspot, HOTSPOT_CONNECTION, WIFI_CONNECTION.
 EOF
 }
 
@@ -127,6 +145,131 @@ cleanup() {
     fi
   done
   wait >/dev/null 2>&1 || true
+  restore_network_mode
+}
+
+run_sudo_command() {
+  "$@" && return 0
+
+  if (( EUID == 0 )); then
+    return $?
+  fi
+
+  sudo -n "$@"
+}
+
+wait_for_ipv4_address() {
+  local address="$1"
+  local deadline=$((SECONDS + NETWORK_SWITCH_TIMEOUT_SEC))
+
+  while (( SECONDS < deadline )); do
+    if ip -4 addr show | grep -q "inet ${address}/"; then
+      return 0
+    fi
+    sleep 1
+  done
+
+  return 1
+}
+
+write_cyclonedds_config() {
+  local local_address="$1"
+  shift
+  local peer
+
+  if ! bool_is_true "$WRITE_CYCLONEDDS_CONFIG"; then
+    return 0
+  fi
+
+  mkdir -p "$(dirname "$CYCLONEDDS_CONFIG_PATH")"
+  {
+    cat <<EOF
+<?xml version="1.0" encoding="UTF-8" ?>
+<CycloneDDS xmlns="https://cdds.io/config">
+  <Domain id="any">
+    <General>
+      <Interfaces>
+        <NetworkInterface address="$local_address" priority="default" multicast="false" />
+      </Interfaces>
+      <AllowMulticast>false</AllowMulticast>
+    </General>
+    <Discovery>
+      <Peers>
+EOF
+    for peer in "$@"; do
+      echo "        <Peer address=\"$peer\" />"
+    done
+    cat <<EOF
+      </Peers>
+      <ParticipantIndex>auto</ParticipantIndex>
+      <MaxAutoParticipantIndex>120</MaxAutoParticipantIndex>
+    </Discovery>
+  </Domain>
+</CycloneDDS>
+EOF
+  } >"$CYCLONEDDS_CONFIG_PATH"
+  echo "Wrote CycloneDDS config: $CYCLONEDDS_CONFIG_PATH"
+  echo "  local_address=$local_address"
+  echo "  peers=$*"
+}
+
+configure_network_mode() {
+  case "$NETWORK_MODE" in
+    hotspot)
+      echo "Switching Jetson network to hotspot profile '$HOTSPOT_CONNECTION'..."
+      if ! command -v nmcli >/dev/null 2>&1; then
+        echo "nmcli is required for NETWORK_MODE=hotspot." >&2
+        exit 1
+      fi
+      if ! nmcli -t -f NAME connection show | grep -Fxq "$HOTSPOT_CONNECTION"; then
+        echo "NetworkManager connection not found: $HOTSPOT_CONNECTION" >&2
+        exit 1
+      fi
+      run_sudo_command nmcli connection up "$HOTSPOT_CONNECTION"
+      if ! wait_for_ipv4_address "$JETSON_HOTSPOT_IP"; then
+        echo "Hotspot did not expose $JETSON_HOTSPOT_IP within ${NETWORK_SWITCH_TIMEOUT_SEC}s." >&2
+        echo "Available IPv4 addresses:" >&2
+        ip -4 addr show >&2
+        exit 1
+      fi
+      write_cyclonedds_config "$JETSON_HOTSPOT_IP" "$PI_HOTSPOT_IP" "$PI_TAILSCALE_IP"
+      ;;
+    tailscale|wifi)
+      if [[ "$NETWORK_MODE" == "wifi" ]]; then
+        echo "Switching Jetson network to Wi-Fi profile '$WIFI_CONNECTION'..."
+        if command -v nmcli >/dev/null 2>&1; then
+          run_sudo_command nmcli connection up "$WIFI_CONNECTION"
+        fi
+      fi
+      if ! wait_for_ipv4_address "$JETSON_TAILSCALE_IP"; then
+        echo "Tailscale address $JETSON_TAILSCALE_IP is not available." >&2
+        echo "Available IPv4 addresses:" >&2
+        ip -4 addr show >&2
+        exit 1
+      fi
+      write_cyclonedds_config "$JETSON_TAILSCALE_IP" "$PI_TAILSCALE_IP" "$PI_HOTSPOT_IP"
+      ;;
+    none)
+      echo "Skipping network and CycloneDDS reconfiguration."
+      ;;
+    *)
+      echo "NETWORK_MODE must be hotspot, tailscale, wifi, or none; got: $NETWORK_MODE" >&2
+      exit 2
+      ;;
+  esac
+}
+
+restore_network_mode() {
+  if [[ "$NETWORK_MODE" != "hotspot" ]]; then
+    return 0
+  fi
+
+  echo "Restoring Jetson network to Wi-Fi/Tailscale mode..."
+  write_cyclonedds_config "$JETSON_TAILSCALE_IP" "$PI_TAILSCALE_IP" "$PI_HOTSPOT_IP" || true
+
+  if bool_is_true "$RESTORE_WIFI_ON_EXIT" && command -v nmcli >/dev/null 2>&1; then
+    run_sudo_command nmcli connection up "$WIFI_CONNECTION" >/dev/null 2>&1 || true
+  fi
 }
 
 launch_background() {
@@ -645,6 +788,12 @@ while (($#)); do
     --no-wrapper)
       START_WRAPPER="false"
       ;;
+    --hotspot)
+      NETWORK_MODE="hotspot"
+      ;;
+    --tailscale|--wifi)
+      NETWORK_MODE="${1#--}"
+      ;;
     -h|--help)
       usage
       exit 0
@@ -675,8 +824,9 @@ if [[ ! -f "$ROS_SETUP" ]]; then
 fi
 
 mkdir -p "$ROS_LOG_DIR" "$MAP_OUTPUT_DIR"
-export ROS_DOMAIN_ID ROS_LOG_DIR
+export ROS_DOMAIN_ID ROS_LOG_DIR RMW_IMPLEMENTATION CYCLONEDDS_URI
 trap cleanup EXIT INT TERM
+configure_network_mode
 
 source_setup_file "$ROS_SETUP"
 cd "$WS_DIR"
@@ -701,6 +851,7 @@ echo "  mode=$SLAM_MODE"
 echo "  ros_domain_id=$ROS_DOMAIN_ID"
 echo "  rmw=${RMW_IMPLEMENTATION:-default}"
 echo "  cyclonedds_uri=${CYCLONEDDS_URI:-default}"
+echo "  network_mode=$NETWORK_MODE"
 echo "  map_prefix=$MAP_PREFIX"
 echo "  map_file_name=$MAP_FILE_NAME"
 echo "  web_console=http://${PLANNING_CONSOLE_HOST}:${PLANNING_CONSOLE_PORT}/"
