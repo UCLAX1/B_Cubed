@@ -137,13 +137,54 @@ source_setup_file() {
 
 cleanup() {
   local pid
+  local still_running=()
 
   trap - EXIT INT TERM
+  if (( ${#child_pids[@]} > 0 )); then
+    echo "Shutting down launch processes..."
+  fi
+
   for pid in "${child_pids[@]}"; do
     if kill -0 "$pid" >/dev/null 2>&1; then
-      kill "$pid" >/dev/null 2>&1 || true
+      kill -INT "$pid" >/dev/null 2>&1 || true
     fi
   done
+
+  for _ in 1 2 3 4 5 6 7 8 9 10; do
+    still_running=()
+    for pid in "${child_pids[@]}"; do
+      if kill -0 "$pid" >/dev/null 2>&1; then
+        still_running+=("$pid")
+      fi
+    done
+    if (( ${#still_running[@]} == 0 )); then
+      break
+    fi
+    sleep 1
+  done
+
+  for pid in "${still_running[@]:-}"; do
+    if kill -0 "$pid" >/dev/null 2>&1; then
+      echo "Escalating shutdown for pid $pid"
+      kill -TERM "$pid" >/dev/null 2>&1 || true
+    fi
+  done
+
+  sleep 2
+  still_running=()
+  for pid in "${child_pids[@]}"; do
+    if kill -0 "$pid" >/dev/null 2>&1; then
+      still_running+=("$pid")
+    fi
+  done
+
+  for pid in "${still_running[@]:-}"; do
+    if kill -0 "$pid" >/dev/null 2>&1; then
+      echo "Force-stopping pid $pid"
+      kill -KILL "$pid" >/dev/null 2>&1 || true
+    fi
+  done
+
   wait >/dev/null 2>&1 || true
   restore_network_mode
 }
@@ -196,7 +237,11 @@ write_cyclonedds_config() {
     <Discovery>
       <Peers>
 EOF
+    echo "        <Peer address=\"$local_address\" />"
     for peer in "$@"; do
+      if [[ "$peer" == "$local_address" ]]; then
+        continue
+      fi
       echo "        <Peer address=\"$peer\" />"
     done
     cat <<EOF
@@ -210,7 +255,7 @@ EOF
   } >"$CYCLONEDDS_CONFIG_PATH"
   echo "Wrote CycloneDDS config: $CYCLONEDDS_CONFIG_PATH"
   echo "  local_address=$local_address"
-  echo "  peers=$*"
+  echo "  peers=$local_address $*"
 }
 
 configure_network_mode() {
@@ -731,6 +776,13 @@ print_visible_zed_topics() {
   fi
 }
 
+zed_wrapper_fatal_signal() {
+  local wrapper_log="$ROS_LOG_DIR/zed_wrapper.log"
+
+  [[ -f "$wrapper_log" ]] || return 1
+  grep -Eq "Camera detection timeout|CAMERA STREAM FAILED TO START|process has died|Caught exception in launch|failed to create domain|does not match an available interface" "$wrapper_log"
+}
+
 print_next_blocker_hint() {
   if topic_missing "$SCAN_TOPIC"; then
     echo "Blocking readiness: $SCAN_TOPIC is missing. Check pointcloud_to_laserscan TF input from $CLOUD_TOPIC to $BASE_FRAME."
@@ -796,6 +848,13 @@ wait_for_wrapper_topics() {
     if bool_is_true "$START_WRAPPER" && ! child_running_by_name "zed_wrapper"; then
       echo "ZED wrapper stopped before required topics appeared." >&2
       echo "  status: $(child_status_by_name "zed_wrapper" || true)" >&2
+      tail_log_on_failure "$ROS_LOG_DIR/zed_wrapper.log"
+      return 1
+    fi
+
+    if zed_wrapper_fatal_signal; then
+      echo "ZED wrapper reported a fatal startup error before required topics appeared." >&2
+      print_zed_log_signal >&2
       tail_log_on_failure "$ROS_LOG_DIR/zed_wrapper.log"
       return 1
     fi
