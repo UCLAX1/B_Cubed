@@ -53,6 +53,7 @@ CLOUD_TOPIC="${CLOUD_TOPIC:-/zed/zed_node/point_cloud/cloud_registered}"
 SCAN_TOPIC="${SCAN_TOPIC:-/scan}"
 REQUIRE_POSE_COV_TOPIC="${REQUIRE_POSE_COV_TOPIC:-false}"
 TOPIC_WAIT_TIMEOUT_SEC="${TOPIC_WAIT_TIMEOUT_SEC:-60}"
+STATUS_INTERVAL_SEC="${STATUS_INTERVAL_SEC:-10}"
 
 BASE_FRAME="${BASE_FRAME:-zed_camera_link}"
 BASE_TO_CAMERA_TRANSLATION="${BASE_TO_CAMERA_TRANSLATION:-0.0,0.0,0.0}"
@@ -83,6 +84,8 @@ PUBLISH_TRACKING_IMAGE="${PUBLISH_TRACKING_IMAGE:-false}"
 
 SLAM_MODE="${SLAM_MODE:-mapping}"
 child_pids=()
+child_names=()
+child_logs=()
 
 usage() {
   cat <<EOF
@@ -126,8 +129,11 @@ launch_background() {
   local name="$1"
   shift
   local log_file="$ROS_LOG_DIR/${name}.log"
+  local command_display
 
   echo "Starting $name; log: $log_file"
+  printf -v command_display '%q ' "$@"
+  echo "  command: ${command_display% }"
   (
     cd "$WS_DIR"
     apply_resource_environment
@@ -137,6 +143,9 @@ launch_background() {
     exec "$@"
   ) >>"$log_file" 2>&1 &
   child_pids+=("$!")
+  child_names+=("$name")
+  child_logs+=("$log_file")
+  echo "  pid: ${child_pids[-1]}"
 }
 
 sanitize_nonnegative_int() {
@@ -317,10 +326,71 @@ missing_topics() {
   fi
 }
 
+topic_visible() {
+  local topic="$1"
+
+  ros2 topic list 2>/dev/null | grep -Fxq "$topic"
+}
+
+report_topic_status() {
+  local label="$1"
+  shift
+  local topic
+  local seen=()
+  local missing=()
+
+  for topic in "$@"; do
+    if topic_visible "$topic"; then
+      seen+=("$topic")
+    else
+      missing+=("$topic")
+    fi
+  done
+
+  echo "$label"
+  if (( ${#seen[@]} > 0 )); then
+    printf '  seen: %s\n' "${seen[*]}"
+  fi
+  if (( ${#missing[@]} > 0 )); then
+    printf '  waiting: %s\n' "${missing[*]}"
+  fi
+}
+
+report_child_status() {
+  local i
+  local pid
+  local name
+  local log_file
+  local state
+
+  echo "Launch process status:"
+  for i in "${!child_pids[@]}"; do
+    pid="${child_pids[$i]}"
+    name="${child_names[$i]}"
+    log_file="${child_logs[$i]}"
+    if kill -0 "$pid" >/dev/null 2>&1; then
+      state="running"
+    else
+      state="stopped"
+    fi
+    echo "  $name: $state pid=$pid log=$log_file"
+  done
+}
+
+tail_log_on_failure() {
+  local log_file="$1"
+
+  if [[ -f "$log_file" ]]; then
+    echo "Last 80 lines from $log_file:" >&2
+    tail -80 "$log_file" >&2 || true
+  fi
+}
+
 wait_for_wrapper_topics() {
   local deadline=$((SECONDS + TOPIC_WAIT_TIMEOUT_SEC))
   local available_topics=""
   local missing=()
+  local next_report=$SECONDS
 
   while (( SECONDS < deadline )); do
     available_topics="$(ros2 topic list 2>/dev/null || true)"
@@ -328,6 +398,12 @@ wait_for_wrapper_topics() {
 
     if (( ${#missing[@]} == 0 )); then
       return 0
+    fi
+
+    if (( SECONDS >= next_report )); then
+      echo "Still waiting for ZED wrapper topics:"
+      printf '  %s\n' "${missing[@]}"
+      next_report=$((SECONDS + STATUS_INTERVAL_SEC))
     fi
 
     sleep 2
@@ -407,9 +483,14 @@ configure_planner_only_launch
 echo "B_Cubed headless launch"
 echo "  mode=$SLAM_MODE"
 echo "  ros_domain_id=$ROS_DOMAIN_ID"
+echo "  rmw=${RMW_IMPLEMENTATION:-default}"
+echo "  cyclonedds_uri=${CYCLONEDDS_URI:-default}"
 echo "  map_prefix=$MAP_PREFIX"
 echo "  map_file_name=$MAP_FILE_NAME"
 echo "  web_console=http://${PLANNING_CONSOLE_HOST}:${PLANNING_CONSOLE_PORT}/"
+echo "  wrapper_log=$ROS_LOG_DIR/zed_wrapper.log"
+echo "  nav_log=$ROS_LOG_DIR/zed_slam_nav.log"
+echo "  required_zed_topics=$INPUT_POSE_TOPIC $INPUT_ODOM_TOPIC $CLOUD_TOPIC"
 
 if bool_is_true "$START_WRAPPER"; then
   launch_background "zed_wrapper" bash -lc "$WRAPPER_LAUNCH"
@@ -458,13 +539,46 @@ nav_args=(
 )
 
 launch_background "zed_slam_nav" ros2 launch depth_processing zed_slam_nav.launch.py "${nav_args[@]}"
+echo "zed_slam_nav launch process started."
+echo "The stack is now running in the background; this script will keep reporting readiness."
+echo "Open the planning console at: http://${PLANNING_CONSOLE_HOST}:${PLANNING_CONSOLE_PORT}/"
 
+report_child_status
+report_topic_status "Initial navigation topic status:" \
+  "/map" \
+  "$SCAN_TOPIC" \
+  "/zed/is_localized" \
+  "$MANUAL_CMD_TOPIC" \
+  "/cmd_vel" \
+  "/balance/status"
+
+next_status_report=$((SECONDS + STATUS_INTERVAL_SEC))
 while :; do
-  for pid in "${child_pids[@]}"; do
+  for i in "${!child_pids[@]}"; do
+    pid="${child_pids[$i]}"
     if ! kill -0 "$pid" >/dev/null 2>&1; then
-      wait "$pid"
-      exit $?
+      if wait "$pid"; then
+        status=0
+      else
+        status=$?
+      fi
+      echo "Launch process '${child_names[$i]}' exited with status $status." >&2
+      tail_log_on_failure "${child_logs[$i]}"
+      exit "$status"
     fi
   done
+
+  if (( SECONDS >= next_status_report )); then
+    report_child_status
+    report_topic_status "Navigation topic status:" \
+      "/map" \
+      "$SCAN_TOPIC" \
+      "/zed/is_localized" \
+      "$MANUAL_CMD_TOPIC" \
+      "/cmd_vel" \
+      "/balance/status"
+    next_status_report=$((SECONDS + STATUS_INTERVAL_SEC))
+  fi
+
   sleep 2
 done
