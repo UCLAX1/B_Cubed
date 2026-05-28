@@ -1,6 +1,19 @@
 # B_Cubed
 UCLA X1 Robotics 2025-26 B^3 Project
 
+## Drive Test Quickstart
+
+For the current split Jetson + Raspberry Pi headless startup procedure, use:
+
+- [B_Cubed Headless Drive Quickstart](docs/README_headless_drive_test.md)
+
+That guide includes copy-paste commands for:
+
+- Jetson ZED/Nav2/web console startup.
+- Raspberry Pi Sense HAT, RL balance controller, ROS listener, and CAN motor startup.
+- Tailscale and hotspot DDS modes.
+- Live checks for `/cmd_vel_manual`, `/cmd_vel_balanced`, `/jet_cmd`, motor powers, and RL policy status.
+
 1. Install ROS2 Humble
 https://docs.ros.org/en/humble/Installation/Ubuntu-Install-Debs.html
 

@@ -16,6 +16,8 @@ START_SENSE_HAT="${START_SENSE_HAT:-true}"
 START_MOTOR_CONTROL="${START_MOTOR_CONTROL:-false}"
 HARDWARE_ENABLED="${HARDWARE_ENABLED:-false}"
 ALLOW_PD_FALLBACK="${ALLOW_PD_FALLBACK:-false}"
+SENSE_HAT_DETACH_KERNEL="${SENSE_HAT_DETACH_KERNEL:-true}"
+SENSE_HAT_I2C_DEVICES="${SENSE_HAT_I2C_DEVICES:-1-001c 1-005c 1-006a}"
 
 NAV_CMD_TOPIC="${NAV_CMD_TOPIC:-cmd_vel}"
 MANUAL_CMD_TOPIC="${MANUAL_CMD_TOPIC:-cmd_vel_manual}"
@@ -34,7 +36,20 @@ COMMAND_MONITOR_ENABLED="${COMMAND_MONITOR_ENABLED:-true}"
 COMMAND_MONITOR_SAMPLE_TIMEOUT_SEC="${COMMAND_MONITOR_SAMPLE_TIMEOUT_SEC:-2}"
 COMMAND_MONITOR_SHOW_MISSING="${COMMAND_MONITOR_SHOW_MISSING:-summary}"
 COMMAND_MONITOR_TOPICS="${COMMAND_MONITOR_TOPICS:-$MANUAL_CMD_TOPIC $NAV_CMD_TOPIC $BALANCED_CMD_TOPIC /jet_cmd /kiwi_drive/motor_powers /balance/status /kiwi_drive/status}"
+NETWORK_MODE="${NETWORK_MODE:-auto}"
+PI_TAILSCALE_IP="${PI_TAILSCALE_IP:-100.80.7.37}"
+PI_HOTSPOT_IP="${PI_HOTSPOT_IP:-10.42.0.166}"
+JETSON_TAILSCALE_IP="${JETSON_TAILSCALE_IP:-100.86.7.33}"
+JETSON_HOTSPOT_IP="${JETSON_HOTSPOT_IP:-10.42.0.1}"
+CYCLONEDDS_AUTOCONFIG="${CYCLONEDDS_AUTOCONFIG:-true}"
+CYCLONEDDS_CONFIG_PATH="${CYCLONEDDS_CONFIG_PATH:-$HOME/cyclonedds.xml}"
+RMW_IMPLEMENTATION="${RMW_IMPLEMENTATION:-rmw_cyclonedds_cpp}"
+ROS_DOMAIN_ID="${ROS_DOMAIN_ID:-0}"
 launch_pid=""
+dds_network_mode=""
+dds_local_address=""
+dds_peer_addresses=()
+ros_launch_extra_args=()
 
 bool_is_true() {
   case "${1,,}" in
@@ -67,6 +82,156 @@ setup_can_interface() {
   "${sudo_cmd[@]}" ip link set "$CAN_CHANNEL" down >/dev/null 2>&1 || true
   "${sudo_cmd[@]}" ip link set "$CAN_CHANNEL" type can bitrate "$CAN_BITRATE"
   "${sudo_cmd[@]}" ip link set "$CAN_CHANNEL" up
+}
+
+detach_sense_hat_kernel_drivers() {
+  local sudo_cmd=()
+  local device
+  local unbind_path
+
+  if (( EUID != 0 )); then
+    sudo_cmd=(sudo)
+  fi
+
+  echo "Detaching Sense HAT kernel drivers..."
+  for device in $SENSE_HAT_I2C_DEVICES; do
+    unbind_path="/sys/bus/i2c/devices/$device/driver/unbind"
+    if [[ -w "$unbind_path" || -e "$unbind_path" ]]; then
+      if printf '%s\n' "$device" | "${sudo_cmd[@]}" tee "$unbind_path" >/dev/null 2>&1; then
+        echo "  detached $device"
+      else
+        echo "  could not detach $device; continuing"
+      fi
+    else
+      echo "  $device is not bound to a kernel driver"
+    fi
+  done
+
+  sleep 0.5
+}
+
+has_ip_address() {
+  local address="$1"
+
+  hostname -I | tr ' ' '\n' | grep -Fxq "$address"
+}
+
+unique_peer_addresses() {
+  local peer
+  local seen=" "
+
+  for peer in "$@"; do
+    if [[ -z "${peer//[[:space:]]/}" ]]; then
+      continue
+    fi
+    if [[ "$seen" == *" $peer "* ]]; then
+      continue
+    fi
+    seen+="$peer "
+    printf '%s\n' "$peer"
+  done
+}
+
+write_cyclonedds_config() {
+  local local_address="$1"
+  shift
+  local peer
+  local peers=()
+
+  mapfile -t peers < <(unique_peer_addresses "$local_address" "$@")
+
+  {
+    cat <<EOF
+<?xml version="1.0" encoding="UTF-8" ?>
+<CycloneDDS xmlns="https://cdds.io/config">
+  <Domain id="any">
+    <General>
+      <Interfaces>
+        <NetworkInterface address="$local_address" priority="default" multicast="false" />
+      </Interfaces>
+      <AllowMulticast>false</AllowMulticast>
+    </General>
+    <Discovery>
+      <Peers>
+EOF
+    for peer in "${peers[@]}"; do
+      echo "        <Peer address=\"$peer\" />"
+    done
+    cat <<EOF
+      </Peers>
+      <ParticipantIndex>auto</ParticipantIndex>
+      <MaxAutoParticipantIndex>120</MaxAutoParticipantIndex>
+    </Discovery>
+  </Domain>
+</CycloneDDS>
+EOF
+  } > "$CYCLONEDDS_CONFIG_PATH"
+
+  export CYCLONEDDS_URI="file://$CYCLONEDDS_CONFIG_PATH"
+  echo "Wrote CycloneDDS config: $CYCLONEDDS_CONFIG_PATH"
+  echo "  local_address=$local_address"
+  echo "  peers=${peers[*]}"
+}
+
+configure_dds_network() {
+  local requested_mode="${NETWORK_MODE,,}"
+
+  export RMW_IMPLEMENTATION
+  export ROS_DOMAIN_ID
+
+  if ! bool_is_true "$CYCLONEDDS_AUTOCONFIG"; then
+    dds_network_mode="manual"
+    return 0
+  fi
+
+  case "$requested_mode" in
+    auto)
+      if has_ip_address "$PI_HOTSPOT_IP"; then
+        dds_network_mode="hotspot"
+        dds_local_address="$PI_HOTSPOT_IP"
+        dds_peer_addresses=("$JETSON_HOTSPOT_IP" "$JETSON_TAILSCALE_IP")
+      elif has_ip_address "$PI_TAILSCALE_IP"; then
+        dds_network_mode="tailscale"
+        dds_local_address="$PI_TAILSCALE_IP"
+        dds_peer_addresses=("$JETSON_TAILSCALE_IP" "$JETSON_HOTSPOT_IP")
+      else
+        echo "No configured Pi DDS address is present on this device." >&2
+        echo "  expected one of: $PI_TAILSCALE_IP $PI_HOTSPOT_IP" >&2
+        echo "  current IPs: $(hostname -I)" >&2
+        exit 1
+      fi
+      ;;
+    hotspot)
+      if ! has_ip_address "$PI_HOTSPOT_IP"; then
+        echo "NETWORK_MODE=hotspot requested, but $PI_HOTSPOT_IP is not present." >&2
+        echo "  current IPs: $(hostname -I)" >&2
+        exit 1
+      fi
+      dds_network_mode="hotspot"
+      dds_local_address="$PI_HOTSPOT_IP"
+      dds_peer_addresses=("$JETSON_HOTSPOT_IP" "$JETSON_TAILSCALE_IP")
+      ;;
+    tailscale|wifi)
+      if ! has_ip_address "$PI_TAILSCALE_IP"; then
+        echo "NETWORK_MODE=$NETWORK_MODE requested, but $PI_TAILSCALE_IP is not present." >&2
+        echo "  current IPs: $(hostname -I)" >&2
+        exit 1
+      fi
+      dds_network_mode="tailscale"
+      dds_local_address="$PI_TAILSCALE_IP"
+      dds_peer_addresses=("$JETSON_TAILSCALE_IP" "$JETSON_HOTSPOT_IP")
+      ;;
+    none)
+      dds_network_mode="none"
+      return 0
+      ;;
+    *)
+      echo "NETWORK_MODE must be auto, hotspot, tailscale, wifi, or none; got: $NETWORK_MODE" >&2
+      exit 1
+      ;;
+  esac
+
+  write_cyclonedds_config "$dds_local_address" "${dds_peer_addresses[@]}"
 }
 
 cleanup() {
@@ -163,10 +328,37 @@ print_command_samples() {
   fi
 }
 
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --hotspot|--tailscale|--wifi|--none|--auto)
+      NETWORK_MODE="${1#--}"
+      shift
+      ;;
+    --network-mode)
+      if [[ $# -lt 2 ]]; then
+        echo "--network-mode requires a value." >&2
+        exit 1
+      fi
+      NETWORK_MODE="$2"
+      shift 2
+      ;;
+    --network-mode=*)
+      NETWORK_MODE="${1#--network-mode=}"
+      shift
+      ;;
+    *)
+      ros_launch_extra_args+=("$1")
+      shift
+      ;;
+  esac
+done
+
 if [[ ! -f "$ROS_SETUP" ]]; then
   echo "ROS setup file not found: $ROS_SETUP" >&2
   exit 1
 fi
+
+configure_dds_network
 
 source_setup_file "$ROS_SETUP"
 
@@ -182,6 +374,10 @@ fi
 source_setup_file "$INSTALL_SETUP"
 mkdir -p "$ROS_LOG_DIR"
 export ROS_LOG_DIR
+
+if bool_is_true "$START_SENSE_HAT" && bool_is_true "$SENSE_HAT_DETACH_KERNEL"; then
+  detach_sense_hat_kernel_drivers
+fi
 
 if bool_is_true "$SETUP_CAN"; then
   setup_can_interface
@@ -213,7 +409,13 @@ echo "B_Cubed Pi balanced drive launch"
 echo "  ros_domain_id=${ROS_DOMAIN_ID:-default}"
 echo "  rmw=${RMW_IMPLEMENTATION:-default}"
 echo "  cyclonedds_uri=${CYCLONEDDS_URI:-default}"
+echo "  network_mode=$NETWORK_MODE"
+echo "  dds_network_mode=${dds_network_mode:-default}"
+echo "  dds_local_address=${dds_local_address:-default}"
+echo "  current_ips=$(hostname -I)"
 echo "  start_sense_hat=$START_SENSE_HAT"
+echo "  sense_hat_detach_kernel=$SENSE_HAT_DETACH_KERNEL"
+echo "  sense_hat_i2c_devices=$SENSE_HAT_I2C_DEVICES"
 echo "  start_motor_control=$START_MOTOR_CONTROL"
 echo "  hardware_enabled=$HARDWARE_ENABLED"
 echo "  nav_cmd_topic=$NAV_CMD_TOPIC"
@@ -228,7 +430,7 @@ echo "  command_monitor_topics=$COMMAND_MONITOR_TOPICS"
 
 ros2 launch bb8_balance_controller pi_balanced_drive.launch.py \
   "${launch_args[@]}" \
-  "$@" &
+  "${ros_launch_extra_args[@]}" &
 launch_pid="$!"
 echo "Pi balance launch process started: pid=$launch_pid"
 
