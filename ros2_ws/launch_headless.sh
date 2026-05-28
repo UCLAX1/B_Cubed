@@ -295,6 +295,53 @@ launch_background() {
   echo "  pid: ${child_pids[-1]}"
 }
 
+child_index_by_name() {
+  local wanted_name="$1"
+  local i
+
+  for i in "${!child_names[@]}"; do
+    if [[ "${child_names[$i]}" == "$wanted_name" ]]; then
+      printf '%s\n' "$i"
+      return 0
+    fi
+  done
+
+  return 1
+}
+
+child_running_by_name() {
+  local wanted_name="$1"
+  local index
+
+  index="$(child_index_by_name "$wanted_name" || true)"
+  if [[ -z "$index" ]]; then
+    return 1
+  fi
+
+  kill -0 "${child_pids[$index]}" >/dev/null 2>&1
+}
+
+child_status_by_name() {
+  local wanted_name="$1"
+  local index
+  local pid
+
+  index="$(child_index_by_name "$wanted_name" || true)"
+  if [[ -z "$index" ]]; then
+    echo "unknown"
+    return 1
+  fi
+
+  pid="${child_pids[$index]}"
+  if kill -0 "$pid" >/dev/null 2>&1; then
+    echo "running pid=$pid"
+    return 0
+  fi
+
+  echo "stopped pid=$pid"
+  return 1
+}
+
 sanitize_nonnegative_int() {
   local variable_name="$1"
   local default_value="$2"
@@ -746,6 +793,13 @@ wait_for_wrapper_topics() {
   local next_report=$SECONDS
 
   while (( SECONDS < deadline )); do
+    if bool_is_true "$START_WRAPPER" && ! child_running_by_name "zed_wrapper"; then
+      echo "ZED wrapper stopped before required topics appeared." >&2
+      echo "  status: $(child_status_by_name "zed_wrapper" || true)" >&2
+      tail_log_on_failure "$ROS_LOG_DIR/zed_wrapper.log"
+      return 1
+    fi
+
     available_topics="$(ros2 topic list 2>/dev/null || true)"
     mapfile -t missing < <(missing_topics "$available_topics")
 
@@ -827,6 +881,9 @@ mkdir -p "$ROS_LOG_DIR" "$MAP_OUTPUT_DIR"
 export ROS_DOMAIN_ID ROS_LOG_DIR RMW_IMPLEMENTATION CYCLONEDDS_URI
 trap cleanup EXIT INT TERM
 configure_network_mode
+
+: >"$ROS_LOG_DIR/zed_wrapper.log"
+: >"$ROS_LOG_DIR/zed_slam_nav.log"
 
 source_setup_file "$ROS_SETUP"
 cd "$WS_DIR"
