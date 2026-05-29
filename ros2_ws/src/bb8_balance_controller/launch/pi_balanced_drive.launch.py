@@ -43,12 +43,12 @@ def generate_launch_description() -> LaunchDescription:
     can_channel = LaunchConfiguration("can_channel")
     can_interface = LaunchConfiguration("can_interface")
     can_bitrate = LaunchConfiguration("can_bitrate")
-    start_balanced_motor_control = PythonExpression(
+    direct_balance_motor_output = PythonExpression(
         [
             "'",
             start_motor_control,
             "'.lower() in ('true', '1', 'yes', 'on') and '",
-            start_balance_controller,
+            hardware_enabled,
             "'.lower() in ('true', '1', 'yes', 'on')",
         ]
     )
@@ -113,6 +113,12 @@ def generate_launch_description() -> LaunchDescription:
                         "nav_cmd_topic": nav_cmd_topic,
                         "manual_cmd_topic": manual_cmd_topic,
                         "output_twist_topic": balanced_cmd_topic,
+                        "publish_ros_outputs": False,
+                        "publish_status_topic": False,
+                        "direct_motor_output_enabled": ParameterValue(
+                            direct_balance_motor_output,
+                            value_type=bool,
+                        ),
                         "imu_topic": imu_topic,
                         "roll_offset_rad": ParameterValue(
                             roll_offset_rad,
@@ -123,24 +129,6 @@ def generate_launch_description() -> LaunchDescription:
                             value_type=float,
                         ),
                         "tilt_topic": "",
-                    },
-                ],
-            ),
-            Node(
-                package="low_level_runner",
-                executable="low_level_motor_control",
-                name="low_level_motor_control",
-                output="screen",
-                condition=IfCondition(start_balanced_motor_control),
-                parameters=[
-                    LaunchConfiguration("motor_params_file"),
-                    {
-                        "hardware_enabled": ParameterValue(
-                            hardware_enabled,
-                            value_type=bool,
-                        ),
-                        "nav_cmd_topic": balanced_cmd_topic,
-                        "manual_cmd_topic": "cmd_vel_manual_balance_bypass_disabled",
                         "can_channel": can_channel,
                         "can_interface": can_interface,
                         "can_bitrate": ParameterValue(can_bitrate, value_type=int),

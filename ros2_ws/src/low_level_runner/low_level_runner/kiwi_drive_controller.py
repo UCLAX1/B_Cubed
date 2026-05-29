@@ -3,8 +3,6 @@
 
 from __future__ import annotations
 
-import json
-import os
 from pathlib import Path
 import time
 
@@ -12,7 +10,6 @@ from geometry_msgs.msg import Twist
 import rclpy
 from rclpy.duration import Duration
 from rclpy.node import Node
-from std_msgs.msg import Float32MultiArray, String
 
 from low_level_runner.hardware_interface import CanBus, Motor
 from low_level_runner.kiwi_kinematics import WheelPowers, twist_to_wheel_powers
@@ -31,14 +28,10 @@ class KiwiDriveController(Node):
 
         self.nav_cmd_topic = str(self.get_parameter("nav_cmd_topic").value)
         self.manual_cmd_topic = str(self.get_parameter("manual_cmd_topic").value)
-        self.motor_command_topic = str(
-            self.get_parameter("motor_command_topic").value
-        )
-        self.status_topic = str(self.get_parameter("status_topic").value)
 
-        self.control_rate_hz = max(
+        self.heartbeat_rate_hz = max(
             1.0,
-            float(self.get_parameter("control_rate_hz").value),
+            float(self.get_parameter("heartbeat_rate_hz").value),
         )
         self.nav_cmd_timeout = Duration(
             seconds=float(self.get_parameter("nav_cmd_timeout_sec").value)
@@ -79,7 +72,6 @@ class KiwiDriveController(Node):
         self.hardware_active = False
         self.hardware_status = "disabled"
         self.hardware_error = ""
-        self.process_id = os.getpid()
 
         self.last_nav_cmd = _zero_twist()
         self.last_manual_cmd = _zero_twist()
@@ -89,12 +81,6 @@ class KiwiDriveController(Node):
         self.last_powers = WheelPowers(0.0, 0.0, 0.0)
         self.last_status_summary = ""
 
-        self.motor_command_pub = self.create_publisher(
-            Float32MultiArray,
-            self.motor_command_topic,
-            10,
-        )
-        self.status_pub = self.create_publisher(String, self.status_topic, 10)
         self.create_subscription(Twist, self.nav_cmd_topic, self._nav_cmd_callback, 10)
         self.create_subscription(
             Twist,
@@ -108,21 +94,20 @@ class KiwiDriveController(Node):
         else:
             self.get_logger().warn("Hardware output is disabled; publishing dry-run.")
 
-        self.control_timer = self.create_timer(
-            1.0 / self.control_rate_hz,
-            self._control_loop,
+        self.heartbeat_timer = self.create_timer(
+            1.0 / self.heartbeat_rate_hz,
+            self._heartbeat_loop,
         )
         self.get_logger().info(
             f"Kiwi drive controller listening to nav={self.nav_cmd_topic}, "
-            f"manual={self.manual_cmd_topic}; publishing {self.motor_command_topic}."
+            f"manual={self.manual_cmd_topic}; syncing CAN power commands to "
+            "received ROS commands."
         )
 
     def _declare_parameters(self) -> None:
         self.declare_parameter("nav_cmd_topic", "cmd_vel")
         self.declare_parameter("manual_cmd_topic", "cmd_vel_manual")
-        self.declare_parameter("motor_command_topic", "kiwi_drive/motor_powers")
-        self.declare_parameter("status_topic", "kiwi_drive/status")
-        self.declare_parameter("control_rate_hz", 50.0)
+        self.declare_parameter("heartbeat_rate_hz", 50.0)
         self.declare_parameter("nav_cmd_timeout_sec", 0.50)
         self.declare_parameter("manual_cmd_timeout_sec", 0.30)
 
@@ -147,13 +132,19 @@ class KiwiDriveController(Node):
     def _nav_cmd_callback(self, msg: Twist) -> None:
         self.last_nav_cmd = msg
         self.last_nav_cmd_rx = self.get_clock().now()
+        if not self._manual_command_is_fresh():
+            self._apply_current_command()
 
     def _manual_cmd_callback(self, msg: Twist) -> None:
         self.last_manual_cmd = msg
         self.last_manual_cmd_rx = self.get_clock().now()
+        self._apply_current_command()
 
-    def _control_loop(self) -> None:
+    def _apply_current_command(self) -> None:
         command, source = self._select_command()
+        self._apply_command(command, source)
+
+    def _apply_command(self, command: Twist, source: str) -> None:
         powers = twist_to_wheel_powers(
             command.linear.x,
             command.linear.y,
@@ -166,9 +157,21 @@ class KiwiDriveController(Node):
         self.last_source = source
         self.last_powers = powers
 
-        self._publish_motor_command(powers)
         self._send_motor_command(powers)
-        self._publish_status(command, powers, source)
+        self._log_status(powers, source)
+
+    def _heartbeat_loop(self) -> None:
+        _, source = self._select_command()
+        if source == "idle":
+            if self.last_source != "idle" or self.last_powers.as_list() != [0.0, 0.0, 0.0]:
+                self._apply_command(_zero_twist(), "idle")
+            else:
+                self._send_motor_heartbeat()
+                self._log_status(self.last_powers, source)
+            return
+
+        self._send_motor_heartbeat()
+        self._log_status(self.last_powers, source)
 
     def _select_command(self) -> tuple[Twist, str]:
         if self._manual_command_is_fresh():
@@ -192,9 +195,6 @@ class KiwiDriveController(Node):
     def _is_fresh(self, stamp, timeout: Duration) -> bool:
         return self.get_clock().now() - stamp <= timeout
 
-    def _publish_motor_command(self, powers: WheelPowers) -> None:
-        self.motor_command_pub.publish(Float32MultiArray(data=powers.as_list()))
-
     def _send_motor_command(self, powers: WheelPowers) -> None:
         if not self.hardware_active:
             return
@@ -208,31 +208,14 @@ class KiwiDriveController(Node):
             motor.send_heartbeat()
             motor.set_power(power_by_name[name])
 
-    def _publish_status(self, command: Twist, powers: WheelPowers, source: str) -> None:
-        status = {
-            "node": self.get_name(),
-            "pid": self.process_id,
-            "source": source,
-            "hardware_enabled": self.hardware_enabled,
-            "hardware_active": self.hardware_active,
-            "hardware_status": self.hardware_status,
-            "hardware_error": self.hardware_error or None,
-            "nav_cmd_age_sec": self._age_sec(self.last_nav_cmd_rx),
-            "manual_cmd_age_sec": self._age_sec(self.last_manual_cmd_rx),
-            "cmd": {
-                "linear_x": command.linear.x,
-                "linear_y": command.linear.y,
-                "angular_z": command.angular.z,
-            },
-            "motor_powers": {
-                "top_left": powers.top_left,
-                "top_right": powers.top_right,
-                "bottom": powers.bottom,
-            },
-        }
-        status_text = json.dumps(status, separators=(",", ":"))
-        self.status_pub.publish(String(data=status_text))
+    def _send_motor_heartbeat(self) -> None:
+        if not self.hardware_active:
+            return
 
+        for motor in self.motors.values():
+            motor.send_heartbeat()
+
+    def _log_status(self, powers: WheelPowers, source: str) -> None:
         summary = (
             f"source={source}, hardware_active={self.hardware_active}, "
             f"powers={powers.as_list()}"
@@ -240,12 +223,6 @@ class KiwiDriveController(Node):
         if summary != self.last_status_summary:
             self.get_logger().info(summary)
             self.last_status_summary = summary
-
-    def _age_sec(self, stamp) -> float | None:
-        if stamp is None:
-            return None
-        age = self.get_clock().now() - stamp
-        return float(age.nanoseconds) / 1e9
 
     def _start_hardware(self) -> None:
         self.hardware_status = "starting"

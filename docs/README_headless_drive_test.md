@@ -222,17 +222,17 @@ Stop the Pi launch with `Ctrl-C`. The script sends a clean shutdown to the ROS l
 
 ## 3. CAN Setup, If Needed
 
-If `can0` is not already up, initialize the CANable before running the Pi launch:
+If `can0` is not already up, let the Pi launch initialize the CANable:
 
 ```bash
 ssh ubuntu-1
 
-if ! ip link show can0 >/dev/null 2>&1; then
-  sudo slcand -o -c -s8 /dev/serial/by-id/usb-Openlight_Labs_CANable2_b158aa7_github.com_normaldotcom_canable2.git_205530883541-if00 can0
-fi
-sudo ip link set can0 up
-ip -details link show can0
+CAN_SETUP=true CAN_DEVICE=/dev/ttyACM0 ./launch_pi_balanced_drive.sh
 ```
+
+With `CAN_SETUP=true`, the script creates `can0` with
+`sudo slcand -o -s8 /dev/ttyACM0 can0` when the interface is missing, then runs
+`sudo ip link set can0 up` and prints `ip -details link show can0`.
 
 ## 4. Quick Health Checks
 
@@ -261,7 +261,7 @@ export ROS_DOMAIN_ID=0
 export RMW_IMPLEMENTATION=rmw_cyclonedds_cpp
 export CYCLONEDDS_URI=file:///home/ubuntu/cyclonedds.xml
 
-ros2 topic list | egrep '/cmd_vel_manual|/cmd_vel_balanced|/jet_cmd|/kiwi_drive/motor_powers|/balance/status|/imu/data|/map|/scan'
+ros2 topic list | egrep '/cmd_vel_manual|/imu/data|/map|/scan'
 ```
 
 Check that the RL controller is alive:
@@ -274,7 +274,7 @@ export ROS_DOMAIN_ID=0
 export RMW_IMPLEMENTATION=rmw_cyclonedds_cpp
 export CYCLONEDDS_URI=file:///home/ubuntu/cyclonedds.xml
 
-ros2 topic echo /balance/status
+tail -f ros2_ws/log/pi_balanced_drive/*.log
 ```
 
 Expected while idle:
@@ -316,15 +316,13 @@ ros2 topic echo /cmd_vel_manual
 In separate Pi terminals:
 
 ```bash
-ros2 topic echo /cmd_vel_balanced
-ros2 topic echo /jet_cmd
-ros2 topic echo /kiwi_drive/motor_powers
+tail -f ros2_ws/log/pi_balanced_drive/*.log
 ```
 
 The expected flow is:
 
 ```text
-web console -> /cmd_vel_manual -> RL balance controller -> /cmd_vel_balanced and /jet_cmd -> low-level motor control -> /kiwi_drive/motor_powers -> CAN
+web console -> /cmd_vel_manual -> RL balance controller -> direct CAN motor output
 ```
 
 ## 6. ZED Camera Check
@@ -390,11 +388,12 @@ In direct motor-test mode, the command flow is:
 laptop web console -> Jetson 10.42.0.1:8080 -> /cmd_vel_manual -> Pi 10.42.0.166 -> low-level motor control -> CAN
 ```
 
-`kiwi_drive/status` should not alternate between `hardware_active=true` and `hardware_active=false` from one healthy motor node. If it flickers, first check for duplicate publishers or a restarting launch:
+The balance controller should appear once in the node list and report policy,
+safety, velocity, and motor power summaries in the Pi launch logs:
 
 ```bash
-ros2 topic info -v /kiwi_drive/status
-ros2 node list | egrep 'low_level_motor_control|kiwi_drive_controller'
+ros2 node list | egrep 'bb8_balance_controller|low_level_motor_control|kiwi_drive_controller'
+tail -f ros2_ws/log/pi_balanced_drive/*.log
 systemctl is-active b_cubed_pi.service
 ```
 

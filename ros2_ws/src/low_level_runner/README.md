@@ -29,9 +29,13 @@ It subscribes to:
 - `cmd_vel` for gated Nav2 velocity commands
 - `cmd_vel_manual` for web-console manual commands
 
-Manual commands take priority while they are fresh. The node publishes the
-calculated wheel powers on `kiwi_drive/motor_powers` and, when hardware is
-enabled, sends those powers to the CAN motor controllers.
+Manual commands take priority while they are fresh. Each incoming command
+immediately computes wheel powers and sends them directly to the CAN motor
+controllers with the same duty-cycle commands used by the `motors_test` branch.
+A lightweight heartbeat/watchdog timer keeps the motor controllers alive between
+Jetson messages and sends one zero-power command when commands go stale. The
+motor driver does not publish ROS topics; ROS 2 is only used here to receive
+Jetson commands.
 
 For a dry run:
 

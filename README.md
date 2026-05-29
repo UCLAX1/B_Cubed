@@ -12,7 +12,7 @@ That guide includes copy-paste commands for:
 - Jetson ZED/Nav2/web console startup.
 - Raspberry Pi Sense HAT, RL balance controller, ROS listener, and CAN motor startup.
 - Tailscale and hotspot DDS modes.
-- Live checks for `/cmd_vel_manual`, `/cmd_vel_balanced`, `/jet_cmd`, motor powers, and RL policy status.
+- Live checks for `/cmd_vel_manual`, IMU input, and RL policy logs.
 
 1. Install ROS2 Humble
 https://docs.ros.org/en/humble/Installation/Ubuntu-Install-Debs.html

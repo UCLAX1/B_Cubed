@@ -10,7 +10,8 @@ ROS_SETUP="${ROS_SETUP:-/opt/ros/${ROS_DISTRO}/setup.bash}"
 INSTALL_SETUP="${INSTALL_SETUP:-$WS_DIR/install/setup.bash}"
 
 BUILD_FIRST="${BUILD_FIRST:-false}"
-SETUP_CAN="${SETUP_CAN:-false}"
+SETUP_CAN="${SETUP_CAN:-${CAN_SETUP:-false}}"
+CAN_SETUP="${CAN_SETUP:-$SETUP_CAN}"
 
 HARDWARE_ENABLED="${HARDWARE_ENABLED:-true}"
 NAV_CMD_TOPIC="${NAV_CMD_TOPIC:-cmd_vel}"
@@ -18,6 +19,8 @@ MANUAL_CMD_TOPIC="${MANUAL_CMD_TOPIC:-cmd_vel_manual}"
 CAN_CHANNEL="${CAN_CHANNEL:-can0}"
 CAN_INTERFACE="${CAN_INTERFACE:-socketcan}"
 CAN_BITRATE="${CAN_BITRATE:-1000000}"
+CAN_DEVICE="${CAN_DEVICE:-/dev/ttyACM0}"
+SLCAND_SPEED="${SLCAND_SPEED:-s8}"
 INIT_POS_PATH="${INIT_POS_PATH:-~/.ros/b_cubed_motor_init_pos.json}"
 PARAMS_FILE="${PARAMS_FILE:-}"
 ROS_LOG_DIR="${ROS_LOG_DIR:-$WS_DIR/log/pi_low_level_motor_control}"
@@ -50,9 +53,23 @@ setup_can_interface() {
     sudo_cmd=(sudo)
   fi
 
-  "${sudo_cmd[@]}" ip link set "$CAN_CHANNEL" down >/dev/null 2>&1 || true
-  "${sudo_cmd[@]}" ip link set "$CAN_CHANNEL" type can bitrate "$CAN_BITRATE"
+  if ! ip link show "$CAN_CHANNEL" >/dev/null 2>&1; then
+    if [[ ! -e "$CAN_DEVICE" ]]; then
+      echo "CAN device not found: $CAN_DEVICE" >&2
+      exit 1
+    fi
+    echo "Creating $CAN_CHANNEL from $CAN_DEVICE with slcand..."
+    "${sudo_cmd[@]}" slcand -o "-$SLCAND_SPEED" "$CAN_DEVICE" "$CAN_CHANNEL"
+    sleep 0.5
+  fi
+
+  if ! ip link show "$CAN_CHANNEL" >/dev/null 2>&1; then
+    echo "CAN interface was not created: $CAN_CHANNEL" >&2
+    exit 1
+  fi
+
   "${sudo_cmd[@]}" ip link set "$CAN_CHANNEL" up
+  ip -details link show "$CAN_CHANNEL"
 }
 
 if [[ ! -f "$ROS_SETUP" ]]; then
@@ -78,6 +95,13 @@ export ROS_LOG_DIR
 if bool_is_true "$SETUP_CAN"; then
   setup_can_interface
 fi
+
+echo "B_Cubed Pi motor control launch"
+echo "  can_setup=$CAN_SETUP"
+echo "  can_channel=$CAN_CHANNEL"
+echo "  can_interface=$CAN_INTERFACE"
+echo "  can_bitrate=$CAN_BITRATE"
+echo "  can_device=$CAN_DEVICE"
 
 launch_args=(
   "hardware_enabled:=$HARDWARE_ENABLED"

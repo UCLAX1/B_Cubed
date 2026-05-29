@@ -89,7 +89,7 @@ PLANNING_CONSOLE_HOST="${PLANNING_CONSOLE_HOST:-0.0.0.0}"
 PLANNING_CONSOLE_PORT="${PLANNING_CONSOLE_PORT:-8080}"
 KILL_STALE_PLANNING_CONSOLE="${KILL_STALE_PLANNING_CONSOLE:-true}"
 MANUAL_CMD_TOPIC="${MANUAL_CMD_TOPIC:-cmd_vel_manual}"
-COMMAND_MONITOR_TOPICS="${COMMAND_MONITOR_TOPICS:-$MANUAL_CMD_TOPIC /cmd_vel /cmd_vel_balanced /jet_cmd /kiwi_drive/motor_powers /balance/status /kiwi_drive/status}"
+COMMAND_MONITOR_TOPICS="${COMMAND_MONITOR_TOPICS:-$MANUAL_CMD_TOPIC /cmd_vel}"
 
 START_PERSON_TRACKING="${START_PERSON_TRACKING:-false}"
 PERSON_TRACKING_IMAGE_TOPIC="${PERSON_TRACKING_IMAGE_TOPIC:-$INPUT_IMAGE_TOPIC}"
@@ -870,12 +870,7 @@ print_next_blocker_hint() {
     echo "Waiting for manual command topic $MANUAL_CMD_TOPIC. It may appear after the web console starts."
     return 0
   fi
-  if topic_missing "/balance/status"; then
-    echo "Pi balance status is not visible yet. Check CycloneDDS peer config and b_cubed_pi.service."
-    return 0
-  fi
-
-  echo "Core topics are visible; if the robot does not move, check /balance/status and hardware gating."
+  echo "Core topics are visible; if the robot does not move, check Pi balance logs and hardware gating."
 }
 
 report_child_status() {
@@ -1108,8 +1103,7 @@ report_topic_status "Initial navigation topic status:" \
   "$SCAN_TOPIC" \
   "/zed/is_localized" \
   "$MANUAL_CMD_TOPIC" \
-  "/cmd_vel" \
-  "/balance/status"
+  "/cmd_vel"
 print_next_blocker_hint
 print_nav_diagnostics
 print_command_topic_info
@@ -1138,8 +1132,7 @@ while :; do
       "$SCAN_TOPIC" \
       "/zed/is_localized" \
       "$MANUAL_CMD_TOPIC" \
-      "/cmd_vel" \
-      "/balance/status"
+      "/cmd_vel"
     print_next_blocker_hint
     print_nav_diagnostics
     print_command_topic_info

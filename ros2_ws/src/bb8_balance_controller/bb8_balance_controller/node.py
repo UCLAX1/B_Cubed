@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import math
+import time
 from typing import Optional
 
 import numpy as np
@@ -16,6 +17,8 @@ from std_msgs.msg import Float32MultiArray, String
 
 from bb8_balance_controller.math_utils import clip_norm, quat_to_roll_pitch
 from bb8_balance_controller.policy import load_policy_or_pd
+from low_level_runner.hardware_interface import CanBus, Motor
+from low_level_runner.kiwi_kinematics import WheelPowers, twist_to_wheel_powers
 
 
 def _zero_twist() -> Twist:
@@ -66,10 +69,28 @@ class BalanceControllerNode(Node):
         self.last_command_source = "idle"
         self.last_control_time = self.get_clock().now()
         self.last_status_summary = ""
+        self.last_powers = WheelPowers(0.0, 0.0, 0.0)
+        self.bus: CanBus | None = None
+        self.motors: dict[str, Motor] = {}
+        self.hardware_active = False
+        self.hardware_status = "disabled"
+        self.hardware_error = ""
 
-        self.cmd_pub = self.create_publisher(Twist, self.output_twist_topic, 10)
-        self.jet_cmd_pub = self.create_publisher(Float32MultiArray, self.jet_cmd_topic, 10)
-        self.status_pub = self.create_publisher(String, self.status_topic, 10)
+        self.cmd_pub = (
+            self.create_publisher(Twist, self.output_twist_topic, 10)
+            if self.publish_ros_outputs and self.output_twist_topic
+            else None
+        )
+        self.jet_cmd_pub = (
+            self.create_publisher(Float32MultiArray, self.jet_cmd_topic, 10)
+            if self.publish_ros_outputs and self.jet_cmd_topic
+            else None
+        )
+        self.status_pub = (
+            self.create_publisher(String, self.status_topic, 10)
+            if self.publish_status_topic and self.status_topic
+            else None
+        )
 
         self.create_subscription(Twist, self.nav_cmd_topic, self._nav_callback, 10)
         if self.manual_cmd_topic:
@@ -88,15 +109,22 @@ class BalanceControllerNode(Node):
         if self.odom_topic:
             self.create_subscription(Odometry, self.odom_topic, self._odom_callback, 10)
 
+        if self.direct_motor_output_enabled:
+            self._start_hardware()
+        else:
+            self.get_logger().info("Direct CAN motor output is disabled.")
+
         self.create_timer(1.0 / self.control_rate_hz, self._control_loop)
-        self.create_timer(1.0 / self.status_rate_hz, self._publish_status)
+        self.create_timer(1.0 / self.status_rate_hz, self._report_status)
 
         self.get_logger().info(
             "Balance controller ready: "
             f"policy_backend={self.policy_backend}, "
             f"nav_cmd_topic={self.nav_cmd_topic}, "
             f"manual_cmd_topic={self.manual_cmd_topic}, "
-            f"jet_cmd_topic={self.jet_cmd_topic}."
+            f"direct_motor_output={self.direct_motor_output_enabled}, "
+            f"publish_ros_outputs={self.publish_ros_outputs}, "
+            f"publish_status_topic={self.publish_status_topic}."
         )
 
     def _declare_parameters(self) -> None:
@@ -105,6 +133,8 @@ class BalanceControllerNode(Node):
         self.declare_parameter("output_twist_topic", "cmd_vel_balanced")
         self.declare_parameter("jet_cmd_topic", "jet_cmd")
         self.declare_parameter("status_topic", "balance/status")
+        self.declare_parameter("publish_ros_outputs", False)
+        self.declare_parameter("publish_status_topic", False)
         self.declare_parameter("imu_topic", "imu/data")
         self.declare_parameter("tilt_topic", "sense_hat/raw")
         self.declare_parameter("tilt_topic_degrees", True)
@@ -143,12 +173,30 @@ class BalanceControllerNode(Node):
         self.declare_parameter("active_state_value", 1.0)
         self.declare_parameter("stopped_state_value", 0.0)
 
+        self.declare_parameter("direct_motor_output_enabled", False)
+        self.declare_parameter("can_channel", "can0")
+        self.declare_parameter("can_interface", "socketcan")
+        self.declare_parameter("can_bitrate", 1000000)
+        self.declare_parameter("max_duty_cycle", 0.5)
+        self.declare_parameter("motor_wait_timeout_sec", 2.0)
+        self.declare_parameter("reset_encoders_on_start", False)
+        self.declare_parameter("init_pos_path", "motor_init_pos.json")
+        self.declare_parameter("top_left_motor_id", 3)
+        self.declare_parameter("top_right_motor_id", 9)
+        self.declare_parameter("bottom_motor_id", 7)
+        self.declare_parameter("linear_to_power_scale", 1.0)
+        self.declare_parameter("angular_to_power_scale", 1.0)
+        self.declare_parameter("max_power", 1.0)
+        self.declare_parameter("normalize_over_limit", False)
+
     def _read_parameters(self) -> None:
         self.nav_cmd_topic = str(self.get_parameter("nav_cmd_topic").value)
         self.manual_cmd_topic = str(self.get_parameter("manual_cmd_topic").value)
         self.output_twist_topic = str(self.get_parameter("output_twist_topic").value)
         self.jet_cmd_topic = str(self.get_parameter("jet_cmd_topic").value)
         self.status_topic = str(self.get_parameter("status_topic").value)
+        self.publish_ros_outputs = bool(self.get_parameter("publish_ros_outputs").value)
+        self.publish_status_topic = bool(self.get_parameter("publish_status_topic").value)
         self.imu_topic = str(self.get_parameter("imu_topic").value)
         self.tilt_topic = str(self.get_parameter("tilt_topic").value)
         self.tilt_topic_degrees = bool(self.get_parameter("tilt_topic_degrees").value)
@@ -215,6 +263,31 @@ class BalanceControllerNode(Node):
             self.servo_neutral.append(0.0)
         self.active_state_value = float(self.get_parameter("active_state_value").value)
         self.stopped_state_value = float(self.get_parameter("stopped_state_value").value)
+        self.direct_motor_output_enabled = bool(
+            self.get_parameter("direct_motor_output_enabled").value
+        )
+        self.can_channel = str(self.get_parameter("can_channel").value)
+        self.can_interface = str(self.get_parameter("can_interface").value)
+        self.can_bitrate = int(self.get_parameter("can_bitrate").value)
+        self.max_duty_cycle = abs(float(self.get_parameter("max_duty_cycle").value))
+        self.motor_wait_timeout_sec = float(
+            self.get_parameter("motor_wait_timeout_sec").value
+        )
+        self.reset_encoders_on_start = bool(
+            self.get_parameter("reset_encoders_on_start").value
+        )
+        self.init_pos_path = str(self.get_parameter("init_pos_path").value)
+        self.motor_ids = {
+            "top_left": int(self.get_parameter("top_left_motor_id").value),
+            "top_right": int(self.get_parameter("top_right_motor_id").value),
+            "bottom": int(self.get_parameter("bottom_motor_id").value),
+        }
+        self.linear_scale = float(self.get_parameter("linear_to_power_scale").value)
+        self.angular_scale = float(self.get_parameter("angular_to_power_scale").value)
+        self.max_power = abs(float(self.get_parameter("max_power").value))
+        self.normalize_over_limit = bool(
+            self.get_parameter("normalize_over_limit").value
+        )
 
     def _nav_callback(self, msg: Twist) -> None:
         self.nav_command = self._twist_to_command(msg)
@@ -333,7 +406,7 @@ class BalanceControllerNode(Node):
         delta = clip_norm(target_velocity - self.output_velocity, max_delta)
         self.output_velocity += delta
 
-        self._publish_command(
+        self._emit_command(
             self.output_velocity,
             float(command[2]),
             self.active_state_value,
@@ -387,48 +460,149 @@ class BalanceControllerNode(Node):
         self.balance_velocity[:] = 0.0
         self.output_velocity[:] = 0.0
         self.last_command_source = "idle"
-        self._publish_command(np.zeros(2, dtype=np.float32), 0.0, self.stopped_state_value)
+        self._emit_command(np.zeros(2, dtype=np.float32), 0.0, self.stopped_state_value)
         self.last_status_summary = reason
 
-    def _publish_command(
+    def _emit_command(
         self,
         velocity_xy: np.ndarray,
         yaw_rate: float,
         state_value: float,
     ) -> None:
+        powers = twist_to_wheel_powers(
+            float(velocity_xy[0]),
+            float(velocity_xy[1]),
+            float(yaw_rate),
+            linear_scale=self.linear_scale,
+            angular_scale=self.angular_scale,
+            max_power=self.max_power,
+            normalize_over_limit=self.normalize_over_limit,
+        )
+        self.last_powers = powers
+        self._send_motor_command(powers)
+
+        if self.cmd_pub is None and self.jet_cmd_pub is None:
+            return
+
         twist = _zero_twist()
         twist.linear.x = float(velocity_xy[0])
         twist.linear.y = float(velocity_xy[1])
         twist.angular.z = float(yaw_rate)
-        self.cmd_pub.publish(twist)
+        if self.cmd_pub is not None:
+            self.cmd_pub.publish(twist)
 
-        jet_cmd = Float32MultiArray()
-        jet_cmd.data = [
-            float(velocity_xy[0]),
-            float(velocity_xy[1]),
-            float(yaw_rate),
-            self.servo_neutral[0],
-            self.servo_neutral[1],
-            self.servo_neutral[2],
-            float(state_value),
-        ]
-        self.jet_cmd_pub.publish(jet_cmd)
+        if self.jet_cmd_pub is not None:
+            jet_cmd = Float32MultiArray()
+            jet_cmd.data = [
+                float(velocity_xy[0]),
+                float(velocity_xy[1]),
+                float(yaw_rate),
+                self.servo_neutral[0],
+                self.servo_neutral[1],
+                self.servo_neutral[2],
+                float(state_value),
+            ]
+            self.jet_cmd_pub.publish(jet_cmd)
 
-    def _publish_status(self) -> None:
+    def _report_status(self) -> None:
         now = self.get_clock().now()
         safe, reason = self._safety_state(now)
         status = (
             f"safe={safe}, reason={reason}, backend={self.policy_backend}, "
             f"command_source={self.last_command_source}, "
+            f"hardware={self.hardware_status}, "
             f"roll={self.roll:.3f}, pitch={self.pitch:.3f}, "
             f"balance_v=({self.balance_velocity[0]:.3f},{self.balance_velocity[1]:.3f}), "
-            f"out_v=({self.output_velocity[0]:.3f},{self.output_velocity[1]:.3f})"
+            f"out_v=({self.output_velocity[0]:.3f},{self.output_velocity[1]:.3f}), "
+            f"powers={self.last_powers.as_list()}"
         )
-        self.status_pub.publish(String(data=status))
+        if self.status_pub is not None:
+            self.status_pub.publish(String(data=status))
         summary = f"{safe}:{reason}:{self.policy_backend}"
         if summary != self.last_status_summary:
             self.get_logger().info(status)
             self.last_status_summary = summary
+
+    def _start_hardware(self) -> None:
+        self.hardware_status = "starting"
+        self.hardware_error = ""
+        self.bus = CanBus(
+            channel=self.can_channel,
+            interface=self.can_interface,
+            bitrate=self.can_bitrate,
+            logger=self.get_logger(),
+        )
+        self.bus.start()
+        if not self.bus.started_successfully():
+            self.hardware_status = "can_start_failed"
+            self.hardware_error = f"CAN bus unavailable on {self.can_interface}:{self.can_channel}"
+            self.get_logger().error(self.hardware_error)
+            return
+
+        try:
+            for name, motor_id in self.motor_ids.items():
+                motor = Motor(
+                    self.bus,
+                    motor_id,
+                    max_duty_cycle=self.max_duty_cycle,
+                    init_pos_path=self.init_pos_path,
+                    wait_timeout_sec=self.motor_wait_timeout_sec,
+                    logger=self.get_logger(),
+                )
+                motor.set_power(0.0)
+                if self.reset_encoders_on_start:
+                    motor.reset_encoder()
+                self.motors[name] = motor
+        except (RuntimeError, TimeoutError) as error:
+            self.hardware_status = "motor_init_failed"
+            self.hardware_error = str(error)
+            self.get_logger().error(f"Motor initialization failed: {error}")
+            self._close_hardware()
+            return
+
+        self.hardware_active = True
+        self.hardware_status = "active"
+        self.get_logger().info(
+            "Direct CAN motor output active: "
+            f"top_left={self.motor_ids['top_left']}, "
+            f"top_right={self.motor_ids['top_right']}, "
+            f"bottom={self.motor_ids['bottom']}."
+        )
+
+    def _send_motor_command(self, powers: WheelPowers) -> None:
+        if not self.hardware_active:
+            return
+
+        power_by_name = {
+            "top_left": powers.top_left,
+            "top_right": powers.top_right,
+            "bottom": powers.bottom,
+        }
+        for name, motor in self.motors.items():
+            motor.send_heartbeat()
+            motor.set_power(power_by_name[name])
+
+    def _stop_motors(self) -> None:
+        if not self.hardware_active:
+            return
+        for motor in self.motors.values():
+            motor.send_heartbeat()
+            motor.set_power(0.0)
+
+    def _close_hardware(self) -> None:
+        self.hardware_active = False
+        if self.direct_motor_output_enabled and self.hardware_status == "active":
+            self.hardware_status = "closed"
+        self.motors = {}
+        if self.bus is not None:
+            self.bus.close()
+            self.bus = None
+
+    def destroy_node(self) -> bool:
+        self._stop_motors()
+        time.sleep(0.02)
+        self._close_hardware()
+        return super().destroy_node()
 
     def _fresh(self, stamp: Optional[object], timeout: Duration, now) -> bool:
         if stamp is None:

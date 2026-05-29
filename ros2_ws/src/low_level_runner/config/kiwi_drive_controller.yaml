@@ -2,9 +2,7 @@ kiwi_drive_controller:
   ros__parameters:
     nav_cmd_topic: cmd_vel
     manual_cmd_topic: cmd_vel_manual
-    motor_command_topic: kiwi_drive/motor_powers
-    status_topic: kiwi_drive/status
-    control_rate_hz: 50.0
+    heartbeat_rate_hz: 50.0
     nav_cmd_timeout_sec: 0.50
     manual_cmd_timeout_sec: 0.30
 

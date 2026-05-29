@@ -10,7 +10,8 @@ ROS_SETUP="${ROS_SETUP:-/opt/ros/${ROS_DISTRO}/setup.bash}"
 INSTALL_SETUP="${INSTALL_SETUP:-$WS_DIR/install/setup.bash}"
 
 BUILD_FIRST="${BUILD_FIRST:-false}"
-SETUP_CAN="${SETUP_CAN:-false}"
+SETUP_CAN="${SETUP_CAN:-${CAN_SETUP:-false}}"
+CAN_SETUP="${CAN_SETUP:-$SETUP_CAN}"
 
 START_SENSE_HAT="${START_SENSE_HAT:-true}"
 START_BALANCE_CONTROLLER="${START_BALANCE_CONTROLLER:-true}"
@@ -30,13 +31,15 @@ PITCH_OFFSET_RAD="${PITCH_OFFSET_RAD:-0.0}"
 CAN_CHANNEL="${CAN_CHANNEL:-can0}"
 CAN_INTERFACE="${CAN_INTERFACE:-socketcan}"
 CAN_BITRATE="${CAN_BITRATE:-1000000}"
+CAN_DEVICE="${CAN_DEVICE:-/dev/ttyACM0}"
+SLCAND_SPEED="${SLCAND_SPEED:-s8}"
 POLICY_PATH="${POLICY_PATH:-}"
 ROS_LOG_DIR="${ROS_LOG_DIR:-$WS_DIR/log/pi_balanced_drive}"
 STATUS_INTERVAL_SEC="${STATUS_INTERVAL_SEC:-10}"
 COMMAND_MONITOR_ENABLED="${COMMAND_MONITOR_ENABLED:-true}"
 COMMAND_MONITOR_SAMPLE_TIMEOUT_SEC="${COMMAND_MONITOR_SAMPLE_TIMEOUT_SEC:-2}"
 COMMAND_MONITOR_SHOW_MISSING="${COMMAND_MONITOR_SHOW_MISSING:-summary}"
-COMMAND_MONITOR_TOPICS="${COMMAND_MONITOR_TOPICS:-$MANUAL_CMD_TOPIC $NAV_CMD_TOPIC $BALANCED_CMD_TOPIC /jet_cmd /kiwi_drive/motor_powers /balance/status /kiwi_drive/status}"
+COMMAND_MONITOR_TOPICS="${COMMAND_MONITOR_TOPICS:-$MANUAL_CMD_TOPIC $NAV_CMD_TOPIC $IMU_TOPIC}"
 NETWORK_MODE="${NETWORK_MODE:-auto}"
 PI_TAILSCALE_IP="${PI_TAILSCALE_IP:-100.80.7.37}"
 PI_HOTSPOT_IP="${PI_HOTSPOT_IP:-10.42.0.166}"
@@ -80,9 +83,23 @@ setup_can_interface() {
     sudo_cmd=(sudo)
   fi
 
-  "${sudo_cmd[@]}" ip link set "$CAN_CHANNEL" down >/dev/null 2>&1 || true
-  "${sudo_cmd[@]}" ip link set "$CAN_CHANNEL" type can bitrate "$CAN_BITRATE"
+  if ! ip link show "$CAN_CHANNEL" >/dev/null 2>&1; then
+    if [[ ! -e "$CAN_DEVICE" ]]; then
+      echo "CAN device not found: $CAN_DEVICE" >&2
+      exit 1
+    fi
+    echo "Creating $CAN_CHANNEL from $CAN_DEVICE with slcand..."
+    "${sudo_cmd[@]}" slcand -o "-$SLCAND_SPEED" "$CAN_DEVICE" "$CAN_CHANNEL"
+    sleep 0.5
+  fi
+
+  if ! ip link show "$CAN_CHANNEL" >/dev/null 2>&1; then
+    echo "CAN interface was not created: $CAN_CHANNEL" >&2
+    exit 1
+  fi
+
   "${sudo_cmd[@]}" ip link set "$CAN_CHANNEL" up
+  ip -details link show "$CAN_CHANNEL"
 }
 
 detach_sense_hat_kernel_drivers() {
@@ -424,9 +441,11 @@ echo "  hardware_enabled=$HARDWARE_ENABLED"
 echo "  nav_cmd_topic=$NAV_CMD_TOPIC"
 echo "  manual_cmd_topic=$MANUAL_CMD_TOPIC"
 echo "  balanced_cmd_topic=$BALANCED_CMD_TOPIC"
+echo "  can_setup=$CAN_SETUP"
 echo "  can_channel=$CAN_CHANNEL"
 echo "  can_interface=$CAN_INTERFACE"
 echo "  can_bitrate=$CAN_BITRATE"
+echo "  can_device=$CAN_DEVICE"
 echo "  command_monitor_enabled=$COMMAND_MONITOR_ENABLED"
 echo "  command_monitor_show_missing=$COMMAND_MONITOR_SHOW_MISSING"
 echo "  command_monitor_topics=$COMMAND_MONITOR_TOPICS"
