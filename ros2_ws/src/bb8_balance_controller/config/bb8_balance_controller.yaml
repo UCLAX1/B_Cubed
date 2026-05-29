@@ -58,18 +58,5 @@ bb8_balance_controller:
     active_state_value: 1.0
     stopped_state_value: 0.0
 
-    direct_motor_output_enabled: false
-    can_channel: can0
-    can_interface: socketcan
-    can_bitrate: 1000000
-    max_duty_cycle: 0.5
-    motor_wait_timeout_sec: 2.0
-    reset_encoders_on_start: false
-    init_pos_path: ~/.ros/b_cubed_motor_init_pos.json
-    top_left_motor_id: 3
-    top_right_motor_id: 9
-    bottom_motor_id: 7
-    linear_to_power_scale: 1.0
-    angular_to_power_scale: 1.0
-    max_power: 1.0
-    normalize_over_limit: false
+    motor_output_enabled: false
+    motor_command_socket_path: /tmp/b_cubed_motor_cmd.sock

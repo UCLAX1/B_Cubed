@@ -322,7 +322,7 @@ tail -f ros2_ws/log/pi_balanced_drive/*.log
 The expected flow is:
 
 ```text
-web console -> /cmd_vel_manual -> RL balance controller -> direct CAN motor output
+web console -> /cmd_vel_manual -> RL balance controller -> Unix socket -> motor IPC server -> CAN
 ```
 
 ## 6. ZED Camera Check

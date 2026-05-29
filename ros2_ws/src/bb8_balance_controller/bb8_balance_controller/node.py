@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import math
-import time
 from typing import Optional
 
 import numpy as np
@@ -17,8 +16,7 @@ from std_msgs.msg import Float32MultiArray, String
 
 from bb8_balance_controller.math_utils import clip_norm, quat_to_roll_pitch
 from bb8_balance_controller.policy import load_policy_or_pd
-from low_level_runner.hardware_interface import CanBus, Motor
-from low_level_runner.kiwi_kinematics import WheelPowers, twist_to_wheel_powers
+from low_level_runner.motor_ipc import DEFAULT_SOCKET_PATH, MotorCommandClient
 
 
 def _zero_twist() -> Twist:
@@ -69,12 +67,9 @@ class BalanceControllerNode(Node):
         self.last_command_source = "idle"
         self.last_control_time = self.get_clock().now()
         self.last_status_summary = ""
-        self.last_powers = WheelPowers(0.0, 0.0, 0.0)
-        self.bus: CanBus | None = None
-        self.motors: dict[str, Motor] = {}
-        self.hardware_active = False
-        self.hardware_status = "disabled"
-        self.hardware_error = ""
+        self.last_motor_command = np.zeros(3, dtype=np.float32)
+        self.motor_client: MotorCommandClient | None = None
+        self.motor_output_status = "disabled"
 
         self.cmd_pub = (
             self.create_publisher(Twist, self.output_twist_topic, 10)
@@ -109,10 +104,14 @@ class BalanceControllerNode(Node):
         if self.odom_topic:
             self.create_subscription(Odometry, self.odom_topic, self._odom_callback, 10)
 
-        if self.direct_motor_output_enabled:
-            self._start_hardware()
+        if self.motor_output_enabled:
+            self.motor_client = MotorCommandClient(self.motor_command_socket_path)
+            self.motor_output_status = "ipc_ready"
+            self.get_logger().info(
+                f"Motor IPC output enabled: socket={self.motor_command_socket_path}"
+            )
         else:
-            self.get_logger().info("Direct CAN motor output is disabled.")
+            self.get_logger().info("Motor output is disabled.")
 
         self.create_timer(1.0 / self.control_rate_hz, self._control_loop)
         self.create_timer(1.0 / self.status_rate_hz, self._report_status)
@@ -122,7 +121,7 @@ class BalanceControllerNode(Node):
             f"policy_backend={self.policy_backend}, "
             f"nav_cmd_topic={self.nav_cmd_topic}, "
             f"manual_cmd_topic={self.manual_cmd_topic}, "
-            f"direct_motor_output={self.direct_motor_output_enabled}, "
+            f"motor_output={self.motor_output_enabled}, "
             f"publish_ros_outputs={self.publish_ros_outputs}, "
             f"publish_status_topic={self.publish_status_topic}."
         )
@@ -173,21 +172,8 @@ class BalanceControllerNode(Node):
         self.declare_parameter("active_state_value", 1.0)
         self.declare_parameter("stopped_state_value", 0.0)
 
-        self.declare_parameter("direct_motor_output_enabled", False)
-        self.declare_parameter("can_channel", "can0")
-        self.declare_parameter("can_interface", "socketcan")
-        self.declare_parameter("can_bitrate", 1000000)
-        self.declare_parameter("max_duty_cycle", 0.5)
-        self.declare_parameter("motor_wait_timeout_sec", 2.0)
-        self.declare_parameter("reset_encoders_on_start", False)
-        self.declare_parameter("init_pos_path", "motor_init_pos.json")
-        self.declare_parameter("top_left_motor_id", 3)
-        self.declare_parameter("top_right_motor_id", 9)
-        self.declare_parameter("bottom_motor_id", 7)
-        self.declare_parameter("linear_to_power_scale", 1.0)
-        self.declare_parameter("angular_to_power_scale", 1.0)
-        self.declare_parameter("max_power", 1.0)
-        self.declare_parameter("normalize_over_limit", False)
+        self.declare_parameter("motor_output_enabled", False)
+        self.declare_parameter("motor_command_socket_path", DEFAULT_SOCKET_PATH)
 
     def _read_parameters(self) -> None:
         self.nav_cmd_topic = str(self.get_parameter("nav_cmd_topic").value)
@@ -263,30 +249,11 @@ class BalanceControllerNode(Node):
             self.servo_neutral.append(0.0)
         self.active_state_value = float(self.get_parameter("active_state_value").value)
         self.stopped_state_value = float(self.get_parameter("stopped_state_value").value)
-        self.direct_motor_output_enabled = bool(
-            self.get_parameter("direct_motor_output_enabled").value
+        self.motor_output_enabled = bool(
+            self.get_parameter("motor_output_enabled").value
         )
-        self.can_channel = str(self.get_parameter("can_channel").value)
-        self.can_interface = str(self.get_parameter("can_interface").value)
-        self.can_bitrate = int(self.get_parameter("can_bitrate").value)
-        self.max_duty_cycle = abs(float(self.get_parameter("max_duty_cycle").value))
-        self.motor_wait_timeout_sec = float(
-            self.get_parameter("motor_wait_timeout_sec").value
-        )
-        self.reset_encoders_on_start = bool(
-            self.get_parameter("reset_encoders_on_start").value
-        )
-        self.init_pos_path = str(self.get_parameter("init_pos_path").value)
-        self.motor_ids = {
-            "top_left": int(self.get_parameter("top_left_motor_id").value),
-            "top_right": int(self.get_parameter("top_right_motor_id").value),
-            "bottom": int(self.get_parameter("bottom_motor_id").value),
-        }
-        self.linear_scale = float(self.get_parameter("linear_to_power_scale").value)
-        self.angular_scale = float(self.get_parameter("angular_to_power_scale").value)
-        self.max_power = abs(float(self.get_parameter("max_power").value))
-        self.normalize_over_limit = bool(
-            self.get_parameter("normalize_over_limit").value
+        self.motor_command_socket_path = str(
+            self.get_parameter("motor_command_socket_path").value
         )
 
     def _nav_callback(self, msg: Twist) -> None:
@@ -469,17 +436,11 @@ class BalanceControllerNode(Node):
         yaw_rate: float,
         state_value: float,
     ) -> None:
-        powers = twist_to_wheel_powers(
-            float(velocity_xy[0]),
-            float(velocity_xy[1]),
-            float(yaw_rate),
-            linear_scale=self.linear_scale,
-            angular_scale=self.angular_scale,
-            max_power=self.max_power,
-            normalize_over_limit=self.normalize_over_limit,
+        self.last_motor_command = np.array(
+            [float(velocity_xy[0]), float(velocity_xy[1]), float(yaw_rate)],
+            dtype=np.float32,
         )
-        self.last_powers = powers
-        self._send_motor_command(powers)
+        self._send_motor_command(velocity_xy, yaw_rate, state_value)
 
         if self.cmd_pub is None and self.jet_cmd_pub is None:
             return
@@ -510,98 +471,43 @@ class BalanceControllerNode(Node):
         status = (
             f"safe={safe}, reason={reason}, backend={self.policy_backend}, "
             f"command_source={self.last_command_source}, "
-            f"hardware={self.hardware_status}, "
+            f"motor_output={self.motor_output_status}, "
             f"roll={self.roll:.3f}, pitch={self.pitch:.3f}, "
             f"balance_v=({self.balance_velocity[0]:.3f},{self.balance_velocity[1]:.3f}), "
             f"out_v=({self.output_velocity[0]:.3f},{self.output_velocity[1]:.3f}), "
-            f"powers={self.last_powers.as_list()}"
+            f"motor_cmd={self.last_motor_command.tolist()}"
         )
         if self.status_pub is not None:
             self.status_pub.publish(String(data=status))
-        summary = f"{safe}:{reason}:{self.policy_backend}"
+        summary = f"{safe}:{reason}:{self.policy_backend}:{self.motor_output_status}"
         if summary != self.last_status_summary:
             self.get_logger().info(status)
             self.last_status_summary = summary
 
-    def _start_hardware(self) -> None:
-        self.hardware_status = "starting"
-        self.hardware_error = ""
-        self.bus = CanBus(
-            channel=self.can_channel,
-            interface=self.can_interface,
-            bitrate=self.can_bitrate,
-            logger=self.get_logger(),
-        )
-        self.bus.start()
-        if not self.bus.started_successfully():
-            self.hardware_status = "can_start_failed"
-            self.hardware_error = f"CAN bus unavailable on {self.can_interface}:{self.can_channel}"
-            self.get_logger().error(self.hardware_error)
+    def _send_motor_command(
+        self,
+        velocity_xy: np.ndarray,
+        yaw_rate: float,
+        state_value: float,
+    ) -> None:
+        if self.motor_client is None:
             return
 
-        try:
-            for name, motor_id in self.motor_ids.items():
-                motor = Motor(
-                    self.bus,
-                    motor_id,
-                    max_duty_cycle=self.max_duty_cycle,
-                    init_pos_path=self.init_pos_path,
-                    wait_timeout_sec=self.motor_wait_timeout_sec,
-                    logger=self.get_logger(),
-                )
-                motor.set_power(0.0)
-                if self.reset_encoders_on_start:
-                    motor.reset_encoder()
-                self.motors[name] = motor
-        except (RuntimeError, TimeoutError) as error:
-            self.hardware_status = "motor_init_failed"
-            self.hardware_error = str(error)
-            self.get_logger().error(f"Motor initialization failed: {error}")
-            self._close_hardware()
-            return
-
-        self.hardware_active = True
-        self.hardware_status = "active"
-        self.get_logger().info(
-            "Direct CAN motor output active: "
-            f"top_left={self.motor_ids['top_left']}, "
-            f"top_right={self.motor_ids['top_right']}, "
-            f"bottom={self.motor_ids['bottom']}."
-        )
-
-    def _send_motor_command(self, powers: WheelPowers) -> None:
-        if not self.hardware_active:
-            return
-
-        power_by_name = {
-            "top_left": powers.top_left,
-            "top_right": powers.top_right,
-            "bottom": powers.bottom,
-        }
-        for name, motor in self.motors.items():
-            motor.send_heartbeat()
-            motor.set_power(power_by_name[name])
-
-    def _stop_motors(self) -> None:
-        if not self.hardware_active:
-            return
-        for motor in self.motors.values():
-            motor.send_heartbeat()
-            motor.set_power(0.0)
-
-    def _close_hardware(self) -> None:
-        self.hardware_active = False
-        if self.direct_motor_output_enabled and self.hardware_status == "active":
-            self.hardware_status = "closed"
-        self.motors = {}
-        if self.bus is not None:
-            self.bus.close()
-            self.bus = None
+        if self.motor_client.send(
+            float(velocity_xy[0]),
+            float(velocity_xy[1]),
+            float(yaw_rate),
+            float(state_value),
+        ):
+            self.motor_output_status = "ipc_sent"
+        else:
+            self.motor_output_status = "ipc_unavailable"
 
     def destroy_node(self) -> bool:
-        self._stop_motors()
-        time.sleep(0.02)
-        self._close_hardware()
+        if self.motor_client is not None:
+            self.motor_client.send(0.0, 0.0, 0.0, self.stopped_state_value)
+            self.motor_client.close()
+            self.motor_client = None
         return super().destroy_node()
 
     def _fresh(self, stamp: Optional[object], timeout: Duration, now) -> bool:

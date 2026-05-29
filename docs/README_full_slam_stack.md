@@ -194,7 +194,8 @@ For the first balanced BB-8-style hardware pass on the Raspberry Pi, use:
 ```
 
 That starts Sense HAT IMU publishing, the learned balance controller, and the
-Pi low-level motor controller wired to consume `cmd_vel_balanced`.
+In reduced-ROS balanced mode, the Pi balance controller sends local Unix socket
+commands to `motor_ipc_server`, which owns `can0`/`socketcan` motor output.
 
 ## Camera-only testing
 

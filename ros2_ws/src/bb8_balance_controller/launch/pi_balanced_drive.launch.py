@@ -2,7 +2,7 @@
 """Bring up Sense HAT balance control and low-level motor output on the Pi."""
 
 from launch import LaunchDescription
-from launch.actions import DeclareLaunchArgument
+from launch.actions import DeclareLaunchArgument, ExecuteProcess
 from launch.conditions import IfCondition
 from launch.substitutions import LaunchConfiguration, PathJoinSubstitution, PythonExpression
 from launch_ros.actions import Node
@@ -43,7 +43,8 @@ def generate_launch_description() -> LaunchDescription:
     can_channel = LaunchConfiguration("can_channel")
     can_interface = LaunchConfiguration("can_interface")
     can_bitrate = LaunchConfiguration("can_bitrate")
-    direct_balance_motor_output = PythonExpression(
+    motor_command_socket_path = LaunchConfiguration("motor_command_socket_path")
+    balanced_motor_ipc_enabled = PythonExpression(
         [
             "'",
             start_motor_control,
@@ -85,6 +86,10 @@ def generate_launch_description() -> LaunchDescription:
             DeclareLaunchArgument("can_channel", default_value="can0"),
             DeclareLaunchArgument("can_interface", default_value="socketcan"),
             DeclareLaunchArgument("can_bitrate", default_value="1000000"),
+            DeclareLaunchArgument(
+                "motor_command_socket_path",
+                default_value="/tmp/b_cubed_motor_cmd.sock",
+            ),
             Node(
                 package="bb8_balance_controller",
                 executable="sense_hat_imu",
@@ -115,10 +120,11 @@ def generate_launch_description() -> LaunchDescription:
                         "output_twist_topic": balanced_cmd_topic,
                         "publish_ros_outputs": False,
                         "publish_status_topic": False,
-                        "direct_motor_output_enabled": ParameterValue(
-                            direct_balance_motor_output,
+                        "motor_output_enabled": ParameterValue(
+                            balanced_motor_ipc_enabled,
                             value_type=bool,
                         ),
+                        "motor_command_socket_path": motor_command_socket_path,
                         "imu_topic": imu_topic,
                         "roll_offset_rad": ParameterValue(
                             roll_offset_rad,
@@ -129,11 +135,29 @@ def generate_launch_description() -> LaunchDescription:
                             value_type=float,
                         ),
                         "tilt_topic": "",
-                        "can_channel": can_channel,
-                        "can_interface": can_interface,
-                        "can_bitrate": ParameterValue(can_bitrate, value_type=int),
                     },
                 ],
+            ),
+            ExecuteProcess(
+                cmd=[
+                    "ros2",
+                    "run",
+                    "low_level_runner",
+                    "motor_ipc_server",
+                    "--socket-path",
+                    motor_command_socket_path,
+                    "--can-channel",
+                    can_channel,
+                    "--can-interface",
+                    can_interface,
+                    "--can-bitrate",
+                    can_bitrate,
+                    "--init-pos-path",
+                    "~/.ros/b_cubed_motor_init_pos.json",
+                ],
+                name="motor_ipc_server",
+                output="screen",
+                condition=IfCondition(balanced_motor_ipc_enabled),
             ),
             Node(
                 package="low_level_runner",

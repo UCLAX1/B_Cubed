@@ -102,6 +102,8 @@ echo "  can_channel=$CAN_CHANNEL"
 echo "  can_interface=$CAN_INTERFACE"
 echo "  can_bitrate=$CAN_BITRATE"
 echo "  can_device=$CAN_DEVICE"
+echo "  expected_kernel=5.15"
+echo "  current_kernel=$(uname -r)"
 
 launch_args=(
   "hardware_enabled:=$HARDWARE_ENABLED"

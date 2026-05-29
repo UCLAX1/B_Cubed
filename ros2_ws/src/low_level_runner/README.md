@@ -37,6 +37,10 @@ Jetson messages and sends one zero-power command when commands go stale. The
 motor driver does not publish ROS topics; ROS 2 is only used here to receive
 Jetson commands.
 
+For reduced-ROS balanced mode, `motor_ipc_server` can run as a separate non-ROS
+process that receives Unix socket commands from the RL balance controller and
+owns `can0`/`socketcan` motor output.
+
 For a dry run:
 
 ```bash
