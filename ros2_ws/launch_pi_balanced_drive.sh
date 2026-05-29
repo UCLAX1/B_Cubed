@@ -13,6 +13,7 @@ BUILD_FIRST="${BUILD_FIRST:-false}"
 SETUP_CAN="${SETUP_CAN:-false}"
 
 START_SENSE_HAT="${START_SENSE_HAT:-true}"
+START_BALANCE_CONTROLLER="${START_BALANCE_CONTROLLER:-true}"
 START_MOTOR_CONTROL="${START_MOTOR_CONTROL:-false}"
 HARDWARE_ENABLED="${HARDWARE_ENABLED:-false}"
 ALLOW_PD_FALLBACK="${ALLOW_PD_FALLBACK:-false}"
@@ -385,6 +386,7 @@ fi
 
 launch_args=(
   "start_sense_hat:=$START_SENSE_HAT"
+  "start_balance_controller:=$START_BALANCE_CONTROLLER"
   "start_motor_control:=$START_MOTOR_CONTROL"
   "hardware_enabled:=$HARDWARE_ENABLED"
   "allow_pd_fallback:=$ALLOW_PD_FALLBACK"
@@ -414,6 +416,7 @@ echo "  dds_network_mode=${dds_network_mode:-default}"
 echo "  dds_local_address=${dds_local_address:-default}"
 echo "  current_ips=$(hostname -I)"
 echo "  start_sense_hat=$START_SENSE_HAT"
+echo "  start_balance_controller=$START_BALANCE_CONTROLLER"
 echo "  sense_hat_detach_kernel=$SENSE_HAT_DETACH_KERNEL"
 echo "  sense_hat_i2c_devices=$SENSE_HAT_I2C_DEVICES"
 echo "  start_motor_control=$START_MOTOR_CONTROL"

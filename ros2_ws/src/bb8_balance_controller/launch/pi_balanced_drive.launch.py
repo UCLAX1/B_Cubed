@@ -4,7 +4,7 @@
 from launch import LaunchDescription
 from launch.actions import DeclareLaunchArgument
 from launch.conditions import IfCondition
-from launch.substitutions import LaunchConfiguration, PathJoinSubstitution
+from launch.substitutions import LaunchConfiguration, PathJoinSubstitution, PythonExpression
 from launch_ros.actions import Node
 from launch_ros.parameter_descriptions import ParameterValue
 from launch_ros.substitutions import FindPackageShare
@@ -29,6 +29,7 @@ def generate_launch_description() -> LaunchDescription:
     )
 
     start_sense_hat = LaunchConfiguration("start_sense_hat")
+    start_balance_controller = LaunchConfiguration("start_balance_controller")
     start_motor_control = LaunchConfiguration("start_motor_control")
     policy_path = LaunchConfiguration("policy_path")
     allow_pd_fallback = LaunchConfiguration("allow_pd_fallback")
@@ -42,10 +43,29 @@ def generate_launch_description() -> LaunchDescription:
     can_channel = LaunchConfiguration("can_channel")
     can_interface = LaunchConfiguration("can_interface")
     can_bitrate = LaunchConfiguration("can_bitrate")
+    start_balanced_motor_control = PythonExpression(
+        [
+            "'",
+            start_motor_control,
+            "'.lower() in ('true', '1', 'yes', 'on') and '",
+            start_balance_controller,
+            "'.lower() in ('true', '1', 'yes', 'on')",
+        ]
+    )
+    start_direct_motor_control = PythonExpression(
+        [
+            "'",
+            start_motor_control,
+            "'.lower() in ('true', '1', 'yes', 'on') and '",
+            start_balance_controller,
+            "'.lower() not in ('true', '1', 'yes', 'on')",
+        ]
+    )
 
     return LaunchDescription(
         [
             DeclareLaunchArgument("start_sense_hat", default_value="true"),
+            DeclareLaunchArgument("start_balance_controller", default_value="true"),
             DeclareLaunchArgument("start_motor_control", default_value="true"),
             DeclareLaunchArgument(
                 "balance_params_file",
@@ -81,6 +101,7 @@ def generate_launch_description() -> LaunchDescription:
                 executable="balance_controller",
                 name="bb8_balance_controller",
                 output="screen",
+                condition=IfCondition(start_balance_controller),
                 parameters=[
                     LaunchConfiguration("balance_params_file"),
                     {
@@ -110,7 +131,7 @@ def generate_launch_description() -> LaunchDescription:
                 executable="low_level_motor_control",
                 name="low_level_motor_control",
                 output="screen",
-                condition=IfCondition(start_motor_control),
+                condition=IfCondition(start_balanced_motor_control),
                 parameters=[
                     LaunchConfiguration("motor_params_file"),
                     {
@@ -120,6 +141,27 @@ def generate_launch_description() -> LaunchDescription:
                         ),
                         "nav_cmd_topic": balanced_cmd_topic,
                         "manual_cmd_topic": "cmd_vel_manual_balance_bypass_disabled",
+                        "can_channel": can_channel,
+                        "can_interface": can_interface,
+                        "can_bitrate": ParameterValue(can_bitrate, value_type=int),
+                    },
+                ],
+            ),
+            Node(
+                package="low_level_runner",
+                executable="low_level_motor_control",
+                name="low_level_motor_control",
+                output="screen",
+                condition=IfCondition(start_direct_motor_control),
+                parameters=[
+                    LaunchConfiguration("motor_params_file"),
+                    {
+                        "hardware_enabled": ParameterValue(
+                            hardware_enabled,
+                            value_type=bool,
+                        ),
+                        "nav_cmd_topic": nav_cmd_topic,
+                        "manual_cmd_topic": manual_cmd_topic,
                         "can_channel": can_channel,
                         "can_interface": can_interface,
                         "can_bitrate": ParameterValue(can_bitrate, value_type=int),

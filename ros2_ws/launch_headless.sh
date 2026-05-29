@@ -321,6 +321,25 @@ restore_network_mode() {
   fi
 }
 
+planning_console_url_host() {
+  if [[ "$PLANNING_CONSOLE_HOST" != "0.0.0.0" && "$PLANNING_CONSOLE_HOST" != "::" ]]; then
+    printf '%s\n' "$PLANNING_CONSOLE_HOST"
+    return 0
+  fi
+
+  case "$NETWORK_MODE" in
+    hotspot)
+      printf '%s\n' "$JETSON_HOTSPOT_IP"
+      ;;
+    tailscale|wifi)
+      printf '%s\n' "$JETSON_TAILSCALE_IP"
+      ;;
+    *)
+      hostname -I | awk '{print $1}'
+      ;;
+  esac
+}
+
 launch_background() {
   local name="$1"
   shift
@@ -991,6 +1010,7 @@ mkdir -p "$ROS_LOG_DIR" "$MAP_OUTPUT_DIR"
 export ROS_DOMAIN_ID ROS_LOG_DIR RMW_IMPLEMENTATION CYCLONEDDS_URI
 trap cleanup EXIT INT TERM
 configure_network_mode
+PLANNING_CONSOLE_URL_HOST="$(planning_console_url_host)"
 
 : >"$ROS_LOG_DIR/zed_wrapper.log"
 : >"$ROS_LOG_DIR/zed_slam_nav.log"
@@ -1021,7 +1041,7 @@ echo "  cyclonedds_uri=${CYCLONEDDS_URI:-default}"
 echo "  network_mode=$NETWORK_MODE"
 echo "  map_prefix=$MAP_PREFIX"
 echo "  map_file_name=$MAP_FILE_NAME"
-echo "  web_console=http://${PLANNING_CONSOLE_HOST}:${PLANNING_CONSOLE_PORT}/"
+echo "  web_console=http://${PLANNING_CONSOLE_URL_HOST}:${PLANNING_CONSOLE_PORT}/"
 echo "  wrapper_log=$ROS_LOG_DIR/zed_wrapper.log"
 echo "  nav_log=$ROS_LOG_DIR/zed_slam_nav.log"
 echo "  required_zed_topics=$INPUT_POSE_TOPIC $INPUT_ODOM_TOPIC $CLOUD_TOPIC"
@@ -1080,7 +1100,7 @@ nav_args=(
 launch_background "zed_slam_nav" ros2 launch depth_processing zed_slam_nav.launch.py "${nav_args[@]}"
 echo "zed_slam_nav launch process started."
 echo "The stack is now running in the background; this script will keep reporting readiness."
-echo "Open the planning console at: http://${PLANNING_CONSOLE_HOST}:${PLANNING_CONSOLE_PORT}/"
+echo "Open the planning console at: http://${PLANNING_CONSOLE_URL_HOST}:${PLANNING_CONSOLE_PORT}/"
 
 report_child_status
 report_topic_status "Initial navigation topic status:" \

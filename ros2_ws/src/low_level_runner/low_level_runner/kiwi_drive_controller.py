@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import json
+import os
 from pathlib import Path
 import time
 
@@ -76,6 +77,9 @@ class KiwiDriveController(Node):
         self.motors: dict[str, Motor] = {}
         self.bus: CanBus | None = None
         self.hardware_active = False
+        self.hardware_status = "disabled"
+        self.hardware_error = ""
+        self.process_id = os.getpid()
 
         self.last_nav_cmd = _zero_twist()
         self.last_manual_cmd = _zero_twist()
@@ -206,9 +210,13 @@ class KiwiDriveController(Node):
 
     def _publish_status(self, command: Twist, powers: WheelPowers, source: str) -> None:
         status = {
+            "node": self.get_name(),
+            "pid": self.process_id,
             "source": source,
             "hardware_enabled": self.hardware_enabled,
             "hardware_active": self.hardware_active,
+            "hardware_status": self.hardware_status,
+            "hardware_error": self.hardware_error or None,
             "nav_cmd_age_sec": self._age_sec(self.last_nav_cmd_rx),
             "manual_cmd_age_sec": self._age_sec(self.last_manual_cmd_rx),
             "cmd": {
@@ -240,6 +248,8 @@ class KiwiDriveController(Node):
         return float(age.nanoseconds) / 1e9
 
     def _start_hardware(self) -> None:
+        self.hardware_status = "starting"
+        self.hardware_error = ""
         self.bus = CanBus(
             channel=self.can_channel,
             interface=self.can_interface,
@@ -248,6 +258,8 @@ class KiwiDriveController(Node):
         )
         self.bus.start()
         if not self.bus.started_successfully():
+            self.hardware_status = "can_start_failed"
+            self.hardware_error = f"CAN bus unavailable on {self.can_interface}:{self.can_channel}"
             self.get_logger().error("Running without CAN motor output.")
             return
 
@@ -266,11 +278,15 @@ class KiwiDriveController(Node):
                     motor.reset_encoder()
                 self.motors[name] = motor
         except (RuntimeError, TimeoutError) as error:
+            self.hardware_status = "motor_init_failed"
+            self.hardware_error = str(error)
             self.get_logger().error(f"Motor initialization failed: {error}")
             self._close_hardware()
             return
 
         self.hardware_active = True
+        self.hardware_status = "active"
+        self.hardware_error = ""
         self.get_logger().info(
             "Motor output enabled with IDs "
             f"top_left={self.motor_ids['top_left']}, "
@@ -287,6 +303,8 @@ class KiwiDriveController(Node):
 
     def _close_hardware(self) -> None:
         self.hardware_active = False
+        if self.hardware_enabled and self.hardware_status == "active":
+            self.hardware_status = "closed"
         self.motors = {}
         if self.bus is not None:
             self.bus.close()
