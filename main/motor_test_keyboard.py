@@ -145,7 +145,7 @@ class App:
         self.top_right_wheel_velocity: float = 0.0
         self.bottom_wheel_velocity: float = 0.0
 
-        self.bus: CanBus = CanBus(channel='COM5', interface='slcan', bitrate=1000000)
+        self.bus: CanBus = CanBus(channel='can0', interface='socketcan', bitrate=1000000)
         self.bus.start()
 
         if not self.bus.started_successfully():
@@ -241,9 +241,11 @@ class App:
 
 
         self.bot_angular_velocity += self.ANGULAR_VELOCITY_INPUT_CHANGE_RATE * dt * (self.input_handler.ccw_pressed - self.input_handler.cw_pressed)
-
+        
+        
+        print("setting motor vel")
         self.set_motors(self.bot_velocity, self.bot_angular_velocity)
-
+        print("set motor vel")
     def draw(self):
         self.screen.fill((0, 0, 0))
 
