@@ -5,6 +5,7 @@ import pygame
 from pygame.locals import *
 # https://stackoverflow.com/questions/12049154/python-numpy-vector-math
 import numpy as np
+# import keyboard
 
 # tasks:
 # 1. see which power maps to which motor speed (figure out units)
@@ -30,6 +31,9 @@ def exit_gracefully():
 def normalize_angle(angle: float) -> float:
     return (angle + np.pi) % (2 * np.pi) - np.pi
 
+def flip_y(vec: np.ndarray, axis_y: float) -> np.ndarray:
+    return np.array([vec[0], 2 * axis_y - vec[1]])
+
 
 class InputHandler:
 
@@ -39,8 +43,8 @@ class InputHandler:
         # self.left_pressed: bool = False
         # self.right_pressed: bool = False
         #
-        # self.cw_pressed: bool = False
-        # self.ccw_pressed: bool = False
+        self.cw_pressed: bool = False
+        self.ccw_pressed: bool = False
 
         self.mouse_pressed: bool = False
 
@@ -63,8 +67,85 @@ class InputHandler:
             if event.type == KEYUP:
                 pass
 
-
         self.mouse_pos = np.array(pygame.mouse.get_pos())
+
+class ServoControllerWindow:
+
+    DEAD_ZONE_MIDDLE_ANGLE = np.deg2rad(180)
+    SERVO_RANGE = np.deg2rad(270)
+    print("set servo range: ", np.rad2deg(SERVO_RANGE))
+    DEAD_ZONE_RANGE = 2 * np.pi - SERVO_RANGE
+    print("set dead-zone range: ", np.rad2deg(DEAD_ZONE_RANGE))
+    DEAD_ZONE_CW_ANGLE = normalize_angle(DEAD_ZONE_MIDDLE_ANGLE - DEAD_ZONE_RANGE / 2)
+    # print("set dead-zone cw angle: ", np.rad2deg(DEAD_ZONE_CW_ANGLE))
+    DEAD_ZONE_CCW_ANGLE = normalize_angle(DEAD_ZONE_MIDDLE_ANGLE + DEAD_ZONE_RANGE / 2)
+    # print("set dead-zone ccw angle: ", np.rad2deg(DEAD_ZONE_CCW_ANGLE))
+
+    CIRCLE_WIDTH = 2
+
+    def __init__(self, screen, servo: ServoEx, input_handler: InputHandler, display_middle_coord: np.ndarray, display_radius: float):
+
+        self.servo = servo
+
+        self.input_handler = input_handler
+        self.display_middle_coord = display_middle_coord
+        self.display_radius = display_radius
+        self.screen = screen
+
+        self.mouse_vec: np.ndarray = np.array([0.0, 0.0])
+
+        # self.servo: ServoEx = ServoEx(servo_pin=16, encoder_pin_a=26, encoder_pin_b=6, absolute_encoder_pin=5)
+
+        # servo_vec for drawing and stuff
+        self.servo_vec: np.ndarray = np.array([0.0, 0.0])
+        # self.current_position: float = servo.get_position()
+        # self.current_absolute_position: float = servo.get_absolute_position()
+
+
+        # requested servo angle in radians (0 is straight up)
+        self.requested_servo_angle: float = 0.0
+
+    def update(self):
+
+        self.servo.update()
+
+        self.mouse_vec = (self.input_handler.mouse_pos - self.display_middle_coord)
+        self.mouse_vec = np.array([self.mouse_vec[0], -self.mouse_vec[1]])
+
+        # self.servo_angle = np.arctan2(self.mouse_vec)
+
+        if self.input_handler.mouse_pressed and np.linalg.norm(self.mouse_vec) < self.display_radius:
+
+            self.servo_vec = self.mouse_vec / np.linalg.norm(self.mouse_vec)
+
+            self.requested_servo_angle = np.arctan2(self.servo_vec[1], self.servo_vec[0])
+            # change the zero
+            self.requested_servo_angle -= np.pi / 2
+            # wrap to -pi to pi
+            self.requested_servo_angle = normalize_angle(self.requested_servo_angle)
+
+            if self.requested_servo_angle > self.DEAD_ZONE_CW_ANGLE:
+                self.requested_servo_angle = self.DEAD_ZONE_CW_ANGLE
+            if self.requested_servo_angle < self.DEAD_ZONE_CCW_ANGLE:
+                self.requested_servo_angle = self.DEAD_ZONE_CCW_ANGLE
+
+            self.servo.set_position(self.requested_servo_angle)
+
+    def draw(self):
+        # draw cyan dead zone lines
+        pygame.draw.line(self.screen, (0, 255, 255), self.display_middle_coord, flip_y(self.display_middle_coord + np.array([-np.sin(self.DEAD_ZONE_CW_ANGLE), np.cos(self.DEAD_ZONE_CW_ANGLE)]) * self.display_radius, self.display_middle_coord[1]), 2)
+        pygame.draw.line(self.screen, (0, 255, 255), self.display_middle_coord, flip_y(self.display_middle_coord + np.array([-np.sin(self.DEAD_ZONE_CCW_ANGLE), np.cos(self.DEAD_ZONE_CCW_ANGLE)]) * self.display_radius, self.display_middle_coord[1]), 2)
+
+        # draw white circle
+        pygame.draw.circle(self.screen, (255, 255, 255), self.display_middle_coord, self.display_radius - self.CIRCLE_WIDTH, self.CIRCLE_WIDTH)
+
+        # pygame.draw.line(self.screen, (255, 0, 0), self.CIRCLE_MIDDLE_COORD, self.flip_y(self.CIRCLE_MIDDLE_COORD + self.DRAW_SCALE * self.servo_vec, self.CIRCLE_MIDDLE_COORD[1]), 5)
+
+        # draw red line
+        requested_servo_vec = np.array([-np.sin(self.requested_servo_angle), np.cos(self.requested_servo_angle)])
+        pygame.draw.line(self.screen, (255, 0, 0), self.display_middle_coord, flip_y(self.display_middle_coord + requested_servo_vec * self.display_radius, self.display_middle_coord[1]), 5)
+
+
 
 
 
@@ -80,15 +161,6 @@ class App:
     TARGET_UPDATES_PER_SECOND: float = 240.0
     TARGET_SECONDS_PER_UPDATE: float = 1.0 / TARGET_UPDATES_PER_SECOND
 
-    DEAD_ZONE_MIDDLE_ANGLE = np.deg2rad(180)
-    SERVO_RANGE = np.deg2rad(270)
-    print("set servo range: ", np.rad2deg(SERVO_RANGE))
-    DEAD_ZONE_RANGE = 2 * np.pi - SERVO_RANGE
-    print("set dead-zone range: ", np.rad2deg(DEAD_ZONE_RANGE))
-    DEAD_ZONE_CW_ANGLE = normalize_angle(DEAD_ZONE_MIDDLE_ANGLE - DEAD_ZONE_RANGE / 2)
-    # print("set dead-zone cw angle: ", np.rad2deg(DEAD_ZONE_CW_ANGLE))
-    DEAD_ZONE_CCW_ANGLE = normalize_angle(DEAD_ZONE_MIDDLE_ANGLE + DEAD_ZONE_RANGE / 2)
-    # print("set dead-zone ccw angle: ", np.rad2deg(DEAD_ZONE_CCW_ANGLE))
 
     def __init__(self):
         # timer in seconds
@@ -100,19 +172,6 @@ class App:
         self.accumulator: float = 0.0
 
         self.input_handler = InputHandler()
-        self.mouse_vec: np.ndarray = np.array([0.0, 0.0])
-
-        # self.servo: ServoEx = ServoEx(servo_pin=16, encoder_pin_a=26, encoder_pin_b=6, absolute_encoder_pin=5)
-
-        # servo_vec for drawing and stuff
-        self.servo_vec: np.ndarray = np.array([0.0, 0.0])
-        # self.current_position: float = servo.get_position()
-        # self.current_absolute_position: float = servo.get_absolute_position()
-
-
-        # requested servo angle in radians (0 is straight up)
-        self.requested_servo_angle: float = 0.0
-
 
 
         # https://stackoverflow.com/questions/13207678/whats-the-simplest-way-of-detecting-keyboard-input-in-a-script-from-the-termina
@@ -125,14 +184,13 @@ class App:
         pygame.display.set_caption('Pygame Servo Test')
         pygame.mouse.set_visible(1)
 
-        # 0: top left wheel
-        # 1: top right wheel
-        # 2: bottom wheel
-        # TODO: make this work
-        # self.wheel_velocities: np.ndarray = np.array([0.0, 0.0, 0.0])
+        # servo = ServoEx(servo_pin=16, encoder_pin_a=26, encoder_pin_b=6, absolute_encoder_pin=5)
+        # servo = ServoEx(servo_pin=16, encoder_pin_a=26, encoder_pin_b=6, absolute_encoder_pin=5)
 
-    def flip_y(self, vec: np.ndarray, axis_y: float = MIDDLE_COORD[1]) -> np.ndarray:
-        return np.array([vec[0], 2 * axis_y - vec[1]])
+        self.servo_controller_windows: list[ServoControllerWindow] = []
+        self.servo_controller_windows.append(ServoControllerWindow(self.screen, None, self.input_handler, np.array([1.0 * self.WINDOW_SIZE[0] / 3.0, self.WINDOW_SIZE[1] / 2.0]), self.WINDOW_SIZE[0] / 6.0))
+        self.servo_controller_windows.append(ServoControllerWindow(self.screen, None, self.input_handler, np.array([2.0 * self.WINDOW_SIZE[0] / 3.0, self.WINDOW_SIZE[1] / 2.0]), self.WINDOW_SIZE[0] / 6.0))
+
 
     def run(self):
         try:
@@ -164,23 +222,10 @@ class App:
 
         self.input_handler.get_input()
 
-        self.mouse_vec = (self.input_handler.mouse_pos - self.CIRCLE_MIDDLE_COORD) / self.DRAW_SCALE
-        self.mouse_vec = np.array([self.mouse_vec[0], -self.mouse_vec[1]])
 
-        # self.servo_angle = np.arctan2(self.mouse_vec)
+        for servo_controller_window in self.servo_controller_windows:
+            servo_controller_window.update()
 
-        if self.input_handler.mouse_pressed:
-            self.servo_vec = self.mouse_vec / np.linalg.norm(self.mouse_vec)
-            self.requested_servo_angle = np.arctan2(self.servo_vec[1], self.servo_vec[0])
-            # change the zero
-            self.requested_servo_angle -= np.pi / 2
-            # wrap to -pi to pi
-            self.requested_servo_angle = normalize_angle(self.requested_servo_angle)
-
-            if self.requested_servo_angle > self.DEAD_ZONE_CW_ANGLE:
-                self.requested_servo_angle = self.DEAD_ZONE_CW_ANGLE
-            if self.requested_servo_angle < self.DEAD_ZONE_CCW_ANGLE:
-                self.requested_servo_angle = self.DEAD_ZONE_CCW_ANGLE
 
 
 
@@ -188,21 +233,18 @@ class App:
     def draw(self):
         self.screen.fill((0, 0, 0))
 
+        for servo_controller_window in self.servo_controller_windows:
+            servo_controller_window.draw()
+
         # intersection_a_scalar = np.dot(self.TOP_RIGHT_VEC, self.TOP_RIGHT_VEC - self.TOP_LEFT_VEC) / np.cross(self.TOP_RIGHT_VEC, self.TOP_LEFT_VEC)
         # intersection_a = self.TOP_LEFT_VEC + intersection_a_scalar * np.array(-self.TOP_LEFT_VEC[1], self.TOP_LEFT_VEC[0])
         # pygame.draw.circle(self.screen, (0, 255, 255), self.DRAW_SCALE * self.flip_y(intersection_a), 4, 2)
 
         # vec to use to draw the servo angle
-        servo_angle_vec: np.ndarray = np.array([0.0, 0.0])
+        # servo_angle_vec: np.ndarray = np.array([0.0, 0.0])
 
-        pygame.draw.circle(self.screen, (255, 255, 255), self.CIRCLE_MIDDLE_COORD, self.DRAW_SCALE - 2, 2)
-
-        # pygame.draw.line(self.screen, (255, 0, 0), self.CIRCLE_MIDDLE_COORD, self.flip_y(self.CIRCLE_MIDDLE_COORD + self.DRAW_SCALE * self.servo_vec, self.CIRCLE_MIDDLE_COORD[1]), 5)
-
-        requested_servo_vec = np.array([-np.sin(self.requested_servo_angle), np.cos(self.requested_servo_angle)])
-        pygame.draw.line(self.screen, (255, 0, 0), self.CIRCLE_MIDDLE_COORD, self.flip_y(self.CIRCLE_MIDDLE_COORD + self.DRAW_SCALE * requested_servo_vec, self.CIRCLE_MIDDLE_COORD[1]), 5)
-        text_surface = self.FONT.render("requested angle: " + str(self.requested_servo_angle), False, (255, 255, 255))
-        self.screen.blit(text_surface, (0,0))
+        # text_surface = self.FONT.render("requested angle: " + str(self.requested_servo_angle), False, (255, 255, 255))
+        # self.screen.blit(text_surface, (0,0))
         #
         # pygame.draw.line(self.screen, (0, 255, 0), self.flip_y(self.TOP_LEFT_WHEEL_COORD), self.flip_y(self.TOP_LEFT_WHEEL_COORD + self.DRAW_SCALE * self.top_left_speed * self.TOP_LEFT_VEC), 5)
         # pygame.draw.line(self.screen, (0, 255, 0), self.flip_y(self.TOP_RIGHT_WHEEL_COORD), self.flip_y(self.TOP_RIGHT_WHEEL_COORD + self.DRAW_SCALE * self.top_right_speed * self.TOP_RIGHT_VEC), 5)

@@ -125,6 +125,9 @@ class ServoEx(Servo):
 
         print(f"absolute encoder connected {self.absolute_encoder.pin}")
 
+    def set_position(self, position: float):
+        self.value = position
+
     # returns position
     def get_position(self) -> float:
         return self.encoder.steps / self.COUNTS_PER_REVOLUTION
