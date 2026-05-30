@@ -16,6 +16,9 @@ START_SENSE_HAT="${START_SENSE_HAT:-true}"
 START_BALANCE_CONTROLLER="${START_BALANCE_CONTROLLER:-true}"
 START_MOTOR_CONTROL="${START_MOTOR_CONTROL:-false}"
 HARDWARE_ENABLED="${HARDWARE_ENABLED:-false}"
+MOSFET_POWER_ENABLED="${MOSFET_POWER_ENABLED:-$HARDWARE_ENABLED}"
+MOSFET_GPIO_PIN="${MOSFET_GPIO_PIN:-16}"
+MOSFET_ACTIVE_LOW="${MOSFET_ACTIVE_LOW:-false}"
 ALLOW_PD_FALLBACK="${ALLOW_PD_FALLBACK:-false}"
 SENSE_HAT_DETACH_KERNEL="${SENSE_HAT_DETACH_KERNEL:-true}"
 SENSE_HAT_I2C_DEVICES="${SENSE_HAT_I2C_DEVICES:-1-001c 1-005c 1-006a}"
@@ -47,6 +50,7 @@ CYCLONEDDS_CONFIG_PATH="${CYCLONEDDS_CONFIG_PATH:-$HOME/cyclonedds.xml}"
 RMW_IMPLEMENTATION="${RMW_IMPLEMENTATION:-rmw_cyclonedds_cpp}"
 ROS_DOMAIN_ID="${ROS_DOMAIN_ID:-0}"
 launch_pid=""
+mosfet_guard_pid=""
 dds_network_mode=""
 dds_local_address=""
 dds_peer_addresses=()
@@ -83,6 +87,41 @@ setup_can_interface() {
   "${sudo_cmd[@]}" ip link set "$CAN_CHANNEL" down >/dev/null 2>&1 || true
   "${sudo_cmd[@]}" ip link set "$CAN_CHANNEL" type can bitrate "$CAN_BITRATE"
   "${sudo_cmd[@]}" ip link set "$CAN_CHANNEL" up
+}
+
+start_mosfet_power_guard() {
+  if ! bool_is_true "$MOSFET_POWER_ENABLED"; then
+    return 0
+  fi
+
+  local guard_args=("--pin" "$MOSFET_GPIO_PIN")
+  if bool_is_true "$MOSFET_ACTIVE_LOW"; then
+    guard_args+=("--active-low")
+  fi
+
+  echo "Starting MOSFET power guard on GPIO $MOSFET_GPIO_PIN..."
+  python3 "$WS_DIR/mosfet_power_guard.py" "${guard_args[@]}" &
+  mosfet_guard_pid="$!"
+  sleep 0.5
+
+  if ! kill -0 "$mosfet_guard_pid" >/dev/null 2>&1; then
+    wait "$mosfet_guard_pid" || true
+    echo "MOSFET power guard failed to start." >&2
+    exit 1
+  fi
+}
+
+stop_mosfet_power_guard() {
+  if [[ -z "$mosfet_guard_pid" ]]; then
+    return 0
+  fi
+
+  if kill -0 "$mosfet_guard_pid" >/dev/null 2>&1; then
+    echo "Stopping MOSFET power guard..."
+    kill -TERM "$mosfet_guard_pid" >/dev/null 2>&1 || true
+    wait "$mosfet_guard_pid" >/dev/null 2>&1 || true
+  fi
+  mosfet_guard_pid=""
 }
 
 detach_sense_hat_kernel_drivers() {
@@ -251,6 +290,7 @@ cleanup() {
       kill -TERM "$launch_pid" >/dev/null 2>&1 || true
     fi
   fi
+  stop_mosfet_power_guard
   wait >/dev/null 2>&1 || true
 }
 
@@ -406,6 +446,7 @@ if [[ -n "${POLICY_PATH//[[:space:]]/}" ]]; then
 fi
 
 trap cleanup EXIT INT TERM
+start_mosfet_power_guard
 
 echo "B_Cubed Pi balanced drive launch"
 echo "  ros_domain_id=${ROS_DOMAIN_ID:-default}"
@@ -421,6 +462,8 @@ echo "  sense_hat_detach_kernel=$SENSE_HAT_DETACH_KERNEL"
 echo "  sense_hat_i2c_devices=$SENSE_HAT_I2C_DEVICES"
 echo "  start_motor_control=$START_MOTOR_CONTROL"
 echo "  hardware_enabled=$HARDWARE_ENABLED"
+echo "  mosfet_power_enabled=$MOSFET_POWER_ENABLED"
+echo "  mosfet_gpio_pin=$MOSFET_GPIO_PIN"
 echo "  nav_cmd_topic=$NAV_CMD_TOPIC"
 echo "  manual_cmd_topic=$MANUAL_CMD_TOPIC"
 echo "  balanced_cmd_topic=$BALANCED_CMD_TOPIC"

@@ -110,10 +110,23 @@ NETWORK_MODE=tailscale \
 ./launch_headless.sh --mapping
 ```
 
+
+Use this for hotspot operation
+```bash
+ssh ubuntu
+cd ~/Documents/B_Cubed/ros2_ws
+
+ROS_DOMAIN_ID=0 \
+RMW_IMPLEMENTATION=rmw_cyclonedds_cpp \
+PLANNING_CONSOLE_HOST=0.0.0.0 \
+NETWORK_MODE=hotspot \
+./launch_headless.sh --mapping
+```
+
 Open the web console from another computer:
 
 ```text
-http://100.86.7.33:8080/
+http://10.42.0.1:8080/
 ```
 
 Use this when the Jetson should switch to hotspot mode.
@@ -185,6 +198,13 @@ SETUP_CAN=false \
 STATUS_INTERVAL_SEC=5 \
 COMMAND_MONITOR_SHOW_MISSING=summary \
 ./launch_pi_balanced_drive.sh --auto
+```
+
+When `HARDWARE_ENABLED=true`, the Pi launch turns the MOSFET on with BCM GPIO `16` (physical pin `36`) before starting the ROS motor stack. On `Ctrl-C`, systemd stop, or launch exit, it turns the MOSFET off. Override with:
+
+```bash
+MOSFET_POWER_ENABLED=false ./launch_pi_balanced_drive.sh --hotspot
+MOSFET_GPIO_PIN=16 ./launch_pi_balanced_drive.sh --hotspot
 ```
 
 Force Tailscale mode:
