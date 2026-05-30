@@ -33,6 +33,7 @@ def generate_launch_description() -> LaunchDescription:
     start_motor_control = LaunchConfiguration("start_motor_control")
     policy_path = LaunchConfiguration("policy_path")
     allow_pd_fallback = LaunchConfiguration("allow_pd_fallback")
+    allow_missing_imu = LaunchConfiguration("allow_missing_imu")
     hardware_enabled = LaunchConfiguration("hardware_enabled")
     nav_cmd_topic = LaunchConfiguration("nav_cmd_topic")
     manual_cmd_topic = LaunchConfiguration("manual_cmd_topic")
@@ -76,6 +77,7 @@ def generate_launch_description() -> LaunchDescription:
             DeclareLaunchArgument("motor_params_file", default_value=default_motor_params),
             DeclareLaunchArgument("policy_path", default_value=default_policy),
             DeclareLaunchArgument("allow_pd_fallback", default_value="false"),
+            DeclareLaunchArgument("allow_missing_imu", default_value="false"),
             DeclareLaunchArgument("hardware_enabled", default_value="true"),
             DeclareLaunchArgument("nav_cmd_topic", default_value="cmd_vel"),
             DeclareLaunchArgument("manual_cmd_topic", default_value="cmd_vel_manual"),
@@ -113,6 +115,16 @@ def generate_launch_description() -> LaunchDescription:
                         "policy_path": policy_path,
                         "allow_pd_fallback": ParameterValue(
                             allow_pd_fallback,
+                            value_type=bool,
+                        ),
+                        "require_attitude": ParameterValue(
+                            PythonExpression(
+                                [
+                                    "'",
+                                    allow_missing_imu,
+                                    "'.lower() not in ('true', '1', 'yes', 'on')",
+                                ]
+                            ),
                             value_type=bool,
                         ),
                         "nav_cmd_topic": nav_cmd_topic,
