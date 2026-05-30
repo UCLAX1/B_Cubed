@@ -1,6 +1,3 @@
-from gpiozero import Servo
-from gpiozero import RotaryEncoder
-# from gpiozero import GPIODevice
 from gpiozero import DigitalInputDevice
 import time
 import math
@@ -21,7 +18,9 @@ class AbsoluteEncoder:
         self.position: float = 0
 
         self.__input_device = DigitalInputDevice(pin)
-        self.__time_activated: float = 0
+        self.__input_device.when_activated = self.on_activated
+        self.__input_device.when_deactivated = self.on_deactivated
+        self.__time_activated: float = 0.0
         self.__previous_value: int = 0
         self.__current_value: int = 0
         self.__position_history: list[float] = []
@@ -29,34 +28,62 @@ class AbsoluteEncoder:
     def is_active(self):
         return self.__input_device.is_active
 
+    def on_activated(self):
+        self.__time_activated = time.time()
+
+    def on_deactivated(self):
+        dt = time.time() - self.__time_activated
+
+        # sanity check: if dt is too unreasonable then don't do anything
+        if dt > 0.005:
+            return
+
+        new_position = dt * 1000
+        # if the position is too close to the zero, it starts going way past 1.0
+        # clamp new_position from 0.0 to 1.0
+        new_position = np.clip(new_position, 0.0, 1.0)
+
+        # save position history
+        if len(self.__position_history) >= self.POSITION_HISTORY_MAX_SIZE:
+            self.__position_history = self.__position_history[1:]
+            # [1, 2, 3, 4, 5]
+            # VVV
+            # [2, 3, 4, 5]
+
+        self.__position_history.append(new_position)
+
+        # set position to average of position history
+        self.position = sum(self.__position_history) / len(self.__position_history)
+
     def update(self):
-        self.__current_value = self.__input_device.value
-
-        # rising edge
-        if self.__current_value == 1 and self.__previous_value == 0:
-            self.__time_activated = time.time()
-
-        # falling edge
-        if self.__current_value == 0 and self.__previous_value == 1:
-            dt = time.time() - self.__time_activated
-            new_position = dt * 1000
-            # if the position is too close to the zero, it starts going way past 1.0
-            # clamp new_position from 0.0 to 1.0
-            new_position = np.clip(new_position, 0.0, 1.0)
-
-            # save position history
-            if len(self.__position_history) >= self.POSITION_HISTORY_MAX_SIZE:
-                self.__position_history = self.__position_history[1:]
-                # [1, 2, 3, 4, 5]
-                # VVV
-                # [2, 3, 4, 5]
-
-            self.__position_history.append(new_position)
-
-            # set position to average of position history
-            self.position = sum(self.__position_history) / len(self.__position_history)
-
-        self.__previous_value = self.__current_value
+        pass
+        # self.__current_value = self.__input_device.value
+        #
+        # # rising edge
+        # if self.__current_value == 1 and self.__previous_value == 0:
+        #     self.__time_activated = time.time()
+        #
+        # # falling edge
+        # if self.__current_value == 0 and self.__previous_value == 1:
+        #     dt = time.time() - self.__time_activated
+        #     new_position = dt * 1000
+        #     # if the position is too close to the zero, it starts going way past 1.0
+        #     # clamp new_position from 0.0 to 1.0
+        #     new_position = np.clip(new_position, 0.0, 1.0)
+        #
+        #     # save position history
+        #     if len(self.__position_history) >= self.POSITION_HISTORY_MAX_SIZE:
+        #         self.__position_history = self.__position_history[1:]
+        #         # [1, 2, 3, 4, 5]
+        #         # VVV
+        #         # [2, 3, 4, 5]
+        #
+        #     self.__position_history.append(new_position)
+        #
+        #     # set position to average of position history
+        #     self.position = sum(self.__position_history) / len(self.__position_history)
+        #
+        # self.__previous_value = self.__current_value
 
 class CRServoEx(ServoBase):
 
@@ -79,21 +106,18 @@ class CRServoEx(ServoBase):
     def __init__(self, servo_pin: int, encoder_pin_a: int, encoder_pin_b: int, absolute_encoder_pin: int):
         super().__init__(servo_pin, encoder_pin_a, encoder_pin_b)
 
+        self.absolute_encoder = AbsoluteEncoder(pin=absolute_encoder_pin)
+        self.wait_for_absolute_encoders_active()
+
         self.pid_controller: PIDController = PIDController(self.kP, self.kI, self.kD)
 
-        self.absolute_encoder = AbsoluteEncoder(pin=absolute_encoder_pin)
         self.time_position_last_centered: float = 0
 
-        self.__wait_for_active(encoder_pin_a, encoder_pin_b)
+        # offset between actual position and absolute encoder position in steps
+        self.encoder_position_offset = 0.0
 
-        # create file if it doesn't exist
-        if not os.path.exists(self.INIT_POS_FILE):
-            self.save_encoder_position()
 
-        self.load_encoder_position()
-
-    def wait_for_active(self, encoder_pin_a: int, encoder_pin_b: int):
-        super().wait_for_active(encoder_pin_a, encoder_pin_b)
+    def wait_for_absolute_encoders_active(self):
 
         print(f"waiting for absolute encoder {self.absolute_encoder.pin}")
         # max_wait = 3
@@ -107,17 +131,23 @@ class CRServoEx(ServoBase):
 
         print(f"absolute encoder connected {self.absolute_encoder.pin}")
 
+    # returns position including the encoder position offset, USE THIS!
+    def get_position(self) -> float:
+        return (self.encoder.steps + self.encoder_position_offset) / self.COUNTS_PER_REVOLUTION
+
+    def get_position_radians(self) -> float:
+        return self.get_position() * 2.0 * math.pi
+
     def get_absolute_position(self) -> float:
         return self.absolute_encoder.position
 
     def get_absolute_position_radians(self) -> float:
-        return self.absolute_encoder.position * 2.0 * math.pi
+        return self.get_absolute_position() * 2.0 * math.pi
 
     # call in main loop, dt is delta time
     def update(self, dt: float):
-        super().update()
 
-        control = self.pid_controller.update(dt, self.get_absolute_position())
+        control = self.pid_controller.update(dt, self.get_position())
         self.set_velocity(control)
 
         self.update_absolute_encoder()
@@ -152,12 +182,12 @@ class CRServoEx(ServoBase):
 
         # how much greater absolute position is from encoder position
         position_difference = self.get_absolute_position() - mod_position
-        self.encoder.steps += position_difference * self.COUNTS_PER_REVOLUTION
+        self.encoder_position_offset += position_difference * self.COUNTS_PER_REVOLUTION
 
     def save_encoder_position(self):
-        data = {}
+        data = self.get_data_from_servo_init_pos_file()
 
-        data[str(self.pin)] = self.encoder.steps
+        data[str(self.pin)] = self.encoder.steps + self.encoder_position_offset
 
         with open(self.INIT_POS_FILE, "w") as f:
             json.dump(data, f, indent=2)
@@ -168,7 +198,7 @@ class CRServoEx(ServoBase):
         if os.path.exists(self.INIT_POS_FILE):
             with open(self.INIT_POS_FILE, "r") as f:
                 data = json.load(f)
-                self.encoder.steps = data.get(str(self.pin), 0)
+                self.encoder_position_offset = data.get(str(self.pin), 0)
 
     def reset_encoder_position(self):
 

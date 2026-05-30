@@ -1,11 +1,8 @@
 from gpiozero import Servo
 from gpiozero import RotaryEncoder
-# from gpiozero import GPIODevice
-from gpiozero import DigitalInputDevice
 import time
 import math
 import json
-import numpy as np
 import os
 
 class ServoBase(Servo):
@@ -23,7 +20,7 @@ class ServoBase(Servo):
 
         self.pin = servo_pin
 
-        self.wait_for_active(encoder_pin_a, encoder_pin_b)
+        self.wait_for_encoders_a_b_active(encoder_pin_a, encoder_pin_b)
 
         # create file if it doesn't exist
         if not os.path.exists(self.INIT_POS_FILE):
@@ -31,7 +28,7 @@ class ServoBase(Servo):
 
         self.load_encoder_position()
 
-    def wait_for_active(self, encoder_pin_a: int, encoder_pin_b: int):
+    def wait_for_encoders_a_b_active(self, encoder_pin_a: int, encoder_pin_b: int):
         print(f"waiting for servo {self.pin}")
         # max_wait = 3
         max_wait = 10000
@@ -44,17 +41,17 @@ class ServoBase(Servo):
 
         print(f"servo connected {self.pin}")
 
-        print(f"waiting for encoder a: {encoder_pin_a}, b: {encoder_pin_b}")
-        # max_wait = 3
-        max_wait = 10000
-        start = time.time()
-        while not self.is_active:
-            if time.time() - start > max_wait:
-                print(f"WARNING: Timeout waiting for encoder to activate.")
-                raise Exception("encoder not connected")
-            time.sleep(0.05)
-
-        print(f"encoder connected")
+        # print(f"waiting for encoder a: {encoder_pin_a}, b: {encoder_pin_b}")
+        # # max_wait = 3
+        # max_wait = 10000
+        # start = time.time()
+        # while not self.is_active:
+        #     if time.time() - start > max_wait:
+        #         print(f"WARNING: Timeout waiting for encoder to activate.")
+        #         raise Exception("encoder not connected")
+        #     time.sleep(0.05)
+        #
+        # print(f"encoder connected")
 
     def set_position(self, position: float):
         self.value = position
@@ -64,7 +61,7 @@ class ServoBase(Servo):
         return self.encoder.steps / self.COUNTS_PER_REVOLUTION
 
     def get_position_radians(self) -> float:
-        return (self.encoder.steps / self.COUNTS_PER_REVOLUTION) * 2.0 * math.pi
+        return self.get_position() * 2.0 * math.pi
 
     def save_encoder_position(self):
         data = {}
