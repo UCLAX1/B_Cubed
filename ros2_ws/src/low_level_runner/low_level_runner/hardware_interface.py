@@ -198,8 +198,13 @@ class Motor:
             raise RuntimeError("CAN bus is not started.")
 
         start = time.monotonic()
+        next_heartbeat = 0.0
         while self.can_bus.motor_pos[self.motor_id] is None:
-            if time.monotonic() - start > self.wait_timeout_sec:
+            now = time.monotonic()
+            if now >= next_heartbeat:
+                self.send_heartbeat()
+                next_heartbeat = now + 0.10
+            if now - start > self.wait_timeout_sec:
                 raise TimeoutError(
                     f"Timed out waiting for motor {self.motor_id} encoder status."
                 )

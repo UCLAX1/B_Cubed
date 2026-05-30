@@ -114,7 +114,7 @@ detach_sense_hat_kernel_drivers() {
   echo "Detaching Sense HAT kernel drivers..."
   for device in $SENSE_HAT_I2C_DEVICES; do
     unbind_path="/sys/bus/i2c/devices/$device/driver/unbind"
-    if [[ -w "$unbind_path" || -e "$unbind_path" ]]; then
+    if [[ -L "/sys/bus/i2c/devices/$device/driver" ]]; then
       if printf '%s\n' "$device" | "${sudo_cmd[@]}" tee "$unbind_path" >/dev/null 2>&1; then
         echo "  detached $device"
       else
