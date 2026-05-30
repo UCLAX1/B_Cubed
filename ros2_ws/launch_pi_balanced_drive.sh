@@ -17,9 +17,8 @@ START_SENSE_HAT="${START_SENSE_HAT:-true}"
 START_BALANCE_CONTROLLER="${START_BALANCE_CONTROLLER:-true}"
 START_MOTOR_CONTROL="${START_MOTOR_CONTROL:-false}"
 HARDWARE_ENABLED="${HARDWARE_ENABLED:-false}"
-MOSFET_POWER_ENABLED="${MOSFET_POWER_ENABLED:-$HARDWARE_ENABLED}"
-MOSFET_GPIO_PIN="${MOSFET_GPIO_PIN:-16}"
 ALLOW_PD_FALLBACK="${ALLOW_PD_FALLBACK:-false}"
+ALLOW_MISSING_IMU="${ALLOW_MISSING_IMU:-false}"
 SENSE_HAT_DETACH_KERNEL="${SENSE_HAT_DETACH_KERNEL:-true}"
 SENSE_HAT_I2C_DEVICES="${SENSE_HAT_I2C_DEVICES:-1-001c 1-005c 1-006a}"
 
@@ -52,7 +51,6 @@ CYCLONEDDS_CONFIG_PATH="${CYCLONEDDS_CONFIG_PATH:-$HOME/cyclonedds.xml}"
 RMW_IMPLEMENTATION="${RMW_IMPLEMENTATION:-rmw_cyclonedds_cpp}"
 ROS_DOMAIN_ID="${ROS_DOMAIN_ID:-0}"
 launch_pid=""
-mosfet_guard_pid=""
 dds_network_mode=""
 dds_local_address=""
 dds_peer_addresses=()
@@ -105,64 +103,13 @@ setup_can_interface() {
   ip -details link show "$CAN_CHANNEL"
 }
 
-start_mosfet_power_guard() {
-  if ! bool_is_true "$MOSFET_POWER_ENABLED"; then
-    return 0
-  fi
-
-  echo "Turning MOSFET ON (BCM GPIO $MOSFET_GPIO_PIN)"
-  python3 -c '
-import signal
-import sys
-from time import sleep
-
-from gpiozero import DigitalOutputDevice
-
-pin = int(sys.argv[1])
-mosfet = DigitalOutputDevice(pin)
-
-def stop(_signum=None, _frame=None):
-    print(f"Turning MOSFET OFF (BCM GPIO {pin})", flush=True)
-    mosfet.off()
-    mosfet.close()
-    raise SystemExit(0)
-
-signal.signal(signal.SIGINT, stop)
-signal.signal(signal.SIGTERM, stop)
-mosfet.on()
-
-while True:
-    sleep(3600)
-' "$MOSFET_GPIO_PIN" &
-  mosfet_guard_pid="$!"
-  sleep 0.5
-
-  if ! kill -0 "$mosfet_guard_pid" >/dev/null 2>&1; then
-    wait "$mosfet_guard_pid" || true
-    echo "MOSFET power guard failed to start." >&2
-    exit 1
-  fi
-}
-
-stop_mosfet_power_guard() {
-  if [[ -z "$mosfet_guard_pid" ]]; then
-    return 0
-  fi
-
-  if kill -0 "$mosfet_guard_pid" >/dev/null 2>&1; then
-    kill -TERM "$mosfet_guard_pid" >/dev/null 2>&1 || true
-    wait "$mosfet_guard_pid" >/dev/null 2>&1 || true
-  fi
-  mosfet_guard_pid=""
-}
-
 detach_sense_hat_kernel_drivers() {
   local sudo_cmd=()
   local device
   local unbind_path
 
   if (( EUID != 0 )); then
-    sudo_cmd=(sudo) 
+    sudo_cmd=(sudo)
   fi
 
   echo "Detaching Sense HAT kernel drivers..."
@@ -322,7 +269,6 @@ cleanup() {
       kill -TERM "$launch_pid" >/dev/null 2>&1 || true
     fi
   fi
-  stop_mosfet_power_guard
   wait >/dev/null 2>&1 || true
 }
 
@@ -448,9 +394,6 @@ source_setup_file "$INSTALL_SETUP"
 mkdir -p "$ROS_LOG_DIR"
 export ROS_LOG_DIR
 
-trap cleanup EXIT INT TERM
-start_mosfet_power_guard
-
 if bool_is_true "$START_SENSE_HAT" && bool_is_true "$SENSE_HAT_DETACH_KERNEL"; then
   detach_sense_hat_kernel_drivers
 fi
@@ -465,6 +408,7 @@ launch_args=(
   "start_motor_control:=$START_MOTOR_CONTROL"
   "hardware_enabled:=$HARDWARE_ENABLED"
   "allow_pd_fallback:=$ALLOW_PD_FALLBACK"
+  "allow_missing_imu:=$ALLOW_MISSING_IMU"
   "nav_cmd_topic:=$NAV_CMD_TOPIC"
   "manual_cmd_topic:=$MANUAL_CMD_TOPIC"
   "balanced_cmd_topic:=$BALANCED_CMD_TOPIC"
@@ -480,6 +424,8 @@ if [[ -n "${POLICY_PATH//[[:space:]]/}" ]]; then
   launch_args=("policy_path:=$POLICY_PATH" "${launch_args[@]}")
 fi
 
+trap cleanup EXIT INT TERM
+
 echo "B_Cubed Pi balanced drive launch"
 echo "  ros_domain_id=${ROS_DOMAIN_ID:-default}"
 echo "  rmw=${RMW_IMPLEMENTATION:-default}"
@@ -494,8 +440,7 @@ echo "  sense_hat_detach_kernel=$SENSE_HAT_DETACH_KERNEL"
 echo "  sense_hat_i2c_devices=$SENSE_HAT_I2C_DEVICES"
 echo "  start_motor_control=$START_MOTOR_CONTROL"
 echo "  hardware_enabled=$HARDWARE_ENABLED"
-echo "  mosfet_power_enabled=$MOSFET_POWER_ENABLED"
-echo "  mosfet_gpio_pin=$MOSFET_GPIO_PIN"
+echo "  allow_missing_imu=$ALLOW_MISSING_IMU"
 echo "  nav_cmd_topic=$NAV_CMD_TOPIC"
 echo "  manual_cmd_topic=$MANUAL_CMD_TOPIC"
 echo "  balanced_cmd_topic=$BALANCED_CMD_TOPIC"
