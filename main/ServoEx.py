@@ -6,6 +6,6 @@ class ServoEx(ServoBase):
         super().__init__(servo_pin, encoder_pin_a, encoder_pin_b)
 
     def update(self):
-        super().update()
+        pass
 
 

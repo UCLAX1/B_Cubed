@@ -66,9 +66,6 @@ class ServoBase(Servo):
     def get_position_radians(self) -> float:
         return (self.encoder.steps / self.COUNTS_PER_REVOLUTION) * 2.0 * math.pi
 
-    def update(self):
-        pass
-
     def save_encoder_position(self):
         data = {}
 

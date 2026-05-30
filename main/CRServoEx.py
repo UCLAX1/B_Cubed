@@ -9,6 +9,7 @@ import numpy as np
 import os
 
 from ServoBase import ServoBase
+from PIDController import PIDController
 
 class AbsoluteEncoder:
 
@@ -69,9 +70,16 @@ class CRServoEx(ServoBase):
     # center position every x seconds
     POSITION_CENTERING_DELAY: float = 0.25
 
+    kP: float = 0.00
+    kI: float = 0.00
+    kD: float = 0.00
+
+
     # check the one google sheet for what "servo_pin", "encoder_pin_a", etc. are
     def __init__(self, servo_pin: int, encoder_pin_a: int, encoder_pin_b: int, absolute_encoder_pin: int):
         super().__init__(servo_pin, encoder_pin_a, encoder_pin_b)
+
+        self.pid_controller: PIDController = PIDController(self.kP, self.kI, self.kD)
 
         self.absolute_encoder = AbsoluteEncoder(pin=absolute_encoder_pin)
         self.time_position_last_centered: float = 0
@@ -105,9 +113,12 @@ class CRServoEx(ServoBase):
     def get_absolute_position_radians(self) -> float:
         return self.absolute_encoder.position * 2.0 * math.pi
 
-    # call in main loop
-    def update(self):
+    # call in main loop, dt is delta time
+    def update(self, dt: float):
         super().update()
+
+        control = self.pid_controller.update(dt, self.get_absolute_position())
+        self.set_velocity(control)
 
         self.update_absolute_encoder()
 
@@ -117,6 +128,15 @@ class CRServoEx(ServoBase):
 
     def update_absolute_encoder(self):
         self.absolute_encoder.update()
+
+    def set_position(self, position: float):
+        self.pid_controller.set_setpoint(position)
+
+    def set_velocity(self, velocity: float):
+        self.value = velocity
+
+    def stop(self):
+        self.set_velocity(0.0)
 
     def center_position_with_absolute_encoder(self):
 

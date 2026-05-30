@@ -1,5 +1,6 @@
 import time
 from ServoEx import ServoEx
+from CRServoEx import CRServoEx
 # main resource:
 # https://www.digikey.com/en/maker/tutorials/2021/how-to-control-servo-motors-with-a-raspberry-pi
 
@@ -16,7 +17,7 @@ from ServoEx import ServoEx
 
 
 
-servo = ServoEx(servo_pin=16, encoder_pin_a=26, encoder_pin_b=6, absolute_encoder_pin=5)
+servo = CRServoEx(servo_pin=16, encoder_pin_a=26, encoder_pin_b=6, absolute_encoder_pin=5)
 
 # device = AbsoluteEncoder(5)
 

@@ -1,8 +1,8 @@
 class PIDController:
-    def __init__(self, kP, kI, kD):
-        self.kP = kP
-        self.kI = kI
-        self.kD = kD
+    def __init__(self, kP: float, kI: float, kD: float):
+        self.kP: float = kP
+        self.kI: float = kI
+        self.kD: float = kD
 
         self.previous_error = 0
         self.integral = 0
