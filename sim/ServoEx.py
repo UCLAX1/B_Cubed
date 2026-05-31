@@ -17,41 +17,45 @@ class AbsoluteEncoder:
         # position in ROTATIONS
         self.position: float = 0
 
-        self.__input_device = DigitalInputDevice(pin)
-        self.__time_activated: float = 0
-        self.__previous_value: int = 0
-        self.__current_value: int = 0
+        self.__input_device = DigitalInputDevice(pin, pull_up=False)
         self.__position_history: list[float] = []
 
 
+    def __read_pulse_width_ms(self, timeout_s: float = 0.1):
+        start = time.time()
+
+        while self.__input_device.value == 1:
+            if time.time() - start > timeout_s:
+                return None
+
+        while self.__input_device.value == 0:
+            if time.time() - start > timeout_s:
+                return None
+
+        pulse_start = time.time()
+
+        while self.__input_device.value == 1:
+            if time.time() - start > timeout_s:
+                return None
+
+        return (time.time() - pulse_start) * 1000.0
+
+
     def update(self):
-        self.__current_value = self.__input_device.value
+        pulse_width_ms = self.__read_pulse_width_ms()
+        if pulse_width_ms is None:
+            return
 
-        # rising edge
-        if self.__current_value == 1 and self.__previous_value == 0:
-            self.__time_activated = time.time()
+        # Keep the existing 0.0..1.0 normalized representation used by the
+        # balance scripts, but derive it from the measured pulse width.
+        new_position = np.clip(pulse_width_ms, 0.0, 1.0)
 
-        # falling edge
-        if self.__current_value == 0 and self.__previous_value == 1:
-            dt = time.time() - self.__time_activated
-            new_position = dt * 1000
-            # if the position is too close to the zero, it starts going way past 1.0
-            # clamp new_position from 0.0 to 1.0
-            new_position = np.clip(new_position, 0.0, 1.0)
+        if len(self.__position_history) >= self.POSITION_HISTORY_MAX_SIZE:
+            self.__position_history = self.__position_history[1:]
 
-            # save position history
-            if len(self.__position_history) >= self.POSITION_HISTORY_MAX_SIZE:
-                self.__position_history = self.__position_history[1:]
-                # [1, 2, 3, 4, 5]
-                # VVV
-                # [2, 3, 4, 5]
+        self.__position_history.append(new_position)
 
-            self.__position_history.append(new_position)
-
-            # set position to average of position history
-            self.position = sum(self.__position_history) / len(self.__position_history)
-
-        self.__previous_value = self.__current_value
+        self.position = sum(self.__position_history) / len(self.__position_history)
 
 class ServoEx(Servo):
     INIT_POS_FILE: str = "servo_init_pos.json"
