@@ -23,7 +23,6 @@ JETSON_HOTSPOT_IP="${JETSON_HOTSPOT_IP:-10.42.0.1}"
 PI_TAILSCALE_IP="${PI_TAILSCALE_IP:-100.80.7.37}"
 PI_HOTSPOT_IP="${PI_HOTSPOT_IP:-10.42.0.166}"
 NETWORK_SWITCH_TIMEOUT_SEC="${NETWORK_SWITCH_TIMEOUT_SEC:-30}"
-RESTORE_WIFI_ON_EXIT="${RESTORE_WIFI_ON_EXIT:-true}"
 WRITE_CYCLONEDDS_CONFIG="${WRITE_CYCLONEDDS_CONFIG:-true}"
 CYCLONEDDS_CONFIG_PATH="${CYCLONEDDS_CONFIG_PATH:-$HOME/cyclonedds.xml}"
 if [[ "${CYCLONEDDS_URI:-}" == file://* ]]; then
@@ -190,7 +189,6 @@ cleanup() {
   done
 
   wait >/dev/null 2>&1 || true
-  restore_network_mode
 }
 
 run_sudo_command() {
@@ -306,19 +304,6 @@ configure_network_mode() {
       exit 2
       ;;
   esac
-}
-
-restore_network_mode() {
-  if [[ "$NETWORK_MODE" != "hotspot" ]]; then
-    return 0
-  fi
-
-  echo "Restoring Jetson network to Wi-Fi/Tailscale mode..."
-  write_cyclonedds_config "$JETSON_TAILSCALE_IP" "$PI_TAILSCALE_IP" "$PI_HOTSPOT_IP" || true
-
-  if bool_is_true "$RESTORE_WIFI_ON_EXIT" && command -v nmcli >/dev/null 2>&1; then
-    run_sudo_command nmcli connection up "$WIFI_CONNECTION" >/dev/null 2>&1 || true
-  fi
 }
 
 planning_console_url_host() {

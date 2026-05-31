@@ -147,7 +147,6 @@ sudo -v
 ROS_DOMAIN_ID=0 \
 RMW_IMPLEMENTATION=rmw_cyclonedds_cpp \
 PLANNING_CONSOLE_HOST=0.0.0.0 \
-RESTORE_WIFI_ON_EXIT=false \
 ./launch_headless.sh --hotspot --mapping
 ```
 
@@ -176,7 +175,7 @@ NETWORK_MODE=tailscale \
 ./launch_headless.sh --localization --map-file /home/jetson-nano-x1/Documents/B_Cubed/ros2_ws/maps/MAP_PREFIX
 ```
 
-Stop the Jetson launch with `Ctrl-C`. The script sends a clean shutdown to the ZED wrapper and navigation launch processes. If hotspot mode was used, it attempts to restore Wi-Fi/Tailscale DDS configuration during cleanup.
+Stop the Jetson launch with `Ctrl-C`. The script sends a clean shutdown to the ZED wrapper and navigation launch processes. It leaves the Jetson in whatever network mode the launch selected.
 
 ## 2. Raspberry Pi Startup
 
@@ -458,7 +457,6 @@ sudo systemctl edit b_cubed_jetson.service
 [Service]
 Environment=NETWORK_MODE=hotspot
 Environment=HOTSPOT_CONNECTION=Hotspot
-Environment=RESTORE_WIFI_ON_EXIT=false
 ```
 
 The Pi systemd unit defaults to DDS auto-detection, but it is conservative about hardware. For a real drive test through systemd, confirm the service has:
