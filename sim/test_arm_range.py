@@ -14,13 +14,13 @@ sys.path.append("/usr/lib/python3/dist-packages")
 from ServoEx import ServoEx
 
 # ============================================================================
-# SERVO INITIALIZATION (150kg arm on GPIO 13)
+# SERVO INITIALIZATION (150kg arm on GPIO 15)
 # ============================================================================
 
 print("Initializing 150kg arm servo...")
 try:
     # physical pins: A=37, B=31, ABS=29 -> BCM: A=26, B=6, ABS=5
-    arm_servo = ServoEx(servo_pin=13, encoder_pin_a=26, encoder_pin_b=6, absolute_encoder_pin=5)
+    arm_servo = ServoEx(servo_pin=15, encoder_pin_a=26, encoder_pin_b=6, absolute_encoder_pin=5)
 except Exception as e:
     print(f"ERROR initializing arm servo: {e}")
     sys.exit(1)

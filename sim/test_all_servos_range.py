@@ -1,9 +1,9 @@
 """
 Slowly moves each servo to both limits then returns to center/stop.
 
-150kg arm (BCM 13): standard servo, vertical = 0.0, limits ±30° (±0.333 servo units)
+150kg arm (BCM 15): standard servo, vertical = 0.0, limits ±30° (±0.333 servo units)
 70kg lazy susan (BCM 12): continuous servo, spins each direction slowly then stops
-5.5kg head (BCM 18): continuous servo, spins each direction slowly then stops
+5.5kg head (BCM 20): continuous servo, spins each direction slowly then stops
 """
 
 import time
@@ -12,14 +12,14 @@ from gpiozero.pins.pigpio import PiGPIOFactory
 
 MOSFET_PIN = 16
 
-ARM_PIN       = 13
+ARM_PIN       = 15
 ARM_VERTICAL  = 0.0
 ARM_SERVO_MIN = -0.5
 ARM_SERVO_MAX = 0.5
 ARM_LIMIT     = 30 / 90  # 30 degrees in servo units
 
 LAZY_PIN      = 12
-HEAD_PIN      = 18
+HEAD_PIN      = 20
 CONT_SPEED    = 0.3   # spin speed for continuous servos
 HEAD_DURATION = 4.0   # seconds to spin head each direction
 LAZY_DURATION = 3.0   # seconds to spin lazy susan to ~90 degrees

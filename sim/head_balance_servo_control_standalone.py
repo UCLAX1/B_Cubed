@@ -291,7 +291,7 @@ def main():
     mosfet.on()
     time.sleep(0.5)
 
-    arm_servo = Servo(13, initial_value=None, pin_factory=factory) if ARM_SERVO_ENABLED else None
+    arm_servo = Servo(15, initial_value=None, pin_factory=factory) if ARM_SERVO_ENABLED else None
     lazy_susan = ServoEx(12, 26, 6, 5, initial_value=None, pin_factory=factory)
     head_servo = ServoEx(20, 4, 22, 17, initial_value=None)
 

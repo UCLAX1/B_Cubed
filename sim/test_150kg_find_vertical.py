@@ -1,5 +1,5 @@
 """
-Interactive fine-tuning for the 150kg standard servo (BCM 13, physical 33).
+Interactive fine-tuning for the 150kg standard servo (BCM 15, physical 10).
 Use arrow keys or +/- to nudge the servo and find the vertical position.
 
 Controls:
@@ -19,7 +19,7 @@ import termios
 from gpiozero import DigitalOutputDevice, Servo
 from gpiozero.pins.pigpio import PiGPIOFactory
 
-SERVO_PIN  = 13
+SERVO_PIN  = 15
 MOSFET_PIN = 16
 
 FINE_STEP   = 0.005

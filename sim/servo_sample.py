@@ -3,9 +3,9 @@ from time import sleep
 
 # Define the servos using their BCM (GPIO) numbers, NOT physical pins!
 # Adjust min_pulse_width and max_pulse_width if your servos don't spin fully
-garosa_5kg = Servo(20, initial_value=None)  # Continuous (Physical Pin 12)
+garosa_5kg = Servo(20, initial_value=None)  # 5.5kg head
 diymall_70kg = Servo(12, initial_value=None)  # Continuous (Physical Pin 32)
-annimos_150kg = Servo(15, initial_value=None)  # Standard (Physical Pin 33)
+annimos_150kg = Servo(15, initial_value=None)  # 150kg arm
 MOSFET = DigitalOutputDevice(16)  # MOSFET control (Physical Pin 36)
 
 try:

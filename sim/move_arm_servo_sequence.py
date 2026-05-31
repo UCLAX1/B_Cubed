@@ -1,7 +1,7 @@
 """Move the arm servo through a short diagnostic sequence.
 
 Uses the same hardware assumptions as the existing 150kg servo test:
-- Servo signal on BCM 13
+- Servo signal on BCM 15
 - MOSFET power enable on BCM 16
 - gpiozero + PiGPIOFactory
 """
@@ -12,7 +12,7 @@ from gpiozero import DigitalOutputDevice, Servo
 from gpiozero.pins.pigpio import PiGPIOFactory
 
 
-SERVO_PIN = 13
+SERVO_PIN = 15
 MOSFET_PIN = 16
 POSITIONS = [-0.5, 0.5, 0.0]
 HOLD_SECONDS = 1.0

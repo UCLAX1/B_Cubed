@@ -6,7 +6,7 @@ import time
 from gpiozero import DigitalOutputDevice, Servo
 from gpiozero.pins.pigpio import PiGPIOFactory
 
-SERVO_PIN  = 13
+SERVO_PIN  = 15
 MOSFET_PIN = 16
 VERTICAL   = 0.0
 ARM_SERVO_MIN = -0.5

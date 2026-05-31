@@ -11,7 +11,7 @@ from ServoEx import ServoEx
 MOSFET_PIN    = 16
 LAZY_SERVO    = 12
 LAZY_A, LAZY_B, LAZY_ABS = 26, 6, 5
-HEAD_SERVO    = 18
+HEAD_SERVO    = 20
 HEAD_A, HEAD_B, HEAD_ABS = 4, 22, 17
 
 mosfet = DigitalOutputDevice(MOSFET_PIN)

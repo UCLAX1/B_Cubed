@@ -211,9 +211,9 @@ def initialize_servos():
         pin_factory = None
 
     servos = (
-        Servo(13, initial_value=None, pin_factory=pin_factory),
+        Servo(15, initial_value=None, pin_factory=pin_factory),
         ServoEx(12, 26, 6, 5,  initial_value=None, pin_factory=pin_factory),
-        ServoEx(18,  4, 22, 17, initial_value=None),
+        ServoEx(20,  4, 22, 17, initial_value=None),
         DigitalOutputDevice(16),
     )
     log("Servos initialized.")

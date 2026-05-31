@@ -1,5 +1,5 @@
 """
-Encoder 0 test for the 70kg arm servo (standard servo, BCM 13, physical 33).
+Encoder 0 test for the 70kg continuous servo (BCM 12, physical 32).
 Sweeps slowly back and forth within the 90-degree limit and prints encoder readings.
 
 Enc 0 pins (BCM): A=26 (physical 37), B=6 (physical 31), ABS=5 (physical 29)

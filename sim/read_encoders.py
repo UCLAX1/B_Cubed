@@ -1,5 +1,5 @@
 """
-Read and print encoder values for lazy susan (BCM 12) and head (BCM 18).
+Read and print encoder values for lazy susan (BCM 12) and head (BCM 20).
 """
 
 import time
@@ -10,7 +10,7 @@ factory = PiGPIOFactory()
 
 print("Initializing encoders...")
 lazy = ServoEx(12, 26, 6, 5, initial_value=None, pin_factory=factory)
-head = ServoEx(18, 4, 22, 17, initial_value=None, pin_factory=factory)
+head = ServoEx(20, 4, 22, 17, initial_value=None, pin_factory=factory)
 
 print(f"Lazy susan encoder loaded: {lazy.encoder.steps} steps")
 print(f"Head encoder loaded: {head.encoder.steps} steps\n")

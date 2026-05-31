@@ -1,5 +1,5 @@
 """
-One-time calibration for the 5.5kg head servo (BCM 18).
+One-time calibration for the 5.5kg head servo (BCM 20).
 Uses encoder position (steps) for all movement — no time-based spinning.
 Press d/a to nudge by 10 degrees, s to save forward as zero, q to quit.
 

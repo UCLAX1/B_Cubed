@@ -1,8 +1,8 @@
 """
 Resets all three servos to their forward/vertical positions.
-    - Arm (150kg, BCM 13): moves to hardcoded vertical (0.0)
-  - Lazy susan (70kg, BCM 12): moves to saved forward position (0 steps)
-  - Head (5.5kg, BCM 18): moves to saved forward position (0 steps)
+    - Arm (150kg, BCM 15): moves to hardcoded vertical (0.0)
+    - Lazy susan (70kg, BCM 12): moves to saved forward position (0 steps)
+    - Head (5.5kg, BCM 20): moves to saved forward position (0 steps)
 """
 
 import time
@@ -11,7 +11,7 @@ from gpiozero.pins.pigpio import PiGPIOFactory
 from ServoEx import ServoEx
 
 MOSFET_PIN    = 16
-ARM_PIN       = 13
+ARM_PIN       = 15
 ARM_VERTICAL  = 0.0
 ARM_SERVO_MIN = -0.5
 ARM_SERVO_MAX = 0.5
@@ -20,7 +20,7 @@ LAZY_SERVO    = 12
 LAZY_A, LAZY_B, LAZY_ABS = 26, 6, 5
 LAZY_CPR      = 1493
 
-HEAD_SERVO    = 18
+HEAD_SERVO    = 20
 HEAD_A, HEAD_B, HEAD_ABS = 4, 22, 17
 HEAD_CPR      = 2048
 
