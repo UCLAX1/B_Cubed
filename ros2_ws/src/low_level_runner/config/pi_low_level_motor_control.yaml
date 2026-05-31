@@ -18,7 +18,7 @@ low_level_motor_control:
     can_channel: can0
     can_interface: socketcan
     can_bitrate: 1000000
-    max_duty_cycle: 0.75
+    max_duty_cycle: 1.00
     motor_wait_timeout_sec: 2.0
     reset_encoders_on_start: false
     init_pos_path: ~/.ros/b_cubed_motor_init_pos.json
