@@ -1,6 +1,8 @@
 import sys
 import time
 import math
+import json
+import os
 
 from head_balance_math import find_motor_angles
 from gpiozero import DigitalOutputDevice, Servo
@@ -21,6 +23,11 @@ ARM_SERVO_MAX = 0.5
 LAZY_CPR = 1493
 HEAD_CPR = 2048
 CONT_MAX_ANGLE_SPEED = 0.5
+STARTUP_HOME_FILE = "servo_home_absolute.json"
+STARTUP_HOME_DEADBAND_DEG = 3.0
+STARTUP_HOME_MAX_COMMAND = 0.25
+STARTUP_HOME_SPEED_SCALE = 45.0
+STARTUP_HOME_TIMEOUT_S = 10.0
 
 SETTINGS_FILE = "RTIMULib"
 sys.path.append("/usr/lib/python3/dist-packages")
@@ -47,12 +54,84 @@ time.sleep(0.5)
 
 arm_servo = Servo(15, initial_value=None, pin_factory=factory) if ARM_SERVO_ENABLED else None
 lazy_susan = ServoEx(12, 26, 6, 5, initial_value=None, pin_factory=factory)
-head_servo = ServoEx(20, 4, 22, 17, initial_value=None)
+head_servo = ServoEx(20, 4, 22, 17, initial_value=None, pin_factory=factory)
 
 def clamp(value, minimum, maximum):
     return max(min(value, maximum), minimum)
 
+
+def wrap_degrees(angle_deg):
+    wrapped = (angle_deg + 180.0) % 360.0 - 180.0
+    if wrapped == -180.0:
+        return 180.0
+    return wrapped
+
+
+def fold_lazy_susan_degrees(angle_deg):
+    folded = wrap_degrees(angle_deg)
+
+    if folded > LAZY_SUSAN_MAX:
+        folded -= 180.0
+    elif folded < LAZY_SUSAN_MIN:
+        folded += 180.0
+
+    return folded
+
+
+def shortest_angle_error(target_deg, actual_deg):
+    return wrap_degrees(target_deg - actual_deg)
+
+
+def load_startup_home_targets():
+    if not os.path.exists(STARTUP_HOME_FILE):
+        return None
+
+    with open(STARTUP_HOME_FILE, "r") as file_handle:
+        return json.load(file_handle)
+
+
+def home_continuous_servo_to_absolute(servo, target_deg, name):
+    deadline = time.time() + STARTUP_HOME_TIMEOUT_S
+    servo.value = 0.0
+
+    print(f"Homing {name} to saved absolute position {target_deg:+.1f}°...")
+    while time.time() < deadline:
+        servo.update()
+        actual_deg = servo.get_absolute_position() * 360.0
+        error_deg = shortest_angle_error(target_deg, actual_deg)
+
+        if abs(error_deg) <= STARTUP_HOME_DEADBAND_DEG:
+            servo.value = 0.0
+            print(f"  {name} homed at {actual_deg:+.1f}° (error {error_deg:+.1f}°)")
+            return True
+
+        servo.value = clamp(
+            error_deg / STARTUP_HOME_SPEED_SCALE,
+            -STARTUP_HOME_MAX_COMMAND,
+            STARTUP_HOME_MAX_COMMAND,
+        )
+        time.sleep(poll_interval)
+
+    servo.value = 0.0
+    print(f"  WARNING: {name} homing timed out at {actual_deg:+.1f}° (target {target_deg:+.1f}°)")
+    return False
+
 try:
+    home_targets = load_startup_home_targets()
+    if home_targets is None:
+        print(f"No saved absolute home file found at {STARTUP_HOME_FILE}; skipping startup homing.")
+    else:
+        home_continuous_servo_to_absolute(
+            lazy_susan,
+            float(home_targets.get("lazy_susan_deg", 0.0)),
+            "lazy susan",
+        )
+        home_continuous_servo_to_absolute(
+            head_servo,
+            float(home_targets.get("head_deg", 0.0)),
+            "head",
+        )
+
     if arm_servo is not None:
         arm_servo.value = clamp(ARM_VERTICAL_OFFSET, ARM_SERVO_MIN, ARM_SERVO_MAX)
     lazy_susan.value = 0.0
@@ -78,12 +157,14 @@ try:
             lazy_susan.update()
             head_servo.update()
 
-            lazy_actual = lazy_susan.encoder.steps * 360.0 / LAZY_CPR
-            lazy_error = lazy_tgt - lazy_actual
+            lazy_actual_raw = lazy_susan.get_position() * 360.0
+            lazy_actual = fold_lazy_susan_degrees(lazy_actual_raw)
+            lazy_error = shortest_angle_error(lazy_tgt, lazy_actual)
             lazy_cmd = clamp(lazy_error / CONT_MAX_ANGLE_SPEED, -1.0, 1.0)
 
-            head_actual = head_servo.encoder.steps * 360.0 / HEAD_CPR
-            head_error = head_tgt - head_actual
+            head_actual_raw = head_servo.get_position() * 360.0
+            head_actual = wrap_degrees(head_actual_raw)
+            head_error = shortest_angle_error(head_tgt, head_actual)
             head_cmd = clamp(head_error / CONT_MAX_ANGLE_SPEED, -1.0, 1.0)
 
             arm_cmd = clamp(

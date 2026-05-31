@@ -137,18 +137,21 @@ class ServoEx(Servo):
         self.encoder.steps += position_difference * self.COUNTS_PER_REVOLUTION
 
     def save_encoder_position(self):
-        """Save current encoder position as the zero/forward reference.
+        """Save the current encoder steps as the persisted reference position.
 
-        The saved value is the offset from the current position.
-        On next startup, load_encoder_position() restores this so:
-          encoder.steps = 0 (current physical pos at startup)
-          load() sets encoder.steps = saved_offset
-        This only works correctly if the servo hasn't moved between power cycles.
+        On the next startup, load_encoder_position() restores this saved encoder
+        value so the current physical pose is treated as the remembered zero.
+        This only stays correct if the servo has not moved while powered off.
         """
         data = {}
         data[str(self.pin)] = self.encoder.steps
         with open(self.INIT_POS_FILE, "w") as f:
             json.dump(data, f, indent=2)
+
+
+    def mark_current_position_as_zero(self):
+        """Persist the current physical pose as the zero reference."""
+        self.save_encoder_position()
 
 
     def load_encoder_position(self):
