@@ -19,7 +19,6 @@ DEBUG = True
 DESIRED_ANGLE = 0.0
 NO_IMU_DATA_TIMEOUT_S = 5.0
 IMU_INIT_TIMEOUT_S = 5.0
-CALIBRATION_SAMPLES = 60
 
 SETTINGS_FILE = "RTIMULib"
 sys.path.append("/usr/lib/python3/dist-packages")
@@ -84,29 +83,21 @@ def normalize_degrees(angle_deg):
     return (angle_deg + 180.0) % 360.0 - 180.0
 
 
-def calibrate_reference_pose(imu_device, poll_interval):
-    log(f"Calibrating flat pose from {CALIBRATION_SAMPLES} samples...")
-    log("Hold the Pi in its flat reference position now.")
+def capture_reference_pose(imu_device, poll_interval):
+    log("Capturing flat reference from the first valid IMU sample...")
 
-    roll_samples = []
-    pitch_samples = []
-
-    while len(roll_samples) < CALIBRATION_SAMPLES:
+    while True:
         if imu_device.IMURead():
             data = imu_device.getIMUData()
             fusion_pose = data["fusionPose"]
-            roll_samples.append(math.degrees(fusion_pose[0]))
-            pitch_samples.append(math.degrees(fusion_pose[1]))
+            roll_reference_deg = math.degrees(fusion_pose[0])
+            pitch_reference_deg = math.degrees(fusion_pose[1])
+            log(
+                f"Flat reference: R={roll_reference_deg:+.1f}°  "
+                f"P={pitch_reference_deg:+.1f}°"
+            )
+            return roll_reference_deg, pitch_reference_deg
         time.sleep(poll_interval)
-
-    roll_reference_deg = sum(roll_samples) / len(roll_samples)
-    pitch_reference_deg = sum(pitch_samples) / len(pitch_samples)
-
-    log(
-        f"Flat reference: R={roll_reference_deg:+.1f}°  "
-        f"P={pitch_reference_deg:+.1f}°"
-    )
-    return roll_reference_deg, pitch_reference_deg
 
 
 def apply_counterbalance(roll_deg, pitch_deg, roll_reference_deg, pitch_reference_deg):
@@ -286,7 +277,7 @@ def main(
         log("Exiting because IMU did not initialize.")
         return 1
 
-    roll_reference_deg, pitch_reference_deg = calibrate_reference_pose(
+    roll_reference_deg, pitch_reference_deg = capture_reference_pose(
         imu, imu_poll_interval
     )
 
