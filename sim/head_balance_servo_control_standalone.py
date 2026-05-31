@@ -89,6 +89,17 @@ def wrap_degrees(angle_deg):
     return wrapped
 
 
+def fold_lazy_susan_degrees(angle_deg):
+    folded = wrap_degrees(angle_deg)
+
+    if folded > LAZY_SUSAN_MAX:
+        folded -= 180.0
+    elif folded < LAZY_SUSAN_MIN:
+        folded += 180.0
+
+    return folded
+
+
 def mod_360(angle_deg):
     return angle_deg % 360.0
 
@@ -317,7 +328,7 @@ def main():
 
     arm_servo = Servo(15, initial_value=None, pin_factory=factory) if ARM_SERVO_ENABLED else None
     lazy_susan = ServoEx(12, 26, 6, 5, initial_value=None, pin_factory=factory)
-    head_servo = ServoEx(20, 4, 22, 17, initial_value=None)
+    head_servo = ServoEx(20, 4, 22, 17, initial_value=None, pin_factory=factory)
 
     lazy_last_actual = None
     head_last_actual = None
@@ -357,7 +368,7 @@ def main():
                 head_servo.update()
 
                 lazy_actual_raw = lazy_susan.encoder.steps * 360.0 / LAZY_CPR
-                lazy_actual = wrap_degrees(lazy_actual_raw)
+                lazy_actual = fold_lazy_susan_degrees(lazy_actual_raw)
                 lazy_error = shortest_angle_error(lazy_tgt, lazy_actual)
                 if abs(lazy_error) < CONT_DEADBAND_DEG:
                     lazy_cmd = 0.0
