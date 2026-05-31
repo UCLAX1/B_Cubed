@@ -41,6 +41,8 @@ const personFrameAge = document.getElementById("personFrameAge");
 
 const mapImage = new Image();
 const SQRT_3 = Math.sqrt(3);
+const GAMEPAD_AXIS_DEADBAND = 0.12;
+const GAMEPAD_ACTIVE_EPSILON = 0.01;
 const manualWheelDefs = [
   {
     key: "topLeft",
@@ -71,6 +73,10 @@ let dragStart = null;
 let manualPointerId = null;
 let manualRotation = 0;
 let manualSendPending = false;
+let gamepadIndex = null;
+let gamepadManualActive = false;
+let gamepadStopLatched = false;
+let manualInputSource = "idle";
 let manualState = {
   x: 0,
   y: 0,
@@ -170,6 +176,10 @@ function setManualState(x, y, angular) {
   drawManualControl();
 }
 
+function setManualInputSource(source) {
+  manualInputSource = source;
+}
+
 function updateManualMetrics() {
   manualCommand.textContent = [
     compactNumber(manualState.x),
@@ -242,6 +252,7 @@ function drawManualControl() {
     "#ef4444",
     5
   );
+  drawManualThumb(center, manualPointToScreen(velocity, center, scale));
 
   wheelVectors.forEach((wheelVector, index) => {
     const coord = manualWheelDefs[index].coord;
@@ -280,6 +291,27 @@ function drawManualControl() {
   });
 }
 
+function drawManualThumb(center, point) {
+  const active = Math.hypot(manualState.x, manualState.y) > 0.01;
+  const fill = manualInputSource === "gamepad" ? "#f59e0b" : "#ef4444";
+
+  manualContext.fillStyle = "#f8fafc";
+  manualContext.strokeStyle = "#111820";
+  manualContext.lineWidth = 2;
+  manualContext.beginPath();
+  manualContext.arc(center.x, center.y, 4, 0, Math.PI * 2);
+  manualContext.fill();
+  manualContext.stroke();
+
+  manualContext.fillStyle = active ? fill : "#94a3b8";
+  manualContext.strokeStyle = "#f8fafc";
+  manualContext.lineWidth = 3;
+  manualContext.beginPath();
+  manualContext.arc(point.x, point.y, active ? 9 : 7, 0, Math.PI * 2);
+  manualContext.fill();
+  manualContext.stroke();
+}
+
 async function sendManualCommand(force = false) {
   if (manualSendPending && !force) {
     return;
@@ -312,6 +344,9 @@ async function sendManualCommand(force = false) {
 function stopManualCommand() {
   manualPointerId = null;
   manualRotation = 0;
+  gamepadManualActive = false;
+  gamepadStopLatched = true;
+  setManualInputSource("idle");
   setManualState(0, 0, 0);
   sendManualCommand(true);
   setChip(manualStatus, "manual idle", "");
@@ -332,6 +367,9 @@ function manualCommandFromPointer(event) {
 
 function updateManualFromPointer(event) {
   const [x, y] = manualCommandFromPointer(event);
+  gamepadManualActive = false;
+  gamepadStopLatched = false;
+  setManualInputSource(Math.hypot(x, y) > 0.01 ? "pointer" : "idle");
   setManualState(x, y, manualRotation);
   sendManualCommand();
 }
@@ -340,6 +378,84 @@ function setManualRotation(direction) {
   manualRotation = direction;
   setManualState(manualState.x, manualState.y, manualRotation);
   sendManualCommand(true);
+}
+
+function gamepadAxis(value) {
+  if (!Number.isFinite(value)) {
+    return 0;
+  }
+  const magnitude = Math.abs(value);
+  if (magnitude <= GAMEPAD_AXIS_DEADBAND) {
+    return 0;
+  }
+  const scaled = (magnitude - GAMEPAD_AXIS_DEADBAND) / (1 - GAMEPAD_AXIS_DEADBAND);
+  return Math.sign(value) * clamp(scaled, 0, 1);
+}
+
+function gamepadHasLeftStick(gamepad) {
+  return Boolean(gamepad && gamepad.connected && gamepad.axes.length >= 2);
+}
+
+function connectedGamepads() {
+  if (!navigator.getGamepads) {
+    return [];
+  }
+  return Array.from(navigator.getGamepads()).filter(gamepadHasLeftStick);
+}
+
+function activeGamepad() {
+  const pads = connectedGamepads();
+  if (gamepadIndex !== null) {
+    const selected = pads.find((gamepad) => gamepad.index === gamepadIndex);
+    if (selected) {
+      return selected;
+    }
+  }
+  const standard = pads.find((gamepad) => gamepad.mapping === "standard");
+  const selected = standard || pads[0] || null;
+  gamepadIndex = selected ? selected.index : null;
+  return selected;
+}
+
+function pollGamepadManualControl() {
+  if (manualPointerId !== null) {
+    return false;
+  }
+
+  const gamepad = activeGamepad();
+  if (!gamepad) {
+    if (gamepadManualActive) {
+      gamepadManualActive = false;
+      setManualInputSource("idle");
+      setManualState(0, 0, manualRotation);
+      sendManualCommand(true);
+    }
+    return false;
+  }
+
+  const x = gamepadAxis(gamepad.axes[0]);
+  const y = -gamepadAxis(gamepad.axes[1]);
+  const stickActive = Math.hypot(x, y) > GAMEPAD_ACTIVE_EPSILON;
+  if (!stickActive) {
+    gamepadStopLatched = false;
+  }
+  if (gamepadStopLatched) {
+    return false;
+  }
+  if (stickActive) {
+    gamepadManualActive = true;
+    setManualInputSource("gamepad");
+    setManualState(x, y, manualRotation);
+    return true;
+  }
+
+  if (gamepadManualActive) {
+    gamepadManualActive = false;
+    setManualInputSource("idle");
+    setManualState(0, 0, manualRotation);
+    sendManualCommand(true);
+  }
+  return false;
 }
 
 function resizeCanvas() {
@@ -968,6 +1084,8 @@ stopButton.addEventListener("click", () => {
 
 manualCanvas.addEventListener("pointerdown", (event) => {
   manualPointerId = event.pointerId;
+  gamepadManualActive = false;
+  gamepadStopLatched = false;
   manualCanvas.setPointerCapture(event.pointerId);
   updateManualFromPointer(event);
 });
@@ -1033,13 +1151,32 @@ headingMode.addEventListener("change", () => {
 });
 
 window.addEventListener("resize", resizeCanvas);
+window.addEventListener("gamepadconnected", (event) => {
+  if (gamepadHasLeftStick(event.gamepad)) {
+    gamepadIndex = event.gamepad.index;
+  }
+});
+window.addEventListener("gamepaddisconnected", (event) => {
+  if (event.gamepad.index !== gamepadIndex) {
+    return;
+  }
+  gamepadIndex = null;
+  if (gamepadManualActive) {
+    gamepadManualActive = false;
+    setManualInputSource("idle");
+    setManualState(0, 0, manualRotation);
+    sendManualCommand(true);
+  }
+});
 
 headingInput.disabled = true;
 resizeCanvas();
 refreshState();
 setInterval(refreshState, 700);
 setInterval(() => {
+  const gamepadActive = pollGamepadManualControl();
   const active = (
+    gamepadActive ||
     manualPointerId !== null ||
     manualRotation !== 0 ||
     Math.hypot(manualState.x, manualState.y) > 0.01 ||
