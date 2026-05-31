@@ -41,6 +41,13 @@ def generate_launch_description() -> LaunchDescription:
     imu_topic = LaunchConfiguration("imu_topic")
     roll_offset_rad = LaunchConfiguration("roll_offset_rad")
     pitch_offset_rad = LaunchConfiguration("pitch_offset_rad")
+    balance_nav_timeout_sec = LaunchConfiguration("balance_nav_timeout_sec")
+    balance_manual_timeout_sec = LaunchConfiguration("balance_manual_timeout_sec")
+    motor_nav_cmd_timeout_sec = LaunchConfiguration("motor_nav_cmd_timeout_sec")
+    motor_manual_cmd_timeout_sec = LaunchConfiguration("motor_manual_cmd_timeout_sec")
+    motor_ipc_watchdog_timeout_sec = LaunchConfiguration(
+        "motor_ipc_watchdog_timeout_sec"
+    )
     can_channel = LaunchConfiguration("can_channel")
     can_interface = LaunchConfiguration("can_interface")
     can_bitrate = LaunchConfiguration("can_bitrate")
@@ -85,6 +92,11 @@ def generate_launch_description() -> LaunchDescription:
             DeclareLaunchArgument("imu_topic", default_value="imu/data"),
             DeclareLaunchArgument("roll_offset_rad", default_value="0.0"),
             DeclareLaunchArgument("pitch_offset_rad", default_value="0.0"),
+            DeclareLaunchArgument("balance_nav_timeout_sec", default_value="0.50"),
+            DeclareLaunchArgument("balance_manual_timeout_sec", default_value="0.30"),
+            DeclareLaunchArgument("motor_nav_cmd_timeout_sec", default_value="0.50"),
+            DeclareLaunchArgument("motor_manual_cmd_timeout_sec", default_value="0.30"),
+            DeclareLaunchArgument("motor_ipc_watchdog_timeout_sec", default_value="0.30"),
             DeclareLaunchArgument("can_channel", default_value="can0"),
             DeclareLaunchArgument("can_interface", default_value="socketcan"),
             DeclareLaunchArgument("can_bitrate", default_value="1000000"),
@@ -129,6 +141,14 @@ def generate_launch_description() -> LaunchDescription:
                         ),
                         "nav_cmd_topic": nav_cmd_topic,
                         "manual_cmd_topic": manual_cmd_topic,
+                        "nav_timeout_sec": ParameterValue(
+                            balance_nav_timeout_sec,
+                            value_type=float,
+                        ),
+                        "manual_timeout_sec": ParameterValue(
+                            balance_manual_timeout_sec,
+                            value_type=float,
+                        ),
                         "output_twist_topic": balanced_cmd_topic,
                         "publish_ros_outputs": False,
                         "publish_status_topic": False,
@@ -164,6 +184,8 @@ def generate_launch_description() -> LaunchDescription:
                     can_interface,
                     "--can-bitrate",
                     can_bitrate,
+                    "--watchdog-timeout-sec",
+                    motor_ipc_watchdog_timeout_sec,
                     "--init-pos-path",
                     "~/.ros/b_cubed_motor_init_pos.json",
                 ],
@@ -186,6 +208,14 @@ def generate_launch_description() -> LaunchDescription:
                         ),
                         "nav_cmd_topic": nav_cmd_topic,
                         "manual_cmd_topic": manual_cmd_topic,
+                        "nav_cmd_timeout_sec": ParameterValue(
+                            motor_nav_cmd_timeout_sec,
+                            value_type=float,
+                        ),
+                        "manual_cmd_timeout_sec": ParameterValue(
+                            motor_manual_cmd_timeout_sec,
+                            value_type=float,
+                        ),
                         "can_channel": can_channel,
                         "can_interface": can_interface,
                         "can_bitrate": ParameterValue(can_bitrate, value_type=int),
