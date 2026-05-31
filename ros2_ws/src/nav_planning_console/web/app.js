@@ -206,9 +206,29 @@ function drawManualLine(start, end, color, width = 2) {
   manualContext.stroke();
 }
 
+function syncManualCanvasSize() {
+  const rect = manualCanvas.getBoundingClientRect();
+  const cssSize = Math.max(1, rect.width || manualCanvas.width);
+  manualCanvas.style.height = `${cssSize}px`;
+
+  const ratio = window.devicePixelRatio || 1;
+  const width = Math.floor(cssSize * ratio);
+  const height = Math.floor(cssSize * ratio);
+
+  if (manualCanvas.width !== width || manualCanvas.height !== height) {
+    manualCanvas.width = width;
+    manualCanvas.height = height;
+  }
+  manualContext.setTransform(ratio, 0, 0, ratio, 0, 0);
+
+  return {
+    width: cssSize,
+    height: cssSize
+  };
+}
+
 function drawManualControl() {
-  const width = manualCanvas.width;
-  const height = manualCanvas.height;
+  const { width, height } = syncManualCanvasSize();
   const center = { x: width * 0.5, y: height * 0.52 };
   const scale = Math.min(width, height) * 0.36;
   const velocity = [manualState.x, manualState.y];
