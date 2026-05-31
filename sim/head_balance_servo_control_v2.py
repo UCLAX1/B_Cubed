@@ -24,6 +24,8 @@ LAZY_CPR = 1493
 HEAD_CPR = 2048
 CONT_MAX_ANGLE_SPEED = 0.5
 STARTUP_HOME_FILE = "servo_home_absolute.json"
+SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+STARTUP_HOME_PATH = os.path.join(SCRIPT_DIR, STARTUP_HOME_FILE)
 STARTUP_HOME_DEADBAND_DEG = 3.0
 STARTUP_HOME_MAX_COMMAND = 0.25
 STARTUP_HOME_SPEED_SCALE = 45.0
@@ -83,10 +85,10 @@ def shortest_angle_error(target_deg, actual_deg):
 
 
 def load_startup_home_targets():
-    if not os.path.exists(STARTUP_HOME_FILE):
+    if not os.path.exists(STARTUP_HOME_PATH):
         return None
 
-    with open(STARTUP_HOME_FILE, "r") as file_handle:
+    with open(STARTUP_HOME_PATH, "r") as file_handle:
         return json.load(file_handle)
 
 
@@ -119,18 +121,25 @@ def home_continuous_servo_to_absolute(servo, target_deg, name):
 try:
     home_targets = load_startup_home_targets()
     if home_targets is None:
-        print(f"No saved absolute home file found at {STARTUP_HOME_FILE}; skipping startup homing.")
+        print(f"No saved absolute home file found at {STARTUP_HOME_PATH}; skipping startup homing.")
     else:
-        home_continuous_servo_to_absolute(
-            lazy_susan,
-            float(home_targets.get("lazy_susan_deg", 0.0)),
-            "lazy susan",
-        )
-        home_continuous_servo_to_absolute(
-            head_servo,
-            float(home_targets.get("head_deg", 0.0)),
-            "head",
-        )
+        if home_targets.get("lazy_abs_valid", True):
+            home_continuous_servo_to_absolute(
+                lazy_susan,
+                float(home_targets.get("lazy_susan_deg", 0.0)),
+                "lazy susan",
+            )
+        else:
+            print("Skipping lazy susan homing because the absolute encoder reading was invalid.")
+
+        if home_targets.get("head_abs_valid", True):
+            home_continuous_servo_to_absolute(
+                head_servo,
+                float(home_targets.get("head_deg", 0.0)),
+                "head",
+            )
+        else:
+            print("Skipping head homing because the absolute encoder reading was invalid.")
 
     if arm_servo is not None:
         arm_servo.value = clamp(ARM_VERTICAL_OFFSET, ARM_SERVO_MIN, ARM_SERVO_MAX)

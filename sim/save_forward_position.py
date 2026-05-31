@@ -21,6 +21,8 @@ HEAD_SERVO    = 20
 HEAD_A, HEAD_B, HEAD_ABS = 4, 22, 17
 
 HOME_FILE = "servo_home_absolute.json"
+SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+HOME_PATH = os.path.join(SCRIPT_DIR, HOME_FILE)
 
 mosfet = DigitalOutputDevice(MOSFET_PIN)
 mosfet.on()
@@ -44,10 +46,12 @@ lazy_home_deg = lazy_abs * 360.0
 head_home_deg = head_abs * 360.0
 lazy_relative_deg = lazy.get_position() * 360.0
 head_relative_deg = head.get_position() * 360.0
+lazy_abs_valid = 0.0 < lazy_abs < 1.0
+head_abs_valid = 0.0 < head_abs < 1.0
 
-if lazy_abs in (0.0, 1.0):
+if not lazy_abs_valid:
 	print(f"WARNING: lazy absolute encoder appears saturated at {lazy_abs:.1f}")
-if head_abs in (0.0, 1.0):
+if not head_abs_valid:
 	print(f"WARNING: head absolute encoder appears saturated at {head_abs:.1f}")
 
 home_data = {
@@ -55,12 +59,14 @@ home_data = {
 	"head_deg": head_home_deg,
 	"lazy_susan_steps": lazy.encoder.steps,
 	"head_steps": head.encoder.steps,
+	"lazy_abs_valid": lazy_abs_valid,
+	"head_abs_valid": head_abs_valid,
 }
 
-with open(HOME_FILE, "w") as file_handle:
+with open(HOME_PATH, "w") as file_handle:
 	json.dump(home_data, file_handle, indent=2)
 
-print(f"Saved absolute home pose to {HOME_FILE}")
+print(f"Saved absolute home pose to {HOME_PATH}")
 print(f"  lazy susan (pin {LAZY_SERVO}) = {lazy_home_deg:.1f}°")
 print(f"  head       (pin {HEAD_SERVO}) = {head_home_deg:.1f}°")
 print(f"  lazy raw absolute = {lazy_abs:.3f}, relative = {lazy_relative_deg:.1f}°")
