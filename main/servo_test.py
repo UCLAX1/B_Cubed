@@ -1,6 +1,9 @@
 import time
+from gpiozero import Servo, DigitalOutputDevice
 from ServoEx import ServoEx
 from CRServoEx import CRServoEx
+from gpiozero.pins.pigpio import PiGPIOFactory
+
 # main resource:
 # https://www.digikey.com/en/maker/tutorials/2021/how-to-control-servo-motors-with-a-raspberry-pi
 
@@ -17,7 +20,9 @@ from CRServoEx import CRServoEx
 
 
 
-servo = CRServoEx(servo_pin=16, encoder_pin_a=26, encoder_pin_b=6, absolute_encoder_pin=5)
+# servo = CRServoEx(servo_pin=16, encoder_pin_a=26, encoder_pin_b=6, absolute_encoder_pin=5)
+# servo = ServoEx(servo_pin=15)
+servo = Servo(15, initial_value=None, pin_factory=PiGPIOFactory())
 
 # device = AbsoluteEncoder(5)
 
@@ -50,6 +55,10 @@ previous_position: float = 0
 current_absolute_position: float = 0
 previous_absolute_position: float = 0
 
+mosfet = DigitalOutputDevice(16)
+mosfet.on()
+
+servo.value = 0
 
 try:
     while True:
@@ -58,32 +67,40 @@ try:
         previous_time = current_time
         timer = current_time - start
 
-        servo.update()
 
-        current_position = servo.get_position()
+        value = float(input("enter value: "))
+        print("value to set: ", value)
+        servo.value = value
 
-        current_absolute_position = servo.get_absolute_position()
 
-        # half a period every second
-        # val = math.sin(timer / (0.5 * (2.0 * math.pi)))
+        # servo.update()
 
-        print(f"normal: {current_position:.2f}, absolute: {current_absolute_position:.2f}")
+        # current_position = servo.get_position()
 
-        # if current_position != previous_position:
-        #     print(f"{current_position:.2f}")
-        #
-        #
-        # # if current_absolute_position != previous_absolute_position:
-        # #     print(f"{current_absolute_position:.2f}")
+        # current_absolute_position = servo.get_absolute_position()
 
-        previous_position = current_position
-        previous_absolute_position = current_absolute_position
+        # # half a period every second
+        # # val = math.sin(timer / (0.5 * (2.0 * math.pi)))
+
+        # print(f"normal: {current_position:.2f}, absolute: {current_absolute_position:.2f}")
+
+        # # if current_position != previous_position:
+        # #     print(f"{current_position:.2f}")
+        # #
+        # #
+        # # # if current_absolute_position != previous_absolute_position:
+        # # #     print(f"{current_absolute_position:.2f}")
+
+        # previous_position = current_position
+        # previous_absolute_position = current_absolute_position
 
 
 except KeyboardInterrupt:
     servo.save_encoder_position()
+    mosfet.off()
     print("Program stopped")
     exit(1)
 
 servo.save_encoder_position()
 print("Program stopped")
+mosfet.off()

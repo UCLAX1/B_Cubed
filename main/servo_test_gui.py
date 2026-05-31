@@ -26,8 +26,7 @@ def exit_gracefully():
     # top_left_motor.set_power(0)
     # top_right_motor.set_power(0)
     # bottom_motor.set_power(0)
-    # bus.close()
-    # mosfet.off()
+    mosfet.off()
     exit(1)
 
 # convert angle to -pi to pi
@@ -74,20 +73,10 @@ class InputHandler:
 
 class ServoControllerWindow:
 
-    DEAD_ZONE_MIDDLE_ANGLE = np.deg2rad(180)
-    # SERVO_RANGE = np.deg2rad(359)
-    SERVO_RANGE = np.deg2rad(270)
-    print("set servo range: ", np.rad2deg(SERVO_RANGE))
-    DEAD_ZONE_RANGE = 2 * np.pi - SERVO_RANGE
-    print("set dead-zone range: ", np.rad2deg(DEAD_ZONE_RANGE))
-    DEAD_ZONE_CW_ANGLE = normalize_angle(DEAD_ZONE_MIDDLE_ANGLE - DEAD_ZONE_RANGE / 2)
-    # print("set dead-zone cw angle: ", np.rad2deg(DEAD_ZONE_CW_ANGLE))
-    DEAD_ZONE_CCW_ANGLE = normalize_angle(DEAD_ZONE_MIDDLE_ANGLE + DEAD_ZONE_RANGE / 2)
-    # print("set dead-zone ccw angle: ", np.rad2deg(DEAD_ZONE_CCW_ANGLE))
 
     CIRCLE_WIDTH = 2
 
-    def __init__(self, screen, servo: ServoBase, input_handler: InputHandler, display_middle_coord: np.ndarray, display_radius: float):
+    def __init__(self, screen, servo: ServoBase, input_handler: InputHandler, display_middle_coord: np.ndarray, display_radius: float, servo_range: float):
 
         self.servo = servo
 
@@ -108,6 +97,19 @@ class ServoControllerWindow:
 
         # requested servo angle in radians (0 is straight up)
         self.requested_servo_angle: float = 0.0
+
+        self.DEAD_ZONE_MIDDLE_ANGLE = np.deg2rad(180)
+
+        # range of the servo in radians
+        self.SERVO_RANGE = servo_range
+        # self.SERVO_RANGE = np.deg2rad(270)
+        print("set servo range: ", np.rad2deg(self.SERVO_RANGE))
+        self.DEAD_ZONE_RANGE = 2 * np.pi - self.SERVO_RANGE
+        print("set dead-zone range: ", np.rad2deg(self.DEAD_ZONE_RANGE))
+        self.DEAD_ZONE_CW_ANGLE = normalize_angle(self.DEAD_ZONE_MIDDLE_ANGLE - self.DEAD_ZONE_RANGE / 2)
+        # print("set dead-zone cw angle: ", np.rad2deg(DEAD_ZONE_CW_ANGLE))
+        self.DEAD_ZONE_CCW_ANGLE = normalize_angle(self.DEAD_ZONE_MIDDLE_ANGLE + self.DEAD_ZONE_RANGE / 2)
+        # print("set dead-zone ccw angle: ", np.rad2deg(DEAD_ZONE_CCW_ANGLE))
 
     def update(self):
 
@@ -132,10 +134,13 @@ class ServoControllerWindow:
             if self.requested_servo_angle > self.DEAD_ZONE_CW_ANGLE:
                 self.requested_servo_angle = self.DEAD_ZONE_CW_ANGLE
             elif self.requested_servo_angle < self.DEAD_ZONE_CCW_ANGLE:
-                self.requested_servo_angle = self.DEAD_ZONE_CCW_ANGLE
+                 self.requested_servo_angle = self.DEAD_ZONE_CCW_ANGLE
+
+            # print(2.0 * self.requested_servo_angle / np.pi)
+            # print(2.0 * self.requested_servo_angle / (self.SERVO_RANGE))
 
             if self.servo is not None:
-                self.servo.set_position(self.requested_servo_angle / (2.0 * np.pi))
+                self.servo.set_position(2.0 * self.requested_servo_angle / (self.SERVO_RANGE))
 
     def draw(self):
         # draw cyan dead zone lines
@@ -189,20 +194,31 @@ class App:
         self.screen = pygame.display.set_mode(self.WINDOW_SIZE)
         pygame.display.set_caption('Pygame Servo Test')
         pygame.mouse.set_visible(1)
+        servo_15 = ServoEx(servo_pin=15, range_degrees=270, max_value=0.5)
 
-        try:
-            neck_yaw_servo = ServoEx(servo_pin=20)
-            lazy_susan_servo = CRServoEx(servo_pin=12, encoder_pin_a=26, encoder_pin_b=6, absolute_encoder_pin=5)
-        except Exception:
-            neck_yaw_servo = None
-            lazy_susan_servo = None
-            print("Servos not found, running in graphical")
+        #try:
+        #    servo_15 = ServoEx(servo_pin=15, range_degrees=270, max_value=0.5)
+        #    # neck_yaw_servo = ServoEx(servo_pin=20)
+        #    # lazy_susan_servo = CRServoEx(servo_pin=12, encoder_pin_a=26, encoder_pin_b=6, absolute_encoder_pin=5)
+        #except Exception:
+        #    servo_15 = None
+        #    # neck_yaw_servo = None
+        #    # lazy_susan_servo = None
+        #    print("Servos not found, running in graphical")
 
         self.servo_controller_windows: list[ServoControllerWindow] = []
         # neck yaw: 5 kg
-        self.servo_controller_windows.append(ServoControllerWindow(self.screen, neck_yaw_servo, self.input_handler, np.array([1.0 * self.WINDOW_SIZE[0] / 3.0, self.WINDOW_SIZE[1] / 2.0]), self.WINDOW_SIZE[0] / 6.0))
+        self.servo_controller_windows.append(ServoControllerWindow(
+            screen=self.screen,
+            servo=servo_15,
+            input_handler=self.input_handler,
+            display_middle_coord=np.array([1.0 * self.WINDOW_SIZE[0] / 3.0, self.WINDOW_SIZE[1] / 2.0]),
+            display_radius=self.WINDOW_SIZE[0] / 6.0,
+            servo_range=servo_15.get_range_radians() * servo_15.get_max_value()
+            )
+        )
         # lazy susan 70 kg
-        self.servo_controller_windows.append(ServoControllerWindow(self.screen, lazy_susan_servo, self.input_handler, np.array([2.0 * self.WINDOW_SIZE[0] / 3.0, self.WINDOW_SIZE[1] / 2.0]), self.WINDOW_SIZE[0] / 6.0))
+        # self.servo_controller_windows.append(ServoControllerWindow(self.screen, lazy_susan_servo, self.input_handler, np.array([2.0 * self.WINDOW_SIZE[0] / 3.0, self.WINDOW_SIZE[1] / 2.0]), self.WINDOW_SIZE[0] / 6.0))
 
         # self.servo_controller_windows: list[ServoControllerWindow] = []
         # self.servo_controller_windows.append(ServoControllerWindow(self.screen, None, self.input_handler, np.array([1.0 * self.WINDOW_SIZE[0] / 3.0, self.WINDOW_SIZE[1] / 2.0]), self.WINDOW_SIZE[0] / 6.0))
@@ -273,14 +289,14 @@ class App:
 # print("SLEEPING 0.5 SEC...")
 # time.sleep(0.5)
 
-# mosfet = DigitalOutputDevice(16)
-# mosfet.on()
+mosfet = DigitalOutputDevice(16)
+mosfet.on()
 
 app = App()
 
 app.run()
 
-# mosfet.off()
+mosfet.off()
 
 # on testing, the motor position updates about every 0.01-0.03 seconds
 
