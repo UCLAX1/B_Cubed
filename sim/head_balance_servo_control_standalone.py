@@ -97,6 +97,28 @@ def shortest_angle_error(target_deg, actual_deg):
     return wrap_degrees(target_deg - actual_deg)
 
 
+def capture_reference_pose(imu_device, poll_interval):
+    while True:
+        if imu_device.IMURead():
+            data = imu_device.getIMUData()
+            fusion_pose = data["fusionPose"]
+            roll_reference_deg = math.degrees(fusion_pose[0])
+            pitch_reference_deg = math.degrees(fusion_pose[1])
+            print(
+                f"Flat reference: R={roll_reference_deg:+.1f}°  "
+                f"P={pitch_reference_deg:+.1f}°"
+            )
+            return roll_reference_deg, pitch_reference_deg
+        time.sleep(poll_interval)
+
+
+def apply_counterbalance(roll_deg, pitch_deg, roll_reference_deg, pitch_reference_deg):
+    return (
+        wrap_degrees(roll_deg - roll_reference_deg),
+        wrap_degrees(pitch_deg - pitch_reference_deg),
+    )
+
+
 def find_motor_angles(pitch, roll, desired_angle):
     pitch = math.radians(pitch)
     roll = math.radians(roll)
@@ -286,6 +308,8 @@ def main():
 
     poll_interval = imu.IMUGetPollInterval() / 1000.0
 
+    roll_reference_deg, pitch_reference_deg = capture_reference_pose(imu, poll_interval)
+
     factory = PiGPIOFactory()
     mosfet = DigitalOutputDevice(16)
     mosfet.on()
@@ -313,8 +337,14 @@ def main():
                 data = imu.getIMUData()
                 fusion_pose = data["fusionPose"]
 
-                roll = math.degrees(fusion_pose[0])
-                pitch = math.degrees(fusion_pose[1])
+                raw_roll = math.degrees(fusion_pose[0])
+                raw_pitch = math.degrees(fusion_pose[1])
+                roll, pitch = apply_counterbalance(
+                    raw_roll,
+                    raw_pitch,
+                    roll_reference_deg,
+                    pitch_reference_deg,
+                )
                 yaw = math.degrees(fusion_pose[2])
 
                 arm_tgt, lazy_tgt, head_tgt = find_motor_angles(pitch, roll, DESIRED_ANGLE)
@@ -382,7 +412,8 @@ def main():
                     arm_servo.value = arm_cmd
 
                 if DEBUG:
-                    print(f"IMU: R={roll:7.1f}° P={pitch:7.1f}° Y={yaw:7.1f}°")
+                    print(f"IMU(raw): R={raw_roll:7.1f}° P={raw_pitch:7.1f}°")
+                    print(f"IMU(adj): R={roll:7.1f}° P={pitch:7.1f}° Y={yaw:7.1f}°")
                     print(f"Tgt: arm={arm_tgt:+7.2f}° lazy={lazy_tgt:+7.2f}° head={head_tgt:+7.2f}° ({head_tgt_360:6.2f}° mod360)")
                     print(f"Pos: lazy={lazy_actual:+7.2f}° head={head_actual:+7.2f}° ({head_actual_360:6.2f}° mod360)")
                     print(f"Err: lazy={lazy_error:+7.2f}° head={head_error:+7.2f}°")
