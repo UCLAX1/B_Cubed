@@ -145,7 +145,7 @@ class App:
         self.top_right_wheel_velocity: float = 0.0
         self.bottom_wheel_velocity: float = 0.0
 
-        self.bus: CanBus = CanBus(channel='can0', interface='socketcan', bitrate=1000000)
+        self.bus: CanBus = CanBus(channel='COM5', interface='slcan', bitrate=1000000)
         self.bus.start()
 
         if not self.bus.started_successfully():
@@ -154,15 +154,19 @@ class App:
         if self.bus.started_successfully():
             self.top_left_motor: Motor = Motor(self.bus, 3)
             self.top_left_motor.set_power(0)
-            self.top_left_motor.reset_encoder()
+            # self.top_left_motor.reset_encoder()
 
             self.top_right_motor: Motor = Motor(self.bus, 9)
             self.top_right_motor.set_power(0)
-            self.top_right_motor.reset_encoder()
+            # self.top_right_motor.reset_encoder()
 
             self.bottom_motor = Motor(self.bus, 7)
             self.bottom_motor.set_power(0)
-            self.bottom_motor.reset_encoder()
+            # self.bottom_motor.reset_encoder()
+
+            self.top_left_motor.wait_for_active()
+            self.top_right_motor.wait_for_active()
+            self.bottom_motor.wait_for_active()
 
         # https://stackoverflow.com/questions/13207678/whats-the-simplest-way-of-detecting-keyboard-input-in-a-script-from-the-termina
         # https://www.pygame.org/docs/tut/newbieguide.html
@@ -243,9 +247,10 @@ class App:
         self.bot_angular_velocity += self.ANGULAR_VELOCITY_INPUT_CHANGE_RATE * dt * (self.input_handler.ccw_pressed - self.input_handler.cw_pressed)
         
         
-        print("setting motor vel")
         self.set_motors(self.bot_velocity, self.bot_angular_velocity)
-        print("set motor vel")
+
+        # print(self.bus.motor_pos)
+
     def draw(self):
         self.screen.fill((0, 0, 0))
 

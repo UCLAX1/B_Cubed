@@ -1,5 +1,7 @@
 from PIDController import PIDController
+from ServoBase import ServoBase
 from ServoEx import ServoEx
+from CRServoEx import CRServoEx
 import time
 import pygame
 from pygame.locals import *
@@ -72,6 +74,7 @@ class InputHandler:
 class ServoControllerWindow:
 
     DEAD_ZONE_MIDDLE_ANGLE = np.deg2rad(180)
+    # SERVO_RANGE = np.deg2rad(359)
     SERVO_RANGE = np.deg2rad(270)
     print("set servo range: ", np.rad2deg(SERVO_RANGE))
     DEAD_ZONE_RANGE = 2 * np.pi - SERVO_RANGE
@@ -83,7 +86,7 @@ class ServoControllerWindow:
 
     CIRCLE_WIDTH = 2
 
-    def __init__(self, screen, servo: ServoEx, input_handler: InputHandler, display_middle_coord: np.ndarray, display_radius: float):
+    def __init__(self, screen, servo: ServoBase, input_handler: InputHandler, display_middle_coord: np.ndarray, display_radius: float):
 
         self.servo = servo
 
@@ -107,7 +110,8 @@ class ServoControllerWindow:
 
     def update(self):
 
-        self.servo.update()
+        if self.servo is not None:
+            self.servo.update()
 
         self.mouse_vec = (self.input_handler.mouse_pos - self.display_middle_coord)
         self.mouse_vec = np.array([self.mouse_vec[0], -self.mouse_vec[1]])
@@ -129,7 +133,8 @@ class ServoControllerWindow:
             if self.requested_servo_angle < self.DEAD_ZONE_CCW_ANGLE:
                 self.requested_servo_angle = self.DEAD_ZONE_CCW_ANGLE
 
-            self.servo.set_position(self.requested_servo_angle)
+            if self.servo is not None:
+                self.servo.set_position(self.requested_servo_angle)
 
     def draw(self):
         # draw cyan dead zone lines
@@ -184,12 +189,23 @@ class App:
         pygame.display.set_caption('Pygame Servo Test')
         pygame.mouse.set_visible(1)
 
-        # servo = ServoEx(servo_pin=16, encoder_pin_a=26, encoder_pin_b=6, absolute_encoder_pin=5)
-        # servo = ServoEx(servo_pin=16, encoder_pin_a=26, encoder_pin_b=6, absolute_encoder_pin=5)
+        try:
+            neck_yaw_servo = ServoEx(servo_pin=20)
+            lazy_susan_servo = CRServoEx(servo_pin=12, encoder_pin_a=26, encoder_pin_b=6, absolute_encoder_pin=5)
+        except Exception:
+            neck_yaw_servo = None
+            lazy_susan_servo = None
+            print("Servos not found, running in graphical")
 
         self.servo_controller_windows: list[ServoControllerWindow] = []
-        self.servo_controller_windows.append(ServoControllerWindow(self.screen, None, self.input_handler, np.array([1.0 * self.WINDOW_SIZE[0] / 3.0, self.WINDOW_SIZE[1] / 2.0]), self.WINDOW_SIZE[0] / 6.0))
-        self.servo_controller_windows.append(ServoControllerWindow(self.screen, None, self.input_handler, np.array([2.0 * self.WINDOW_SIZE[0] / 3.0, self.WINDOW_SIZE[1] / 2.0]), self.WINDOW_SIZE[0] / 6.0))
+        # neck yaw: 5 kg
+        self.servo_controller_windows.append(ServoControllerWindow(self.screen, neck_yaw_servo, self.input_handler, np.array([1.0 * self.WINDOW_SIZE[0] / 3.0, self.WINDOW_SIZE[1] / 2.0]), self.WINDOW_SIZE[0] / 6.0))
+        # lazy susan 70 kg
+        self.servo_controller_windows.append(ServoControllerWindow(self.screen, lazy_susan_servo, self.input_handler, np.array([2.0 * self.WINDOW_SIZE[0] / 3.0, self.WINDOW_SIZE[1] / 2.0]), self.WINDOW_SIZE[0] / 6.0))
+
+        # self.servo_controller_windows: list[ServoControllerWindow] = []
+        # self.servo_controller_windows.append(ServoControllerWindow(self.screen, None, self.input_handler, np.array([1.0 * self.WINDOW_SIZE[0] / 3.0, self.WINDOW_SIZE[1] / 2.0]), self.WINDOW_SIZE[0] / 6.0))
+        # self.servo_controller_windows.append(ServoControllerWindow(self.screen, None, self.input_handler, np.array([2.0 * self.WINDOW_SIZE[0] / 3.0, self.WINDOW_SIZE[1] / 2.0]), self.WINDOW_SIZE[0] / 6.0))
 
 
     def run(self):

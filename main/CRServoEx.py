@@ -1,4 +1,5 @@
 from gpiozero import DigitalInputDevice
+from gpiozero import RotaryEncoder
 import time
 import math
 import json
@@ -104,10 +105,11 @@ class CRServoEx(ServoBase):
 
     # check the one google sheet for what "servo_pin", "encoder_pin_a", etc. are
     def __init__(self, servo_pin: int, encoder_pin_a: int, encoder_pin_b: int, absolute_encoder_pin: int):
-        super().__init__(servo_pin, encoder_pin_a, encoder_pin_b)
+        super().__init__(servo_pin)
+        self.encoder = RotaryEncoder(a=encoder_pin_a, b=encoder_pin_b, max_steps=10000000000000)
 
         self.absolute_encoder = AbsoluteEncoder(pin=absolute_encoder_pin)
-        self.wait_for_absolute_encoders_active()
+        self.wait_for_encoders_active()
 
         self.pid_controller: PIDController = PIDController(self.kP, self.kI, self.kD)
 
@@ -116,8 +118,27 @@ class CRServoEx(ServoBase):
         # offset between actual position and absolute encoder position in steps
         self.encoder_position_offset = 0.0
 
+        self.wait_for_encoders_active()
 
-    def wait_for_absolute_encoders_active(self):
+        # create file if it doesn't exist
+        if not os.path.exists(self.INIT_POS_FILE):
+            self.save_encoder_position()
+
+        self.load_encoder_position()
+
+
+    def wait_for_encoders_active(self):
+        print(f"waiting for servo {self.pin}")
+        # max_wait = 3
+        max_wait = 10000
+        start = time.time()
+        while not self.is_active:
+            if time.time() - start > max_wait:
+                print(f"WARNING: Timeout waiting for servo {self.pin} to activate.")
+                raise Exception("servo not connected")
+            time.sleep(0.05)
+
+        print(f"servo connected {self.pin}")
 
         print(f"waiting for absolute encoder {self.absolute_encoder.pin}")
         # max_wait = 3
@@ -159,7 +180,7 @@ class CRServoEx(ServoBase):
     def update_absolute_encoder(self):
         self.absolute_encoder.update()
 
-    def set_position(self, position: float):
+    def set_position(self, position: float): # override
         self.pid_controller.set_setpoint(position)
 
     def set_velocity(self, velocity: float):
@@ -210,5 +231,16 @@ class CRServoEx(ServoBase):
 
         data[str(self.pin)] = 0
 
+        with open(self.INIT_POS_FILE, "w") as f:
+            json.dump(data, f, indent=2)
+
+    def get_data_from_servo_init_pos_file(self) -> dict:
+        data = {}
+        if os.path.exists(self.INIT_POS_FILE):
+            with open(self.INIT_POS_FILE, "r") as f:
+                data = json.load(f)
+        return data
+
+    def write_data_to_servo_init_pos_file(self, data: dict):
         with open(self.INIT_POS_FILE, "w") as f:
             json.dump(data, f, indent=2)
