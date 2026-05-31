@@ -1,7 +1,7 @@
 """
 Slowly moves each servo to both limits then returns to center/stop.
 
-150kg arm (BCM 13): standard servo, vertical = -0.66, limits ±30° (±0.333 servo units)
+150kg arm (BCM 13): standard servo, vertical = 0.0, limits ±30° (±0.333 servo units)
 70kg lazy susan (BCM 12): continuous servo, spins each direction slowly then stops
 5.5kg head (BCM 18): continuous servo, spins each direction slowly then stops
 """
@@ -13,7 +13,7 @@ from gpiozero.pins.pigpio import PiGPIOFactory
 MOSFET_PIN = 16
 
 ARM_PIN       = 13
-ARM_VERTICAL  = -0.66
+ARM_VERTICAL  = 0.0
 ARM_SERVO_MIN = -0.5
 ARM_SERVO_MAX = 0.5
 ARM_LIMIT     = 30 / 90  # 30 degrees in servo units

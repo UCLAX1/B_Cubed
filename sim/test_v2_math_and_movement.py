@@ -45,7 +45,7 @@ def mock_find_motor_angles(pitch, roll, desired_angle):
 LAZY_CPR = 1493
 HEAD_CPR = 2048
 CONT_MAX_ANGLE_SPEED = 0.5
-ARM_VERTICAL_OFFSET = -0.66
+ARM_VERTICAL_OFFSET = 0.0
 ARM_SERVO_MIN = -0.5
 ARM_SERVO_MAX = 0.5
 

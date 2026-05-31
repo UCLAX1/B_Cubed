@@ -1,6 +1,6 @@
 """
 Resets all three servos to their forward/vertical positions.
-  - Arm (150kg, BCM 13): moves to hardcoded vertical (-0.66)
+    - Arm (150kg, BCM 13): moves to hardcoded vertical (0.0)
   - Lazy susan (70kg, BCM 12): moves to saved forward position (0 steps)
   - Head (5.5kg, BCM 18): moves to saved forward position (0 steps)
 """
@@ -12,7 +12,7 @@ from ServoEx import ServoEx
 
 MOSFET_PIN    = 16
 ARM_PIN       = 13
-ARM_VERTICAL  = -0.66
+ARM_VERTICAL  = 0.0
 ARM_SERVO_MIN = -0.5
 ARM_SERVO_MAX = 0.5
 

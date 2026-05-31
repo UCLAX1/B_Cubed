@@ -19,6 +19,7 @@ DEBUG = True
 DESIRED_ANGLE = 0.0
 NO_IMU_DATA_TIMEOUT_S = 5.0
 IMU_INIT_TIMEOUT_S = 5.0
+CALIBRATION_SAMPLES = 60
 
 SETTINGS_FILE = "RTIMULib"
 sys.path.append("/usr/lib/python3/dist-packages")
@@ -27,7 +28,7 @@ ARM_MIN, ARM_MAX = -30.0, 30.0
 LAZY_SUSAN_MIN, LAZY_SUSAN_MAX = -90.0, 90.0
 HEAD_MIN, HEAD_MAX = -float('inf'), float('inf')
 
-ARM_VERTICAL_OFFSET = -0.66  # servo value at physical vertical (measured)
+ARM_VERTICAL_OFFSET = 0.0  # servo value at physical vertical
 ARM_SERVO_MIN = -0.5
 ARM_SERVO_MAX = 0.5
 
@@ -77,6 +78,41 @@ def angle_to_servo_value(angle_deg, servo_type="standard"):
 
 def slew_limit(current, target, max_step):
     return current + clamp(target - current, -max_step, max_step)
+
+
+def normalize_degrees(angle_deg):
+    return (angle_deg + 180.0) % 360.0 - 180.0
+
+
+def calibrate_reference_pose(imu_device, poll_interval):
+    log(f"Calibrating flat pose from {CALIBRATION_SAMPLES} samples...")
+    log("Hold the Pi in its flat reference position now.")
+
+    roll_samples = []
+    pitch_samples = []
+
+    while len(roll_samples) < CALIBRATION_SAMPLES:
+        if imu_device.IMURead():
+            data = imu_device.getIMUData()
+            fusion_pose = data["fusionPose"]
+            roll_samples.append(math.degrees(fusion_pose[0]))
+            pitch_samples.append(math.degrees(fusion_pose[1]))
+        time.sleep(poll_interval)
+
+    roll_reference_deg = sum(roll_samples) / len(roll_samples)
+    pitch_reference_deg = sum(pitch_samples) / len(pitch_samples)
+
+    log(
+        f"Flat reference: R={roll_reference_deg:+.1f}°  "
+        f"P={pitch_reference_deg:+.1f}°"
+    )
+    return roll_reference_deg, pitch_reference_deg
+
+
+def apply_counterbalance(roll_deg, pitch_deg, roll_reference_deg, pitch_reference_deg):
+    adjusted_roll = normalize_degrees(roll_deg - roll_reference_deg)
+    adjusted_pitch = normalize_degrees(pitch_deg - pitch_reference_deg)
+    return adjusted_roll, adjusted_pitch
 
 
 class AngleFilter:
@@ -250,6 +286,10 @@ def main(
         log("Exiting because IMU did not initialize.")
         return 1
 
+    roll_reference_deg, pitch_reference_deg = calibrate_reference_pose(
+        imu, imu_poll_interval
+    )
+
     roll_filter = AngleFilter(IMU_ALPHA)
     pitch_filter = AngleFilter(IMU_ALPHA)
     yaw_filter = AngleFilter(IMU_ALPHA)
@@ -313,8 +353,16 @@ def main(
                 last_imu_data = now
                 data = imu.getIMUData()
                 fusion_pose = data["fusionPose"]
-                roll = roll_filter.update(math.degrees(fusion_pose[0]))
-                pitch = pitch_filter.update(math.degrees(fusion_pose[1]))
+                raw_roll = math.degrees(fusion_pose[0])
+                raw_pitch = math.degrees(fusion_pose[1])
+                roll, pitch = apply_counterbalance(
+                    raw_roll,
+                    raw_pitch,
+                    roll_reference_deg,
+                    pitch_reference_deg,
+                )
+                roll = roll_filter.update(roll)
+                pitch = pitch_filter.update(pitch)
                 yaw = yaw_filter.update(math.degrees(fusion_pose[2]))
 
                 if now - last_servo_update >= servo_update_interval:
@@ -381,7 +429,10 @@ def main(
 
                 if DEBUG and now - last_print >= print_interval:
                     print(
-                        f"IMU(filt): R={roll:7.2f}  P={pitch:7.2f}  Y={yaw:7.2f}"
+                        f"IMU(raw):  R={raw_roll:7.2f}  P={raw_pitch:7.2f}"
+                    )
+                    print(
+                        f"IMU(adj):  R={roll:7.2f}  P={pitch:7.2f}  Y={yaw:7.2f}"
                     )
                     print(
                         f"Cmd: arm={arm_cmd_last:+.3f}  "

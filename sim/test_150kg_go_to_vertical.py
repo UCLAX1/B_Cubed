@@ -1,5 +1,5 @@
 """
-Moves the 150kg arm servo instantly to the known vertical position (-0.66).
+Moves the 150kg arm servo instantly to the known vertical position (0.0).
 """
 
 import time
@@ -8,7 +8,7 @@ from gpiozero.pins.pigpio import PiGPIOFactory
 
 SERVO_PIN  = 13
 MOSFET_PIN = 16
-VERTICAL   = -0.66
+VERTICAL   = 0.0
 ARM_SERVO_MIN = -0.5
 ARM_SERVO_MAX = 0.5
 
