@@ -46,8 +46,8 @@ lazy_home_deg = lazy_abs * 360.0
 head_home_deg = head_abs * 360.0
 lazy_relative_deg = lazy.get_position() * 360.0
 head_relative_deg = head.get_position() * 360.0
-lazy_abs_valid = 0.0 < lazy_abs < 1.0
-head_abs_valid = 0.0 < head_abs < 1.0
+lazy_abs_valid = bool(0.0 < lazy_abs < 1.0)
+head_abs_valid = bool(0.0 < head_abs < 1.0)
 
 if not lazy_abs_valid:
 	print(f"WARNING: lazy absolute encoder appears saturated at {lazy_abs:.1f}")
