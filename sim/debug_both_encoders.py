@@ -34,6 +34,8 @@ HEAD_A, HEAD_B, HEAD_ABS = 4, 22, 17
 HEAD_CPR = 2048
 
 NUDGE_SPEED = 0.2
+HEAD_NUDGE_SPEED = 0.35
+NUDGE_TIME_S = 0.6
 ABS_VALID_MIN = 0.0
 ABS_VALID_MAX = 1.0
 
@@ -109,6 +111,10 @@ def nudge(servo, direction):
     servo.value = clamp(direction * NUDGE_SPEED, -1.0, 1.0)
 
 
+def nudge_head(servo, direction):
+    servo.value = clamp(direction * HEAD_NUDGE_SPEED, -1.0, 1.0)
+
+
 try:
     print_status()
     while True:
@@ -130,15 +136,19 @@ try:
 
         if ch in ("l", "L", "h", "H"):
             if ch == "l":
+                print(f"\nNudging lazy susan at {NUDGE_SPEED:+.2f}")
                 nudge(lazy, +1.0)
             elif ch == "L":
+                print(f"\nNudging lazy susan at {-NUDGE_SPEED:+.2f}")
                 nudge(lazy, -1.0)
             elif ch == "h":
-                nudge(head, +1.0)
+                print(f"\nNudging head at {HEAD_NUDGE_SPEED:+.2f}")
+                nudge_head(head, +1.0)
             elif ch == "H":
-                nudge(head, -1.0)
+                print(f"\nNudging head at {-HEAD_NUDGE_SPEED:+.2f}")
+                nudge_head(head, -1.0)
 
-            time.sleep(0.4)
+            time.sleep(NUDGE_TIME_S)
             lazy.value = 0.0
             head.value = 0.0
             print_status()

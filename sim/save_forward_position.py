@@ -49,14 +49,19 @@ head_relative_deg = head.get_position() * 360.0
 lazy_abs_valid = bool(0.0 < lazy_abs < 1.0)
 head_abs_valid = bool(0.0 < head_abs < 1.0)
 
+previous_home_data = {}
+if os.path.exists(HOME_PATH):
+    with open(HOME_PATH, "r") as file_handle:
+        previous_home_data = json.load(file_handle)
+
 if not lazy_abs_valid:
 	print(f"WARNING: lazy absolute encoder appears saturated at {lazy_abs:.1f}")
 if not head_abs_valid:
 	print(f"WARNING: head absolute encoder appears saturated at {head_abs:.1f}")
 
 home_data = {
-	"lazy_susan_deg": lazy_home_deg,
-	"head_deg": head_home_deg,
+	"lazy_susan_deg": lazy_home_deg if lazy_abs_valid else previous_home_data.get("lazy_susan_deg", lazy_home_deg),
+	"head_deg": head_home_deg if head_abs_valid else previous_home_data.get("head_deg", head_home_deg),
 	"lazy_susan_steps": lazy.encoder.steps,
 	"head_steps": head.encoder.steps,
 	"lazy_abs_valid": lazy_abs_valid,
