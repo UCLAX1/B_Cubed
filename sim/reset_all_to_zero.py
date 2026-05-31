@@ -13,6 +13,8 @@ from ServoEx import ServoEx
 MOSFET_PIN    = 16
 ARM_PIN       = 13
 ARM_VERTICAL  = -0.66
+ARM_SERVO_MIN = -0.5
+ARM_SERVO_MAX = 0.5
 
 LAZY_SERVO    = 12
 LAZY_A, LAZY_B, LAZY_ABS = 26, 6, 5
@@ -38,7 +40,7 @@ arm  = Servo(ARM_PIN, initial_value=None, pin_factory=factory)
 lazy = ServoEx(LAZY_SERVO, LAZY_A, LAZY_B, LAZY_ABS, initial_value=None, pin_factory=factory)
 head = ServoEx(HEAD_SERVO, HEAD_A, HEAD_B, HEAD_ABS, initial_value=None)
 
-print(f"Arm:        will move to servo value {ARM_VERTICAL}")
+print(f"Arm:        will move to servo value {ARM_VERTICAL} (clamped to [{ARM_SERVO_MIN}, {ARM_SERVO_MAX}])")
 print(f"Lazy susan: loaded at {lazy.encoder.steps} steps ({lazy.encoder.steps * 360.0 / LAZY_CPR:.1f} deg from saved forward)")
 print(f"Head:       loaded at {head.encoder.steps} steps ({head.encoder.steps * 360.0 / HEAD_CPR:.1f} deg from saved forward)")
 
@@ -95,7 +97,7 @@ def move_to_zero(servo, name, direction_sign):
 
 # ── Arm ───────────────────────────────────────────────────────
 print("\nMoving arm to vertical...")
-arm.value = ARM_VERTICAL
+arm.value = max(min(ARM_VERTICAL, ARM_SERVO_MAX), ARM_SERVO_MIN)
 time.sleep(1.5)  # standard servo, just wait for it to reach position
 print(f"  arm at {ARM_VERTICAL}")
 

@@ -46,6 +46,8 @@ LAZY_CPR = 1493
 HEAD_CPR = 2048
 CONT_MAX_ANGLE_SPEED = 0.5
 ARM_VERTICAL_OFFSET = -0.66
+ARM_SERVO_MIN = -0.5
+ARM_SERVO_MAX = 0.5
 
 def clamp(value, minimum, maximum):
     return max(min(value, maximum), minimum)
@@ -56,7 +58,7 @@ def angle_to_servo_cmd_continuous(error_deg):
 
 def angle_to_servo_cmd_arm(angle_deg):
     """Convert angle degrees to servo command with vertical offset"""
-    return clamp((angle_deg / 90.0) + ARM_VERTICAL_OFFSET, -1.0, 1.0)
+    return clamp((angle_deg / 90.0) + ARM_VERTICAL_OFFSET, ARM_SERVO_MIN, ARM_SERVO_MAX)
 
 print("=" * 80)
 print("PHASE 1: MATH VALIDATION")
@@ -128,7 +130,7 @@ for error, description in error_tests:
         print(f"  ✓ Fast movement ({abs(cmd):.3f})")
 
     # Validate command is in [-1, 1]
-    if -1.0 <= cmd <= 1.0:
+    if ARM_SERVO_MIN <= cmd <= ARM_SERVO_MAX:
         print(f"  ✓ Command in valid range [-1.0, 1.0]")
     else:
         print(f"  ✗ COMMAND OUT OF RANGE")
@@ -201,7 +203,7 @@ for pitch, roll, description in tilt_sequence:
     print(f"    Movement: {' | '.join(directions)}")
 
     # Validate all commands in range
-    if not (-1.0 <= lazy_cmd <= 1.0 and -1.0 <= head_cmd <= 1.0 and -1.0 <= arm_cmd <= 1.0):
+    if not ( -1.0 <= lazy_cmd <= 1.0 and -1.0 <= head_cmd <= 1.0 and ARM_SERVO_MIN <= arm_cmd <= ARM_SERVO_MAX):
         print(f"    ✗ COMMAND OUT OF RANGE")
         e2e_pass = False
     print()

@@ -9,6 +9,8 @@ from gpiozero.pins.pigpio import PiGPIOFactory
 SERVO_PIN  = 13
 MOSFET_PIN = 16
 VERTICAL   = -0.66
+ARM_SERVO_MIN = -0.5
+ARM_SERVO_MAX = 0.5
 
 mosfet = DigitalOutputDevice(MOSFET_PIN)
 mosfet.on()
@@ -18,8 +20,8 @@ factory = PiGPIOFactory()
 servo = Servo(SERVO_PIN, initial_value=None, pin_factory=factory)
 time.sleep(0.5)
 
-print(f"Moving to vertical ({VERTICAL})...")
-servo.value = VERTICAL
+print(f"Moving to vertical ({VERTICAL})... (clamped to [{ARM_SERVO_MIN},{ARM_SERVO_MAX}])")
+servo.value = max(min(VERTICAL, ARM_SERVO_MAX), ARM_SERVO_MIN)
 print("Done. Press Ctrl+C to release.")
 
 try:

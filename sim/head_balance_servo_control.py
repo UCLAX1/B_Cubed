@@ -28,6 +28,8 @@ LAZY_SUSAN_MIN, LAZY_SUSAN_MAX = -90.0, 90.0
 HEAD_MIN, HEAD_MAX = -float('inf'), float('inf')
 
 ARM_VERTICAL_OFFSET = -0.66  # servo value at physical vertical (measured)
+ARM_SERVO_MIN = -0.5
+ARM_SERVO_MAX = 0.5
 
 LAZY_CPR = 1493   # measured counts per revolution for 70kg lazy susan
 HEAD_CPR  = 2048  # default; update after head encoder is calibrated
@@ -278,7 +280,7 @@ def main(
         time.sleep(0.5)
 
         log("Centering servos...")
-        arm_servo.value = ARM_VERTICAL_OFFSET
+        arm_servo.value = clamp(ARM_VERTICAL_OFFSET, ARM_SERVO_MIN, ARM_SERVO_MAX)
         lazy_susan_servo.value = 0
         head_servo.value = 0
         arm_damper.reset(0.0)
@@ -342,7 +344,7 @@ def main(
 
                     arm_cmd = clamp(
                         angle_to_servo_value(damped_arm_tgt, "standard") + ARM_VERTICAL_OFFSET,
-                        -1.0, 1.0
+                        ARM_SERVO_MIN, ARM_SERVO_MAX
                     )
 
                     lazy_actual = lazy_susan_servo.encoder.steps * 360.0 / LAZY_CPR

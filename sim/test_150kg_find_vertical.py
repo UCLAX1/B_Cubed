@@ -57,9 +57,9 @@ try:
         if ch in ('q', '\x03'):
             break
         elif ch in ('\x1b[C', 'd', '+'):  # right arrow, d, +
-            current = min(1.0, current + step)
+            current = min(0.5, current + step)
         elif ch in ('\x1b[D', 'a', '-'):  # left arrow, a, -
-            current = max(-1.0, current - step)
+            current = max(-0.5, current - step)
         elif ch == '0':
             current = 0.0
         elif ch == 'f':

@@ -14,6 +14,8 @@ MOSFET_PIN = 16
 
 ARM_PIN       = 13
 ARM_VERTICAL  = -0.66
+ARM_SERVO_MIN = -0.5
+ARM_SERVO_MAX = 0.5
 ARM_LIMIT     = 30 / 90  # 30 degrees in servo units
 
 LAZY_PIN      = 12
@@ -60,11 +62,11 @@ def spin(servo, name, speed, duration):
 # ── 150kg ARM ────────────────────────────────────────────────
 print("\n=== ARM SERVO (150kg) ===")
 print("Setting to vertical (arm should already be there)...")
-arm.value = ARM_VERTICAL
+arm.value = max(min(ARM_VERTICAL, ARM_SERVO_MAX), ARM_SERVO_MIN)
 time.sleep(1.0)
 
-pos_limit = ARM_VERTICAL + ARM_LIMIT
-neg_limit = ARM_VERTICAL - ARM_LIMIT
+pos_limit = max(min(ARM_VERTICAL + ARM_LIMIT, ARM_SERVO_MAX), ARM_SERVO_MIN)
+neg_limit = max(min(ARM_VERTICAL - ARM_LIMIT, ARM_SERVO_MAX), ARM_SERVO_MIN)
 
 print(f"Ramping to positive limit ({pos_limit:+.3f})...")
 ramp(arm, ARM_VERTICAL, pos_limit)

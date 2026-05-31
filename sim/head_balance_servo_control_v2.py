@@ -9,12 +9,15 @@ from ServoEx import ServoEx
 
 DEBUG = True
 DESIRED_ANGLE = 0.0
+ARM_SERVO_ENABLED = False
 
 ARM_MIN, ARM_MAX = -30.0, 30.0
 LAZY_SUSAN_MIN, LAZY_SUSAN_MAX = -90.0, 90.0
 HEAD_MIN, HEAD_MAX = -float('inf'), float('inf')
 
 ARM_VERTICAL_OFFSET = -0.66
+ARM_SERVO_MIN = -0.5
+ARM_SERVO_MAX = 0.5
 LAZY_CPR = 1493
 HEAD_CPR = 2048
 CONT_MAX_ANGLE_SPEED = 0.5
@@ -42,7 +45,7 @@ mosfet = DigitalOutputDevice(16)
 mosfet.on()
 time.sleep(0.5)
 
-arm_servo = Servo(13, initial_value=None, pin_factory=factory)
+arm_servo = Servo(13, initial_value=None, pin_factory=factory) if ARM_SERVO_ENABLED else None
 lazy_susan = ServoEx(12, 26, 6, 5, initial_value=None, pin_factory=factory)
 head_servo = ServoEx(20, 4, 22, 17, initial_value=None)
 
@@ -50,7 +53,8 @@ def clamp(value, minimum, maximum):
     return max(min(value, maximum), minimum)
 
 try:
-    arm_servo.value = ARM_VERTICAL_OFFSET
+    if arm_servo is not None:
+        arm_servo.value = clamp(ARM_VERTICAL_OFFSET, ARM_SERVO_MIN, ARM_SERVO_MAX)
     lazy_susan.value = 0.0
     head_servo.value = 0.0
     time.sleep(0.5)
@@ -83,7 +87,7 @@ try:
             head_cmd = clamp(head_error / CONT_MAX_ANGLE_SPEED, -1.0, 1.0)
 
             arm_cmd = clamp(
-                (arm_tgt / 90.0) + ARM_VERTICAL_OFFSET, -1.0, 1.0
+                (arm_tgt / 90.0) + ARM_VERTICAL_OFFSET, ARM_SERVO_MIN, ARM_SERVO_MAX
             )
 
             lazy_susan.value = lazy_cmd
@@ -93,6 +97,7 @@ try:
             if DEBUG:
                 print(f"IMU: R={roll:7.1f}° P={pitch:7.1f}° Y={yaw:7.1f}°")
                 print(f"Tgt: arm={arm_tgt:+7.2f}° lazy={lazy_tgt:+7.2f}° head={head_tgt:+7.2f}°")
+                print(f"Head attempt: {head_tgt:+7.2f}°")
                 print(f"Pos: lazy={lazy_actual:+7.2f}° head={head_actual:+7.2f}°")
                 print(f"Err: lazy={lazy_error:+7.2f}° head={head_error:+7.2f}°")
                 print(f"Cmd: arm={arm_cmd:+.3f} lazy={lazy_cmd:+.3f} head={head_cmd:+.3f}")
@@ -103,7 +108,8 @@ try:
 except KeyboardInterrupt:
     print("\nStopped.")
 finally:
-    arm_servo.value = 0.0
+    if arm_servo is not None:
+        arm_servo.value = 0.0
     lazy_susan.value = 0.0
     head_servo.value = 0.0
     lazy_susan.deactivate_and_save()
