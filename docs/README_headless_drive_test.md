@@ -17,7 +17,7 @@ The launch scripts write `~/cyclonedds.xml` at startup. They bind DDS only to an
 
 ## 0. One-Time Hotspot Setup
 
-The runtime scripts already know how to use either Tailscale or hotspot DDS. By default, the Jetson launch auto-detects the current address and prefers the hotspot if `10.42.0.1` is already active; it does not switch the Jetson back to Tailscale on startup or shutdown. The one-time setup is making sure the Jetson has a NetworkManager hotspot profile named `Hotspot`, and the Pi joins that hotspot at the expected static IP.
+The runtime scripts already know how to use either Tailscale or hotspot DDS. By default, the Jetson launch auto-detects the current address and prefers the hotspot if `10.42.0.1` is already active; it does not start the hotspot or switch the Jetson back to Tailscale on startup or shutdown. The one-time setup is making sure the Jetson has a NetworkManager hotspot profile named `Hotspot`, and the Pi joins that hotspot at the expected static IP.
 
 On the Jetson, create or verify the hotspot profile:
 
@@ -110,7 +110,7 @@ PLANNING_CONSOLE_HOST=0.0.0.0 \
 ```
 
 
-Use this when the Jetson should actively bring up the hotspot profile before launching:
+Use this when the Jetson hotspot is already active:
 ```bash
 ssh ubuntu
 cd ~/Documents/B_Cubed/ros2_ws
@@ -128,9 +128,9 @@ Open the web console from another computer:
 http://10.42.0.1:8080/
 ```
 
-Use this when the Jetson should switch to hotspot mode.
+The Jetson launch does not bring up the hotspot. Start the `Hotspot` NetworkManager profile before running the launch.
 
-Important: if you start hotspot mode through a Tailscale SSH session, the SSH connection may drop as soon as the Jetson changes Wi-Fi modes. Run the launch inside `tmux` or from systemd/local terminal so the robot stack keeps running after your SSH session disconnects.
+Important: if you start the hotspot itself through a Tailscale SSH session, the SSH connection may drop as soon as the Jetson changes Wi-Fi modes. Start the launch after reconnecting through the hotspot, or run it inside `tmux`, with systemd, or from a local terminal.
 
 ```bash
 ssh ubuntu
@@ -174,11 +174,7 @@ NETWORK_MODE=tailscale \
 ./launch_headless.sh --localization --map-file /home/jetson-nano-x1/Documents/B_Cubed/ros2_ws/maps/MAP_PREFIX
 ```
 
-Stop the Jetson launch with `Ctrl-C`. The script sends a clean shutdown to the ZED wrapper and navigation launch processes. It leaves the Jetson in whatever network mode the launch selected. In hotspot mode, it also reasserts the `Hotspot` NetworkManager profile on exit so the `x1-jetson` Wi-Fi stays available after the ROS stack stops. Override only if you intentionally want normal NetworkManager behavior:
-
-```bash
-HOTSPOT_KEEP_ACTIVE_ON_EXIT=false ./launch_headless.sh --hotspot --mapping
-```
+Stop the Jetson launch with `Ctrl-C`. The script sends a clean shutdown to the ZED wrapper and navigation launch processes. It leaves the Jetson network alone.
 
 ## 2. Raspberry Pi Startup
 
@@ -379,7 +375,7 @@ find ~/B_Cubed/ros2_ws/log/pi_balanced_drive -maxdepth 3 -type f | sort | tail
 
 ## 8. Hotspot Troubleshooting
 
-If the Jetson launch dies right after `Switching Jetson network to hotspot`, it was probably started in a plain SSH session that got disconnected. Start it inside `tmux`, with `systemd`, or from a local terminal.
+If the Jetson launch says `NETWORK_MODE=hotspot requested, but 10.42.0.1 is not present`, the Jetson hotspot is not active yet. Start the `Hotspot` NetworkManager profile first, then rerun the launch.
 
 If the Pi launch says `NETWORK_MODE=hotspot requested, but 10.42.0.166 is not present`, the Pi did not join the hotspot with the expected static IP. Check `hostname -I` on the Pi and fix the Pi Wi-Fi profile or override `PI_HOTSPOT_IP` on both launch commands.
 
@@ -450,7 +446,7 @@ sudo systemctl enable --now b_cubed_pi.service
 sudo journalctl -u b_cubed_pi.service -f
 ```
 
-The Jetson systemd unit defaults to the script's normal Tailscale mode. For a standalone hotspot robot, add a systemd override:
+The Jetson systemd unit defaults to network auto-detection. For a standalone hotspot robot, make sure the `Hotspot` NetworkManager profile is already active before the service starts. You can also force the launch to require the hotspot address with a systemd override:
 
 ```bash
 sudo systemctl edit b_cubed_jetson.service
@@ -459,7 +455,6 @@ sudo systemctl edit b_cubed_jetson.service
 ```ini
 [Service]
 Environment=NETWORK_MODE=hotspot
-Environment=HOTSPOT_CONNECTION=Hotspot
 ```
 
 The Pi systemd unit defaults to DDS auto-detection, but it is conservative about hardware. For a real drive test through systemd, confirm the service has:

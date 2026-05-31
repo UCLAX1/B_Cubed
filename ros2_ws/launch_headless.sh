@@ -16,9 +16,7 @@ ROS_LOG_DIR="${ROS_LOG_DIR:-$WS_DIR/log/headless}"
 NPROC_VALUE="$(command -v nproc >/dev/null 2>&1 && nproc || echo 4)"
 
 NETWORK_MODE="${NETWORK_MODE:-auto}"
-HOTSPOT_CONNECTION="${HOTSPOT_CONNECTION:-Hotspot}"
 WIFI_CONNECTION="${WIFI_CONNECTION:-eduroam}"
-HOTSPOT_KEEP_ACTIVE_ON_EXIT="${HOTSPOT_KEEP_ACTIVE_ON_EXIT:-true}"
 JETSON_TAILSCALE_IP="${JETSON_TAILSCALE_IP:-100.86.7.33}"
 JETSON_HOTSPOT_IP="${JETSON_HOTSPOT_IP:-10.42.0.1}"
 PI_TAILSCALE_IP="${PI_TAILSCALE_IP:-100.80.7.37}"
@@ -119,8 +117,7 @@ Environment overrides:
   ENABLE_PLANNING_CONSOLE, PLANNING_CONSOLE_HOST, PLANNING_CONSOLE_PORT.
   KILL_STALE_ZED_WRAPPER, TOPIC_WAIT_TIMEOUT_SEC, STATUS_INTERVAL_SEC.
   COMMAND_MONITOR_ENABLED, COMMAND_MONITOR_TOPICS.
-  NETWORK_MODE=auto|tailscale|hotspot|wifi|none, HOTSPOT_CONNECTION, WIFI_CONNECTION.
-  HOTSPOT_KEEP_ACTIVE_ON_EXIT=true keeps the Jetson hotspot up after Ctrl-C.
+  NETWORK_MODE=auto|tailscale|hotspot|wifi|none, WIFI_CONNECTION.
 EOF
 }
 
@@ -191,7 +188,6 @@ cleanup() {
   done
 
   wait >/dev/null 2>&1 || true
-  keep_selected_network_mode_active || true
 }
 
 run_sudo_command() {
@@ -287,22 +283,14 @@ configure_network_mode() {
       fi
       ;;
     hotspot)
-      echo "Switching Jetson network to hotspot profile '$HOTSPOT_CONNECTION'..."
-      if ! command -v nmcli >/dev/null 2>&1; then
-        echo "nmcli is required for NETWORK_MODE=hotspot." >&2
-        exit 1
-      fi
-      if ! nmcli -t -f NAME connection show | grep -Fxq "$HOTSPOT_CONNECTION"; then
-        echo "NetworkManager connection not found: $HOTSPOT_CONNECTION" >&2
-        exit 1
-      fi
-      run_sudo_command nmcli connection up "$HOTSPOT_CONNECTION"
-      if ! wait_for_ipv4_address "$JETSON_HOTSPOT_IP"; then
-        echo "Hotspot did not expose $JETSON_HOTSPOT_IP within ${NETWORK_SWITCH_TIMEOUT_SEC}s." >&2
+      if ! has_ipv4_address "$JETSON_HOTSPOT_IP"; then
+        echo "NETWORK_MODE=hotspot requested, but $JETSON_HOTSPOT_IP is not present." >&2
+        echo "Start the Jetson hotspot before running this launch." >&2
         echo "Available IPv4 addresses:" >&2
         ip -4 addr show >&2
         exit 1
       fi
+      echo "Using active Jetson hotspot address $JETSON_HOTSPOT_IP."
       write_cyclonedds_config "$JETSON_HOTSPOT_IP" "$PI_HOTSPOT_IP" "$PI_TAILSCALE_IP"
       ;;
     tailscale|wifi)
@@ -328,31 +316,6 @@ configure_network_mode() {
       exit 2
       ;;
   esac
-}
-
-keep_selected_network_mode_active() {
-  if [[ "$NETWORK_MODE" != "hotspot" ]] ||
-    ! bool_is_true "$HOTSPOT_KEEP_ACTIVE_ON_EXIT"; then
-    return 0
-  fi
-  if ! command -v nmcli >/dev/null 2>&1; then
-    return 0
-  fi
-
-  if nmcli -t -f NAME connection show --active 2>/dev/null |
-    grep -Fxq "$HOTSPOT_CONNECTION" &&
-    wait_for_ipv4_address "$JETSON_HOTSPOT_IP"; then
-    echo "Leaving Jetson hotspot active: $HOTSPOT_CONNECTION ($JETSON_HOTSPOT_IP)"
-    return 0
-  fi
-
-  echo "Re-asserting Jetson hotspot profile '$HOTSPOT_CONNECTION' before exit..."
-  if run_sudo_command nmcli connection up "$HOTSPOT_CONNECTION" &&
-    wait_for_ipv4_address "$JETSON_HOTSPOT_IP"; then
-    echo "Jetson hotspot remains active: $HOTSPOT_CONNECTION ($JETSON_HOTSPOT_IP)"
-  else
-    echo "Warning: could not verify that hotspot '$HOTSPOT_CONNECTION' stayed active." >&2
-  fi
 }
 
 planning_console_url_host() {
