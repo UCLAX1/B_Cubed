@@ -64,6 +64,7 @@ home_data = {
 	"head_deg": head_home_deg if head_abs_valid else previous_home_data.get("head_deg", head_home_deg),
 	"lazy_susan_steps": lazy.encoder.steps,
 	"head_steps": head.encoder.steps,
+	"head_home_steps": head.encoder.steps,
 	"lazy_abs_valid": lazy_abs_valid,
 	"head_abs_valid": head_abs_valid,
 }

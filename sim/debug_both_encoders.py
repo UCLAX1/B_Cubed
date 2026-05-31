@@ -135,6 +135,8 @@ try:
             continue
 
         if ch in ("l", "L", "h", "H"):
+            head_before = head.encoder.steps
+            lazy_before = lazy.encoder.steps
             if ch == "l":
                 print(f"\nNudging lazy susan at {NUDGE_SPEED:+.2f}")
                 nudge(lazy, +1.0)
@@ -152,6 +154,10 @@ try:
             lazy.value = 0.0
             head.value = 0.0
             print_status()
+            print(
+                f"delta: lazy_steps={lazy.encoder.steps - lazy_before:+d} "
+                f"head_steps={head.encoder.steps - head_before:+d}"
+            )
 
 except KeyboardInterrupt:
     print("\nStopped.")

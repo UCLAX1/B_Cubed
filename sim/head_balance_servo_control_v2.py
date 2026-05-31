@@ -27,6 +27,7 @@ STARTUP_HOME_FILE = "servo_home_absolute.json"
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 STARTUP_HOME_PATH = os.path.join(SCRIPT_DIR, STARTUP_HOME_FILE)
 STARTUP_HOME_DEADBAND_DEG = 3.0
+STARTUP_HOME_DEADBAND_STEPS = 8
 STARTUP_HOME_MAX_COMMAND = 0.25
 STARTUP_HOME_SPEED_SCALE = 45.0
 STARTUP_HOME_TIMEOUT_S = 10.0
@@ -118,6 +119,32 @@ def home_continuous_servo_to_absolute(servo, target_deg, name):
     print(f"  WARNING: {name} homing timed out at {actual_deg:+.1f}° (target {target_deg:+.1f}°)")
     return False
 
+
+def home_continuous_servo_to_steps(servo, target_steps, name):
+    deadline = time.time() + STARTUP_HOME_TIMEOUT_S
+    servo.value = 0.0
+
+    print(f"Homing {name} to saved encoder steps {target_steps:+d}...")
+    while time.time() < deadline:
+        current_steps = servo.encoder.steps
+        error_steps = target_steps - current_steps
+
+        if abs(error_steps) <= STARTUP_HOME_DEADBAND_STEPS:
+            servo.value = 0.0
+            print(f"  {name} homed at {current_steps:+d} steps (error {error_steps:+d})")
+            return True
+
+        servo.value = clamp(
+            error_steps / (STARTUP_HOME_SPEED_SCALE * 10.0),
+            -STARTUP_HOME_MAX_COMMAND,
+            STARTUP_HOME_MAX_COMMAND,
+        )
+        time.sleep(poll_interval)
+
+    servo.value = 0.0
+    print(f"  WARNING: {name} homing timed out at {servo.encoder.steps:+d} steps (target {target_steps:+d})")
+    return False
+
 try:
     home_targets = load_startup_home_targets()
     if home_targets is None:
@@ -139,7 +166,11 @@ try:
                 "head",
             )
         else:
-            print("Skipping head homing because the absolute encoder reading was invalid.")
+            home_continuous_servo_to_steps(
+                head_servo,
+                int(home_targets.get("head_home_steps", home_targets.get("head_steps", 0))),
+                "head",
+            )
 
     if arm_servo is not None:
         arm_servo.value = clamp(ARM_VERTICAL_OFFSET, ARM_SERVO_MIN, ARM_SERVO_MAX)
