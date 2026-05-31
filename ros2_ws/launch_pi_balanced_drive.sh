@@ -35,6 +35,7 @@ BALANCE_MANUAL_TIMEOUT_SEC="${BALANCE_MANUAL_TIMEOUT_SEC:-0.30}"
 MOTOR_NAV_CMD_TIMEOUT_SEC="${MOTOR_NAV_CMD_TIMEOUT_SEC:-0.50}"
 MOTOR_MANUAL_CMD_TIMEOUT_SEC="${MOTOR_MANUAL_CMD_TIMEOUT_SEC:-0.30}"
 MOTOR_IPC_WATCHDOG_TIMEOUT_SEC="${MOTOR_IPC_WATCHDOG_TIMEOUT_SEC:-0.30}"
+MOTOR_POWER_SLEW_RATE_PER_SEC="${MOTOR_POWER_SLEW_RATE_PER_SEC:-4.0}"
 
 CAN_CHANNEL="${CAN_CHANNEL:-can0}"
 CAN_INTERFACE="${CAN_INTERFACE:-socketcan}"
@@ -335,11 +336,22 @@ cleanup() {
 topic_visible() {
   local topic="$1"
 
-  ros2 topic list 2>/dev/null | grep -Fxq "$topic"
+  ros2 topic list 2>/dev/null | grep -Fxq "$(normalize_ros_topic "$topic")"
+}
+
+normalize_ros_topic() {
+  local topic="$1"
+
+  if [[ "$topic" == /* ]]; then
+    printf '%s\n' "$topic"
+  else
+    printf '/%s\n' "$topic"
+  fi
 }
 
 print_command_topic_info() {
   local topic
+  local normalized_topic
   local info
   local available_topics
   local missing=()
@@ -351,11 +363,12 @@ print_command_topic_info() {
   available_topics="$(ros2 topic list 2>/dev/null || true)"
   echo "Pi command topic endpoints:"
   for topic in $COMMAND_MONITOR_TOPICS; do
-    if ! grep -Fxq "$topic" <<<"$available_topics"; then
+    normalized_topic="$(normalize_ros_topic "$topic")"
+    if ! grep -Fxq "$normalized_topic" <<<"$available_topics"; then
       missing+=("$topic")
       continue
     fi
-    info="$(ros2 topic info "$topic" 2>/dev/null | tr '\n' '; ' || true)"
+    info="$(ros2 topic info "$normalized_topic" 2>/dev/null | tr '\n' '; ' || true)"
     echo "  $topic: $info"
   done
 
@@ -370,6 +383,7 @@ print_command_topic_info() {
 
 print_command_samples() {
   local topic
+  local normalized_topic
   local sample
   local available_topics
   local missing=()
@@ -381,14 +395,15 @@ print_command_samples() {
   available_topics="$(ros2 topic list 2>/dev/null || true)"
   echo "Pi command monitor:"
   for topic in $COMMAND_MONITOR_TOPICS; do
-    if ! grep -Fxq "$topic" <<<"$available_topics"; then
+    normalized_topic="$(normalize_ros_topic "$topic")"
+    if ! grep -Fxq "$normalized_topic" <<<"$available_topics"; then
       missing+=("$topic")
       continue
     fi
 
     sample="$(
       timeout "$COMMAND_MONITOR_SAMPLE_TIMEOUT_SEC" \
-        ros2 topic echo "$topic" --once 2>/dev/null || true
+        ros2 topic echo "$normalized_topic" --once 2>/dev/null || true
     )"
     if [[ -n "${sample//[[:space:]]/}" ]]; then
       echo "  $topic:"
@@ -483,6 +498,7 @@ launch_args=(
   "motor_nav_cmd_timeout_sec:=$MOTOR_NAV_CMD_TIMEOUT_SEC"
   "motor_manual_cmd_timeout_sec:=$MOTOR_MANUAL_CMD_TIMEOUT_SEC"
   "motor_ipc_watchdog_timeout_sec:=$MOTOR_IPC_WATCHDOG_TIMEOUT_SEC"
+  "motor_power_slew_rate_per_sec:=$MOTOR_POWER_SLEW_RATE_PER_SEC"
   "can_channel:=$CAN_CHANNEL"
   "can_interface:=$CAN_INTERFACE"
   "can_bitrate:=$CAN_BITRATE"
@@ -517,6 +533,7 @@ echo "  balance_manual_timeout_sec=$BALANCE_MANUAL_TIMEOUT_SEC"
 echo "  motor_nav_cmd_timeout_sec=$MOTOR_NAV_CMD_TIMEOUT_SEC"
 echo "  motor_manual_cmd_timeout_sec=$MOTOR_MANUAL_CMD_TIMEOUT_SEC"
 echo "  motor_ipc_watchdog_timeout_sec=$MOTOR_IPC_WATCHDOG_TIMEOUT_SEC"
+echo "  motor_power_slew_rate_per_sec=$MOTOR_POWER_SLEW_RATE_PER_SEC"
 echo "  can_setup=$CAN_SETUP"
 echo "  can_channel=$CAN_CHANNEL"
 echo "  can_interface=$CAN_INTERFACE"

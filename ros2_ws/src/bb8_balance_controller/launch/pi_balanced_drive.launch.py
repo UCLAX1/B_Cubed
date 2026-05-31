@@ -48,6 +48,9 @@ def generate_launch_description() -> LaunchDescription:
     motor_ipc_watchdog_timeout_sec = LaunchConfiguration(
         "motor_ipc_watchdog_timeout_sec"
     )
+    motor_power_slew_rate_per_sec = LaunchConfiguration(
+        "motor_power_slew_rate_per_sec"
+    )
     can_channel = LaunchConfiguration("can_channel")
     can_interface = LaunchConfiguration("can_interface")
     can_bitrate = LaunchConfiguration("can_bitrate")
@@ -99,6 +102,7 @@ def generate_launch_description() -> LaunchDescription:
             DeclareLaunchArgument("motor_nav_cmd_timeout_sec", default_value="0.50"),
             DeclareLaunchArgument("motor_manual_cmd_timeout_sec", default_value="0.30"),
             DeclareLaunchArgument("motor_ipc_watchdog_timeout_sec", default_value="0.30"),
+            DeclareLaunchArgument("motor_power_slew_rate_per_sec", default_value="4.0"),
             DeclareLaunchArgument("can_channel", default_value="can0"),
             DeclareLaunchArgument("can_interface", default_value="socketcan"),
             DeclareLaunchArgument("can_bitrate", default_value="1000000"),
@@ -216,6 +220,10 @@ def generate_launch_description() -> LaunchDescription:
                         ),
                         "manual_cmd_timeout_sec": ParameterValue(
                             motor_manual_cmd_timeout_sec,
+                            value_type=float,
+                        ),
+                        "power_slew_rate_per_sec": ParameterValue(
+                            motor_power_slew_rate_per_sec,
                             value_type=float,
                         ),
                         "can_channel": can_channel,

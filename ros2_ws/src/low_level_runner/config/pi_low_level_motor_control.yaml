@@ -10,6 +10,7 @@ low_level_motor_control:
     angular_to_power_scale: 1.0
     max_power: 1.0
     normalize_over_limit: false
+    power_slew_rate_per_sec: 4.0
 
     hardware_enabled: true
     can_channel: can0

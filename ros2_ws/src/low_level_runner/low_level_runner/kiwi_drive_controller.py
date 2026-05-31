@@ -46,6 +46,10 @@ class KiwiDriveController(Node):
         self.normalize_over_limit = bool(
             self.get_parameter("normalize_over_limit").value
         )
+        self.power_slew_rate = max(
+            0.0,
+            float(self.get_parameter("power_slew_rate_per_sec").value),
+        )
 
         self.hardware_enabled = bool(self.get_parameter("hardware_enabled").value)
         self.can_channel = str(self.get_parameter("can_channel").value)
@@ -79,6 +83,8 @@ class KiwiDriveController(Node):
         self.last_manual_cmd_rx = None
         self.last_source = "idle"
         self.last_powers = WheelPowers(0.0, 0.0, 0.0)
+        self.commanded_powers = WheelPowers(0.0, 0.0, 0.0)
+        self.last_power_update_time = self.get_clock().now()
         self.last_status_summary = ""
 
         self.create_subscription(Twist, self.nav_cmd_topic, self._nav_cmd_callback, 10)
@@ -115,6 +121,7 @@ class KiwiDriveController(Node):
         self.declare_parameter("angular_to_power_scale", 1.0)
         self.declare_parameter("max_power", 1.0)
         self.declare_parameter("normalize_over_limit", False)
+        self.declare_parameter("power_slew_rate_per_sec", 0.0)
 
         self.declare_parameter("hardware_enabled", True)
         self.declare_parameter("can_channel", "can0")
@@ -154,24 +161,30 @@ class KiwiDriveController(Node):
             max_power=self.max_power,
             normalize_over_limit=self.normalize_over_limit,
         )
+        command_age = self._command_age(source)
+        powers = self._slew_limit_powers(powers)
         self.last_source = source
         self.last_powers = powers
 
         self._send_motor_command(powers)
-        self._log_status(powers, source)
+        self._log_status(powers, source, command_age)
 
     def _heartbeat_loop(self) -> None:
-        _, source = self._select_command()
+        command, source = self._select_command()
         if source == "idle":
             if self.last_source != "idle" or self.last_powers.as_list() != [0.0, 0.0, 0.0]:
                 self._apply_command(_zero_twist(), "idle")
             else:
                 self._send_motor_heartbeat()
-                self._log_status(self.last_powers, source)
+                self._log_status(self.last_powers, source, self._command_age(source))
+            return
+
+        if self.power_slew_rate > 0.0:
+            self._apply_command(command, source)
             return
 
         self._send_motor_heartbeat()
-        self._log_status(self.last_powers, source)
+        self._log_status(self.last_powers, source, self._command_age(source))
 
     def _select_command(self) -> tuple[Twist, str]:
         if self._manual_command_is_fresh():
@@ -195,6 +208,40 @@ class KiwiDriveController(Node):
     def _is_fresh(self, stamp, timeout: Duration) -> bool:
         return self.get_clock().now() - stamp <= timeout
 
+    def _command_age(self, source: str) -> float | None:
+        if source == "manual" and self.last_manual_cmd_rx is not None:
+            return (self.get_clock().now() - self.last_manual_cmd_rx).nanoseconds / 1e9
+        if source == "nav" and self.last_nav_cmd_rx is not None:
+            return (self.get_clock().now() - self.last_nav_cmd_rx).nanoseconds / 1e9
+        return None
+
+    def _slew_limit_powers(self, target: WheelPowers) -> WheelPowers:
+        if self.power_slew_rate <= 0.0:
+            self.commanded_powers = target
+            self.last_power_update_time = self.get_clock().now()
+            return target
+
+        now = self.get_clock().now()
+        dt = max(0.0, (now - self.last_power_update_time).nanoseconds / 1e9)
+        self.last_power_update_time = now
+        max_delta = self.power_slew_rate * dt
+        current = self.commanded_powers.as_list()
+        limited = [
+            self._move_toward(current_power, target_power, max_delta)
+            for current_power, target_power in zip(current, target.as_list())
+        ]
+        self.commanded_powers = WheelPowers(*limited)
+        return self.commanded_powers
+
+    @staticmethod
+    def _move_toward(current: float, target: float, max_delta: float) -> float:
+        if max_delta <= 0.0:
+            return current
+        delta = target - current
+        if abs(delta) <= max_delta:
+            return target
+        return current + max_delta * (1.0 if delta > 0.0 else -1.0)
+
     def _send_motor_command(self, powers: WheelPowers) -> None:
         if not self.hardware_active:
             return
@@ -209,20 +256,30 @@ class KiwiDriveController(Node):
             motor.set_power(power_by_name[name])
 
     def _send_motor_heartbeat(self) -> None:
+        if self.power_slew_rate > 0.0:
+            self.last_power_update_time = self.get_clock().now()
+
         if not self.hardware_active:
             return
 
         for motor in self.motors.values():
             motor.send_heartbeat()
 
-    def _log_status(self, powers: WheelPowers, source: str) -> None:
-        summary = (
+    def _log_status(
+        self,
+        powers: WheelPowers,
+        source: str,
+        command_age: float | None,
+    ) -> None:
+        age_text = "none" if command_age is None else f"{command_age:.3f}"
+        power_values = [round(power, 4) for power in powers.as_list()]
+        summary_key = (
             f"source={source}, hardware_active={self.hardware_active}, "
-            f"powers={powers.as_list()}"
+            f"powers={power_values}"
         )
-        if summary != self.last_status_summary:
-            self.get_logger().info(summary)
-            self.last_status_summary = summary
+        if summary_key != self.last_status_summary:
+            self.get_logger().info(f"{summary_key}, cmd_age_sec={age_text}")
+            self.last_status_summary = summary_key
 
     def _start_hardware(self) -> None:
         self.hardware_status = "starting"
