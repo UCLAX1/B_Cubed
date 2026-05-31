@@ -50,6 +50,14 @@ class KiwiDriveController(Node):
             0.0,
             float(self.get_parameter("power_slew_rate_per_sec").value),
         )
+        self.power_deadband = max(
+            0.0,
+            float(self.get_parameter("power_deadband").value),
+        )
+        self.min_power = max(
+            0.0,
+            float(self.get_parameter("min_power").value),
+        )
 
         self.hardware_enabled = bool(self.get_parameter("hardware_enabled").value)
         self.can_channel = str(self.get_parameter("can_channel").value)
@@ -122,6 +130,8 @@ class KiwiDriveController(Node):
         self.declare_parameter("max_power", 1.0)
         self.declare_parameter("normalize_over_limit", False)
         self.declare_parameter("power_slew_rate_per_sec", 0.0)
+        self.declare_parameter("power_deadband", 0.0)
+        self.declare_parameter("min_power", 0.0)
 
         self.declare_parameter("hardware_enabled", True)
         self.declare_parameter("can_channel", "can0")
@@ -162,6 +172,7 @@ class KiwiDriveController(Node):
             normalize_over_limit=self.normalize_over_limit,
         )
         command_age = self._command_age(source)
+        powers = self._shape_low_power_outputs(powers)
         powers = self._slew_limit_powers(powers)
         self.last_source = source
         self.last_powers = powers
@@ -214,6 +225,38 @@ class KiwiDriveController(Node):
         if source == "nav" and self.last_nav_cmd_rx is not None:
             return (self.get_clock().now() - self.last_nav_cmd_rx).nanoseconds / 1e9
         return None
+
+    def _shape_low_power_outputs(self, powers: WheelPowers) -> WheelPowers:
+        if self.power_deadband <= 0.0 and self.min_power <= 0.0:
+            return powers
+
+        return WheelPowers(
+            *[
+                self._shape_single_power(power)
+                for power in powers.as_list()
+            ]
+        )
+
+    def _shape_single_power(self, power: float) -> float:
+        magnitude = abs(power)
+        if magnitude <= self.power_deadband:
+            return 0.0
+        if self.min_power <= self.power_deadband:
+            return power
+
+        limit = max(self.max_power, self.min_power)
+        if limit <= self.power_deadband:
+            return power
+        scaled = self.min_power + (
+            (magnitude - self.power_deadband)
+            * (limit - self.min_power)
+            / (limit - self.power_deadband)
+        )
+        return self._copy_sign(min(scaled, limit), power)
+
+    @staticmethod
+    def _copy_sign(magnitude: float, sign_source: float) -> float:
+        return magnitude if sign_source >= 0.0 else -magnitude
 
     def _slew_limit_powers(self, target: WheelPowers) -> WheelPowers:
         if self.power_slew_rate <= 0.0:

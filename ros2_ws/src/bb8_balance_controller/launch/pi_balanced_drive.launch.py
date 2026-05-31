@@ -51,6 +51,8 @@ def generate_launch_description() -> LaunchDescription:
     motor_power_slew_rate_per_sec = LaunchConfiguration(
         "motor_power_slew_rate_per_sec"
     )
+    motor_power_deadband = LaunchConfiguration("motor_power_deadband")
+    motor_min_power = LaunchConfiguration("motor_min_power")
     can_channel = LaunchConfiguration("can_channel")
     can_interface = LaunchConfiguration("can_interface")
     can_bitrate = LaunchConfiguration("can_bitrate")
@@ -103,6 +105,8 @@ def generate_launch_description() -> LaunchDescription:
             DeclareLaunchArgument("motor_manual_cmd_timeout_sec", default_value="0.30"),
             DeclareLaunchArgument("motor_ipc_watchdog_timeout_sec", default_value="0.30"),
             DeclareLaunchArgument("motor_power_slew_rate_per_sec", default_value="4.0"),
+            DeclareLaunchArgument("motor_power_deadband", default_value="0.04"),
+            DeclareLaunchArgument("motor_min_power", default_value="0.0"),
             DeclareLaunchArgument("can_channel", default_value="can0"),
             DeclareLaunchArgument("can_interface", default_value="socketcan"),
             DeclareLaunchArgument("can_bitrate", default_value="1000000"),
@@ -224,6 +228,14 @@ def generate_launch_description() -> LaunchDescription:
                         ),
                         "power_slew_rate_per_sec": ParameterValue(
                             motor_power_slew_rate_per_sec,
+                            value_type=float,
+                        ),
+                        "power_deadband": ParameterValue(
+                            motor_power_deadband,
+                            value_type=float,
+                        ),
+                        "min_power": ParameterValue(
+                            motor_min_power,
                             value_type=float,
                         ),
                         "can_channel": can_channel,
