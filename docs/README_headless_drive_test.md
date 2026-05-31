@@ -175,7 +175,11 @@ NETWORK_MODE=tailscale \
 ./launch_headless.sh --localization --map-file /home/jetson-nano-x1/Documents/B_Cubed/ros2_ws/maps/MAP_PREFIX
 ```
 
-Stop the Jetson launch with `Ctrl-C`. The script sends a clean shutdown to the ZED wrapper and navigation launch processes. It leaves the Jetson in whatever network mode the launch selected.
+Stop the Jetson launch with `Ctrl-C`. The script sends a clean shutdown to the ZED wrapper and navigation launch processes. It leaves the Jetson in whatever network mode the launch selected. In hotspot mode, it also reasserts the `Hotspot` NetworkManager profile on exit so the `x1-jetson` Wi-Fi stays available after the ROS stack stops. Override only if you intentionally want normal NetworkManager behavior:
+
+```bash
+HOTSPOT_KEEP_ACTIVE_ON_EXIT=false ./launch_headless.sh --hotspot --mapping
+```
 
 ## 2. Raspberry Pi Startup
 
