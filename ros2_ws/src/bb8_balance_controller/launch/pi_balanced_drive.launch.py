@@ -57,6 +57,8 @@ def generate_launch_description() -> LaunchDescription:
             "'",
             start_motor_control,
             "'.lower() in ('true', '1', 'yes', 'on') and '",
+            start_balance_controller,
+            "'.lower() in ('true', '1', 'yes', 'on') and '",
             hardware_enabled,
             "'.lower() in ('true', '1', 'yes', 'on')",
         ]
