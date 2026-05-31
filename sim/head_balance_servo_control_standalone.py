@@ -54,7 +54,7 @@ def continuous_servo_command(error_deg):
     else:
         speed_scale = 20.0
 
-    return clamp(error_deg / speed_scale, -1.0, 1.0)
+    return clamp(error_deg / speed_scale, -1.0, 1.0) * CONT_MAX_ANGLE_SPEED
 
 
 def lazy_servo_command(error_deg, actual_deg):
