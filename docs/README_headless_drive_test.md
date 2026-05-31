@@ -17,7 +17,7 @@ The launch scripts write `~/cyclonedds.xml` at startup. They bind DDS only to an
 
 ## 0. One-Time Hotspot Setup
 
-The runtime scripts already know how to switch between Tailscale and hotspot DDS. The one-time setup is making sure the Jetson has a NetworkManager hotspot profile named `Hotspot`, and the Pi joins that hotspot at the expected static IP.
+The runtime scripts already know how to use either Tailscale or hotspot DDS. By default, the Jetson launch auto-detects the current address and prefers the hotspot if `10.42.0.1` is already active; it does not switch the Jetson back to Tailscale on startup or shutdown. The one-time setup is making sure the Jetson has a NetworkManager hotspot profile named `Hotspot`, and the Pi joins that hotspot at the expected static IP.
 
 On the Jetson, create or verify the hotspot profile:
 
@@ -97,7 +97,7 @@ PI_HOTSPOT_IP=10.42.0.X ./launch_pi_balanced_drive.sh --hotspot
 
 ## 1. Jetson Startup
 
-Use this for normal Tailscale/Wi-Fi mode:
+Use this for whichever Jetson network is already active. If the hotspot is up, this stays on hotspot; otherwise it uses the Tailscale address if present:
 
 ```bash
 ssh ubuntu
@@ -106,12 +106,11 @@ cd ~/Documents/B_Cubed/ros2_ws
 ROS_DOMAIN_ID=0 \
 RMW_IMPLEMENTATION=rmw_cyclonedds_cpp \
 PLANNING_CONSOLE_HOST=0.0.0.0 \
-NETWORK_MODE=tailscale \
 ./launch_headless.sh --mapping
 ```
 
 
-Use this for hotspot operation
+Use this when the Jetson should actively bring up the hotspot profile before launching:
 ```bash
 ssh ubuntu
 cd ~/Documents/B_Cubed/ros2_ws

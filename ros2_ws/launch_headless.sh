@@ -15,7 +15,7 @@ ROS_DOMAIN_ID="${ROS_DOMAIN_ID:-0}"
 ROS_LOG_DIR="${ROS_LOG_DIR:-$WS_DIR/log/headless}"
 NPROC_VALUE="$(command -v nproc >/dev/null 2>&1 && nproc || echo 4)"
 
-NETWORK_MODE="${NETWORK_MODE:-tailscale}"
+NETWORK_MODE="${NETWORK_MODE:-auto}"
 HOTSPOT_CONNECTION="${HOTSPOT_CONNECTION:-Hotspot}"
 WIFI_CONNECTION="${WIFI_CONNECTION:-eduroam}"
 HOTSPOT_KEEP_ACTIVE_ON_EXIT="${HOTSPOT_KEEP_ACTIVE_ON_EXIT:-true}"
@@ -119,7 +119,7 @@ Environment overrides:
   ENABLE_PLANNING_CONSOLE, PLANNING_CONSOLE_HOST, PLANNING_CONSOLE_PORT.
   KILL_STALE_ZED_WRAPPER, TOPIC_WAIT_TIMEOUT_SEC, STATUS_INTERVAL_SEC.
   COMMAND_MONITOR_ENABLED, COMMAND_MONITOR_TOPICS.
-  NETWORK_MODE=tailscale|hotspot, HOTSPOT_CONNECTION, WIFI_CONNECTION.
+  NETWORK_MODE=auto|tailscale|hotspot|wifi|none, HOTSPOT_CONNECTION, WIFI_CONNECTION.
   HOTSPOT_KEEP_ACTIVE_ON_EXIT=true keeps the Jetson hotspot up after Ctrl-C.
 EOF
 }
@@ -204,12 +204,18 @@ run_sudo_command() {
   sudo -n "$@"
 }
 
+has_ipv4_address() {
+  local address="$1"
+
+  ip -4 addr show | grep -q "inet ${address}/"
+}
+
 wait_for_ipv4_address() {
   local address="$1"
   local deadline=$((SECONDS + NETWORK_SWITCH_TIMEOUT_SEC))
 
   while (( SECONDS < deadline )); do
-    if ip -4 addr show | grep -q "inet ${address}/"; then
+    if has_ipv4_address "$address"; then
       return 0
     fi
     sleep 1
@@ -265,6 +271,21 @@ EOF
 
 configure_network_mode() {
   case "$NETWORK_MODE" in
+    auto)
+      if has_ipv4_address "$JETSON_HOTSPOT_IP"; then
+        NETWORK_MODE="hotspot"
+        write_cyclonedds_config "$JETSON_HOTSPOT_IP" "$PI_HOTSPOT_IP" "$PI_TAILSCALE_IP"
+      elif has_ipv4_address "$JETSON_TAILSCALE_IP"; then
+        NETWORK_MODE="tailscale"
+        write_cyclonedds_config "$JETSON_TAILSCALE_IP" "$PI_TAILSCALE_IP" "$PI_HOTSPOT_IP"
+      else
+        echo "NETWORK_MODE=auto could not find a configured Jetson address." >&2
+        echo "  expected one of: $JETSON_HOTSPOT_IP $JETSON_TAILSCALE_IP" >&2
+        echo "Available IPv4 addresses:" >&2
+        ip -4 addr show >&2
+        exit 1
+      fi
+      ;;
     hotspot)
       echo "Switching Jetson network to hotspot profile '$HOTSPOT_CONNECTION'..."
       if ! command -v nmcli >/dev/null 2>&1; then
@@ -303,7 +324,7 @@ configure_network_mode() {
       echo "Skipping network and CycloneDDS reconfiguration."
       ;;
     *)
-      echo "NETWORK_MODE must be hotspot, tailscale, wifi, or none; got: $NETWORK_MODE" >&2
+      echo "NETWORK_MODE must be auto, hotspot, tailscale, wifi, or none; got: $NETWORK_MODE" >&2
       exit 2
       ;;
   esac
@@ -986,6 +1007,9 @@ while (($#)); do
       ;;
     --hotspot)
       NETWORK_MODE="hotspot"
+      ;;
+    --auto)
+      NETWORK_MODE="auto"
       ;;
     --tailscale|--wifi)
       NETWORK_MODE="${1#--}"
