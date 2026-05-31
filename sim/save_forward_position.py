@@ -38,12 +38,23 @@ for _ in range(5):
 	head.update()
 	time.sleep(0.05)
 
-lazy_home_deg = lazy.get_absolute_position() * 360.0
-head_home_deg = head.get_absolute_position() * 360.0
+lazy_abs = lazy.get_absolute_position()
+head_abs = head.get_absolute_position()
+lazy_home_deg = lazy_abs * 360.0
+head_home_deg = head_abs * 360.0
+lazy_relative_deg = lazy.get_position() * 360.0
+head_relative_deg = head.get_position() * 360.0
+
+if lazy_abs in (0.0, 1.0):
+	print(f"WARNING: lazy absolute encoder appears saturated at {lazy_abs:.1f}")
+if head_abs in (0.0, 1.0):
+	print(f"WARNING: head absolute encoder appears saturated at {head_abs:.1f}")
 
 home_data = {
 	"lazy_susan_deg": lazy_home_deg,
 	"head_deg": head_home_deg,
+	"lazy_susan_steps": lazy.encoder.steps,
+	"head_steps": head.encoder.steps,
 }
 
 with open(HOME_FILE, "w") as file_handle:
@@ -52,6 +63,8 @@ with open(HOME_FILE, "w") as file_handle:
 print(f"Saved absolute home pose to {HOME_FILE}")
 print(f"  lazy susan (pin {LAZY_SERVO}) = {lazy_home_deg:.1f}°")
 print(f"  head       (pin {HEAD_SERVO}) = {head_home_deg:.1f}°")
+print(f"  lazy raw absolute = {lazy_abs:.3f}, relative = {lazy_relative_deg:.1f}°")
+print(f"  head raw absolute = {head_abs:.3f}, relative = {head_relative_deg:.1f}°")
 
 lazy.value = None
 head.value = None
