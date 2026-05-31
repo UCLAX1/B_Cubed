@@ -1,4 +1,5 @@
 from PIDController import PIDController
+from gpiozero import DigitalOutputDevice
 from ServoBase import ServoBase
 from ServoEx import ServoEx
 from CRServoEx import CRServoEx
@@ -26,7 +27,7 @@ def exit_gracefully():
     # top_right_motor.set_power(0)
     # bottom_motor.set_power(0)
     # bus.close()
-    print("exception occurred")
+    # mosfet.off()
     exit(1)
 
 # convert angle to -pi to pi
@@ -130,11 +131,11 @@ class ServoControllerWindow:
 
             if self.requested_servo_angle > self.DEAD_ZONE_CW_ANGLE:
                 self.requested_servo_angle = self.DEAD_ZONE_CW_ANGLE
-            if self.requested_servo_angle < self.DEAD_ZONE_CCW_ANGLE:
+            elif self.requested_servo_angle < self.DEAD_ZONE_CCW_ANGLE:
                 self.requested_servo_angle = self.DEAD_ZONE_CCW_ANGLE
 
             if self.servo is not None:
-                self.servo.set_position(self.requested_servo_angle)
+                self.servo.set_position(self.requested_servo_angle / (2.0 * np.pi))
 
     def draw(self):
         # draw cyan dead zone lines
@@ -272,9 +273,14 @@ class App:
 # print("SLEEPING 0.5 SEC...")
 # time.sleep(0.5)
 
+# mosfet = DigitalOutputDevice(16)
+# mosfet.on()
+
 app = App()
 
 app.run()
+
+# mosfet.off()
 
 # on testing, the motor position updates about every 0.01-0.03 seconds
 
