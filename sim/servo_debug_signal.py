@@ -1,7 +1,7 @@
 from gpiozero import Servo, DigitalOutputDevice, PWMOutputDevice
 from time import sleep
 
-PIN = 19
+PIN = 14
 
 servo = Servo(PIN, initial_value=None)  # Continuous (Physical Pin 12)
 
