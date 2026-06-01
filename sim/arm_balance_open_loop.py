@@ -146,20 +146,32 @@ def parse_args():
         default=IMU_INIT_TIMEOUT_S,
         help="Seconds to wait for IMUInit before exiting. Use 0 to disable.",
     )
+    parser.add_argument(
+        "--assume-vertical",
+        action="store_true",
+        help="Assume the robot starts vertical and skip waiting for an IMU reference sample.",
+    )
     return parser.parse_args()
 
 
-def main(max_runtime_s=None, max_servo_updates=None, imu_init_timeout_s=IMU_INIT_TIMEOUT_S):
+def main(max_runtime_s=None, max_servo_updates=None, imu_init_timeout_s=IMU_INIT_TIMEOUT_S, assume_vertical: bool = False):
     log("Starting open-loop arm-only controller.")
 
     arm_servo, mosfet = initialize_servo()
 
     imu, imu_poll_interval = initialize_imu(imu_init_timeout_s)
-    if imu is None:
-        log("Exiting because IMU did not initialize.")
-        return 1
+    if assume_vertical:
+        log("Assuming vertical startup; skipping IMU reference capture.")
+        roll_ref, pitch_ref = 0.0, 0.0
+        # If IMU isn't available, continue open-loop anyway.
+        if imu is None:
+            imu_poll_interval = 0.02
+    else:
+        if imu is None:
+            log("Exiting because IMU did not initialize.")
+            return 1
 
-    roll_ref, pitch_ref = capture_reference_pose(imu, imu_poll_interval)
+        roll_ref, pitch_ref = capture_reference_pose(imu, imu_poll_interval)
 
     mosfet.on()
     time.sleep(0.5)
