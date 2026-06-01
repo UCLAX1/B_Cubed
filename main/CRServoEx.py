@@ -15,7 +15,7 @@ class AbsoluteEncoder:
 
     def __init__(self, pin: int):
         self.pin = pin
-        # position in ROTATIONS
+        # position in ROTATIONS (from 0.0 to 1.0)
         self.position: float = 0
 
         self.__input_device = DigitalInputDevice(pin)
@@ -168,7 +168,8 @@ class CRServoEx(ServoBase):
     # call in main loop, dt is delta time
     def update(self, dt: float):
 
-        control = self.pid_controller.update(dt, self.get_position())
+        control = self.pid_controller.update(dt, self.get_absolute_position())
+        control = np.clip(control, -1.0, 1.0)
         self.set_velocity(control)
 
         self.update_absolute_encoder()
@@ -180,6 +181,7 @@ class CRServoEx(ServoBase):
     def update_absolute_encoder(self):
         self.absolute_encoder.update()
 
+    # position should be from 0.0 to 1.0
     def set_position(self, position: float): # override
         self.pid_controller.set_setpoint(position)
 
