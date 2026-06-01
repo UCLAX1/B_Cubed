@@ -12,12 +12,14 @@ class AbsoluteEncoder:
 
     POSITION_HISTORY_MAX_SIZE: int = 100
 
-    def __init__(self, pin: int):
+    def __init__(self, pin: int, pin_factory=None):
         self.pin = pin
         # position in ROTATIONS
         self.position: float = 0
 
-        self.__input_device = DigitalInputDevice(pin, pull_up=False)
+        self.__input_device = DigitalInputDevice(
+            pin, pull_up=True, pin_factory=pin_factory
+        )
         self.__position_history: list[float] = []
 
 
@@ -46,9 +48,13 @@ class AbsoluteEncoder:
         if pulse_width_ms is None:
             return
 
-        # Keep the existing 0.0..1.0 normalized representation used by the
-        # balance scripts, but derive it from the measured pulse width.
-        new_position = np.clip(pulse_width_ms, 0.0, 1.0)
+        pulse_width_us = pulse_width_ms * 1000.0
+        if not 1.0 <= pulse_width_us <= 1024.0:
+            return
+
+        # REV-11-1271 absolute position is encoded from 1us (0 degrees) to
+        # 1024us (360 degrees) within a fixed 1025us period.
+        new_position = np.clip((pulse_width_us - 1.0) / 1023.0, 0.0, 1.0)
 
         if len(self.__position_history) >= self.POSITION_HISTORY_MAX_SIZE:
             self.__position_history = self.__position_history[1:]
@@ -59,7 +65,8 @@ class AbsoluteEncoder:
 
 class ServoEx(Servo):
     INIT_POS_FILE: str = "servo_init_pos.json"
-    COUNTS_PER_REVOLUTION: int = 2048
+    # REV-11-1271: 2048 quadrature cycles/rev, decoded on all four edges.
+    COUNTS_PER_REVOLUTION: int = 8192
 
     # when the absolute encoder wraps from 0.98->0.01, since it's based on voltage, it has to glide down from 0.98.
     # this is bad because that means there is a specific angle range where the absolute encoder is wrong.
@@ -74,12 +81,19 @@ class ServoEx(Servo):
     def __init__(self, servo_pin: int, encoder_pin_a: int, encoder_pin_b: int, absolute_encoder_pin: int, initial_value=None, pin_factory=None, save_on_deactivate=False):
         try:
             super().__init__(servo_pin, initial_value=initial_value, pin_factory=pin_factory)
-            self.encoder = RotaryEncoder(a=encoder_pin_a, b=encoder_pin_b, max_steps=10000000000000)
+            self.encoder = RotaryEncoder(
+                a=encoder_pin_a,
+                b=encoder_pin_b,
+                max_steps=10000000000000,
+                pin_factory=pin_factory,
+            )
         except Exception:
             print("ERROR: gpiozero servo could not initialize. Make sure the servos are plugged in to the right pins.")
             exit(1)
 
-        self.absolute_encoder = AbsoluteEncoder(pin=absolute_encoder_pin)
+        self.absolute_encoder = AbsoluteEncoder(
+            pin=absolute_encoder_pin, pin_factory=pin_factory
+        )
         self.pin = servo_pin
         self.time_position_last_centered: float = 0
         self.save_on_deactivate = save_on_deactivate

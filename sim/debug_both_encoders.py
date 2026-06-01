@@ -17,6 +17,7 @@ import sys
 import time
 import tty
 import termios
+import pigpio
 
 from gpiozero import DigitalOutputDevice
 from gpiozero.pins.pigpio import PiGPIOFactory
@@ -27,17 +28,45 @@ MOSFET_PIN = 16
 
 LAZY_SERVO = 12
 LAZY_A, LAZY_B, LAZY_ABS = 26, 6, 5
-LAZY_CPR = 1493
+LAZY_CPR = 8192
 
 HEAD_SERVO = 20
 HEAD_A, HEAD_B, HEAD_ABS = 4, 22, 17
-HEAD_CPR = 2048
+HEAD_CPR = 8192
 
 NUDGE_SPEED = 0.2
 HEAD_NUDGE_SPEED = 0.35
 NUDGE_TIME_S = 0.6
 ABS_VALID_MIN = 0.0
 ABS_VALID_MAX = 1.0
+
+
+class RawPinMonitor:
+    def __init__(self, pins):
+        self.pi = pigpio.pi()
+        if not self.pi.connected:
+            raise RuntimeError("pigpiod is not available")
+
+        self.edge_counts = {pin: 0 for pin in pins}
+        self.callbacks = [
+            self.pi.callback(pin, pigpio.EITHER_EDGE, self._count_edge)
+            for pin in pins
+        ]
+
+    def _count_edge(self, pin, level, _tick):
+        if level in (0, 1):
+            self.edge_counts[pin] += 1
+
+    def snapshot(self):
+        return {
+            pin: (self.pi.read(pin), self.edge_counts[pin])
+            for pin in self.edge_counts
+        }
+
+    def close(self):
+        for callback in self.callbacks:
+            callback.cancel()
+        self.pi.stop()
 
 
 def clamp(value, minimum, maximum):
@@ -72,6 +101,7 @@ mosfet.on()
 time.sleep(0.5)
 
 factory = PiGPIOFactory()
+raw_pins = RawPinMonitor([LAZY_A, LAZY_B, LAZY_ABS, HEAD_A, HEAD_B, HEAD_ABS])
 
 print("Initializing lazy susan encoder...")
 lazy = ServoEx(LAZY_SERVO, LAZY_A, LAZY_B, LAZY_ABS, initial_value=None, pin_factory=factory)
@@ -107,6 +137,18 @@ def print_status():
     print("-" * 78)
 
 
+def print_raw_delta(before, after):
+    def describe(pin):
+        level, edges = after[pin]
+        return f"{pin}={level} edges={edges - before[pin][1]:+d}"
+
+    print(
+        "raw delta: "
+        f"lazy[A {describe(LAZY_A)}, B {describe(LAZY_B)}, ABS {describe(LAZY_ABS)}] "
+        f"head[A {describe(HEAD_A)}, B {describe(HEAD_B)}, ABS {describe(HEAD_ABS)}]"
+    )
+
+
 def nudge(servo, direction):
     servo.value = clamp(direction * NUDGE_SPEED, -1.0, 1.0)
 
@@ -135,6 +177,7 @@ try:
             continue
 
         if ch in ("l", "L", "h", "H"):
+            raw_before = raw_pins.snapshot()
             head_before = head.encoder.steps
             lazy_before = lazy.encoder.steps
             if ch == "l":
@@ -158,6 +201,7 @@ try:
                 f"delta: lazy_steps={lazy.encoder.steps - lazy_before:+d} "
                 f"head_steps={head.encoder.steps - head_before:+d}"
             )
+            print_raw_delta(raw_before, raw_pins.snapshot())
 
 except KeyboardInterrupt:
     print("\nStopped.")
@@ -166,5 +210,7 @@ finally:
     head.value = 0.0
     lazy.deactivate_and_save()
     head.deactivate_and_save()
+    raw_pins.close()
+    factory.close()
     time.sleep(0.2)
     mosfet.off()
