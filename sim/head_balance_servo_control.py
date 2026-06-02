@@ -159,6 +159,9 @@ def initialize_imu(init_timeout_s=IMU_INIT_TIMEOUT_S):
     imu_device = RTIMU.RTIMU(settings)
 
     log("Initializing IMU...")
+    # RTIMU needs a brief settle period after object construction on the Pi.
+    # Without it, IMUInit() can succeed while IMURead() never produces data.
+    time.sleep(0.5)
     # Wrapping RTIMU.IMUInit() with SIGALRM leaves IMURead() returning False
     # indefinitely on the Pi, even when initialization itself succeeds.
     initialized = imu_device.IMUInit()
