@@ -1185,17 +1185,13 @@ class NavPlanningConsoleNode(Node):
         field_relative = False
         if self.manual_field_relative_enabled and magnitude > 1e-6:
             heading = self._fresh_manual_heading()
-            if heading is None:
-                raise PlanningConsoleError(
-                    "Manual orientation is not available yet; waiting for "
-                    f"{self.manual_orientation_topic}."
+            if heading is not None:
+                x_value, y_value = _rotate_start_frame_to_body_frame(
+                    x_value,
+                    y_value,
+                    float(heading["relative_yaw"]),
                 )
-            x_value, y_value = _rotate_start_frame_to_body_frame(
-                x_value,
-                y_value,
-                float(heading["relative_yaw"]),
-            )
-            field_relative = True
+                field_relative = True
 
         twist = Twist()
         twist.linear.x = x_value * self.manual_max_linear_velocity
