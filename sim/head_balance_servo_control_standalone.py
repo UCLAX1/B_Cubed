@@ -1,12 +1,12 @@
-"""Standalone head-balance controller with no local file dependencies.
+"""Standalone balance controller with lazy susan feedback only.
 
 Copy this file onto the Raspberry Pi as-is. It inlines:
 - the motor angle math from head_balance_math.py
 - the encoder-backed servo helper from ServoEx.py
 
-The arm servo stays disabled by default so the broken arm hardware is not
-commanded, while the continuous motors still use encoder feedback to avoid
-free-running.
+This version ignores head movement entirely. It keeps the arm and lazy susan
+control path only, because the lazy susan has encoder feedback and the head
+encoder is not available.
 """
 
 import json
@@ -21,23 +21,21 @@ from gpiozero.pins.pigpio import PiGPIOFactory
 
 DEBUG = True
 DESIRED_ANGLE = 0.0
-ARM_SERVO_ENABLED = False
+ARM_SERVO_ENABLED = True
 
 ARM_MIN, ARM_MAX = -30.0, 30.0
 LAZY_SUSAN_MIN, LAZY_SUSAN_MAX = -90.0, 90.0
-HEAD_MIN, HEAD_MAX = -float("inf"), float("inf")
 
 ARM_VERTICAL_OFFSET = 0.0
 ARM_SERVO_MIN = -0.5
 ARM_SERVO_MAX = 0.5
 LAZY_CPR = 1493
-HEAD_CPR = 2048
 CONT_MAX_ANGLE_SPEED = 0.5
 CONT_DEADBAND_DEG = 4.0
 ENCODER_STALL_TIMEOUT_S = 1.0
 ENCODER_STALL_MIN_MOVE_DEG = 0.5
-HEAD_FAILSAFE_DISABLE = True
 LAZY_COMMAND_SIGN = -1.0
+STRICT_BOUND_EPSILON = 1e-6
 
 
 def continuous_servo_command(error_deg):
@@ -82,6 +80,12 @@ def clamp(value, minimum, maximum):
     return max(min(value, maximum), minimum)
 
 
+def clamp_strict(value, minimum, maximum):
+    if minimum >= maximum:
+        return minimum
+    return clamp(value, minimum + STRICT_BOUND_EPSILON, maximum - STRICT_BOUND_EPSILON)
+
+
 def wrap_degrees(angle_deg):
     wrapped = (angle_deg + 180.0) % 360.0 - 180.0
     if wrapped == -180.0:
@@ -106,6 +110,10 @@ def mod_360(angle_deg):
 
 def shortest_angle_error(target_deg, actual_deg):
     return wrap_degrees(target_deg - actual_deg)
+
+
+def arm_servo_command(target_deg):
+    return clamp_strict((target_deg / 90.0) + ARM_VERTICAL_OFFSET, ARM_SERVO_MIN, ARM_SERVO_MAX)
 
 
 def capture_reference_pose(imu_device, poll_interval):
@@ -160,8 +168,7 @@ def find_motor_angles(pitch, roll, desired_angle):
         else:
             lazy_susan += 180
 
-    head = math.degrees(desired_angle) - lazy_susan
-    return arm, lazy_susan, head
+    return arm, lazy_susan
 
 
 class AbsoluteEncoder:
@@ -207,7 +214,7 @@ class AbsoluteEncoder:
 
 class ServoEx(Servo):
     INIT_POS_FILE = "servo_init_pos.json"
-    COUNTS_PER_REVOLUTION = 2048
+    COUNTS_PER_REVOLUTION = LAZY_CPR
     POSITION_CENTERING_DEADZONE_ERROR = 0.08
     POSITION_CENTERING_DELAY = 0.25
 
@@ -322,25 +329,20 @@ def main():
     roll_reference_deg, pitch_reference_deg = capture_reference_pose(imu, poll_interval)
 
     factory = PiGPIOFactory()
-    mosfet = DigitalOutputDevice(16)
+    mosfet = DigitalOutputDevice(16, pin_factory=factory)
     mosfet.on()
     time.sleep(0.5)
 
     arm_servo = Servo(15, initial_value=None, pin_factory=factory) if ARM_SERVO_ENABLED else None
     lazy_susan = ServoEx(12, 26, 6, 5, initial_value=None, pin_factory=factory)
-    head_servo = ServoEx(20, 4, 22, 17, initial_value=None, pin_factory=factory)
 
     lazy_last_actual = None
-    head_last_actual = None
     lazy_stalled_since = None
-    head_stalled_since = None
-    head_disabled = False
 
     try:
         if arm_servo is not None:
-            arm_servo.value = clamp(ARM_VERTICAL_OFFSET, ARM_SERVO_MIN, ARM_SERVO_MAX)
+            arm_servo.value = clamp_strict(ARM_VERTICAL_OFFSET, ARM_SERVO_MIN, ARM_SERVO_MAX)
         lazy_susan.value = 0.0
-        head_servo.value = 0.0
         time.sleep(0.5)
 
         while True:
@@ -358,14 +360,12 @@ def main():
                 )
                 yaw = math.degrees(fusion_pose[2])
 
-                arm_tgt, lazy_tgt, head_tgt = find_motor_angles(pitch, roll, DESIRED_ANGLE)
+                arm_tgt, lazy_tgt = find_motor_angles(pitch, roll, DESIRED_ANGLE)
 
                 arm_tgt = clamp(arm_tgt, ARM_MIN, ARM_MAX)
-                lazy_tgt = clamp(lazy_tgt, LAZY_SUSAN_MIN, LAZY_SUSAN_MAX)
-                head_tgt = clamp(head_tgt, HEAD_MIN, HEAD_MAX)
+                lazy_tgt = clamp_strict(lazy_tgt, LAZY_SUSAN_MIN, LAZY_SUSAN_MAX)
 
                 lazy_susan.update()
-                head_servo.update()
 
                 lazy_actual_raw = lazy_susan.encoder.steps * 360.0 / LAZY_CPR
                 lazy_actual = fold_lazy_susan_degrees(lazy_actual_raw)
@@ -374,18 +374,6 @@ def main():
                     lazy_cmd = 0.0
                 else:
                     lazy_cmd = clamp(lazy_servo_command(lazy_error, lazy_actual), -1.0, 1.0)
-
-                head_actual_raw = head_servo.encoder.steps * 360.0 / HEAD_CPR
-                head_actual = wrap_degrees(head_actual_raw)
-                head_actual_360 = mod_360(head_actual_raw)
-                head_tgt_360 = mod_360(head_tgt)
-                head_error = shortest_angle_error(head_tgt, head_actual)
-                if head_disabled:
-                    head_cmd = 0.0
-                elif abs(head_error) < CONT_DEADBAND_DEG:
-                    head_cmd = 0.0
-                else:
-                    head_cmd = continuous_servo_command(head_error)
 
                 now = time.time()
                 if lazy_last_actual is not None and abs(wrap_degrees(lazy_actual - lazy_last_actual)) < ENCODER_STALL_MIN_MOVE_DEG and abs(lazy_cmd) > 0.2:
@@ -398,26 +386,11 @@ def main():
                 else:
                     lazy_stalled_since = None
 
-                if head_last_actual is not None and abs(wrap_degrees(head_actual - head_last_actual)) < ENCODER_STALL_MIN_MOVE_DEG and abs(head_cmd) > 0.2:
-                    if head_stalled_since is None:
-                        head_stalled_since = now
-                    elif now - head_stalled_since >= ENCODER_STALL_TIMEOUT_S:
-                        head_cmd = 0.0
-                        log_message = f"Warning: head encoder not moving; stopping motor. actual={head_actual:+.2f}° target={head_tgt:+.2f}°"
-                        print(log_message)
-                        if HEAD_FAILSAFE_DISABLE:
-                            head_disabled = True
-                            print("Warning: head motor disabled until restart because encoder feedback did not move.")
-                else:
-                    head_stalled_since = None
-
                 lazy_last_actual = lazy_actual
-                head_last_actual = head_actual
 
-                arm_cmd = clamp((arm_tgt / 90.0) + ARM_VERTICAL_OFFSET, ARM_SERVO_MIN, ARM_SERVO_MAX)
+                arm_cmd = arm_servo_command(arm_tgt)
 
                 lazy_susan.value = lazy_cmd
-                head_servo.value = head_cmd
 
                 if arm_servo is not None:
                     arm_servo.value = arm_cmd
@@ -425,10 +398,10 @@ def main():
                 if DEBUG:
                     print(f"IMU(raw): R={raw_roll:7.1f}° P={raw_pitch:7.1f}°")
                     print(f"IMU(adj): R={roll:7.1f}° P={pitch:7.1f}° Y={yaw:7.1f}°")
-                    print(f"Tgt: arm={arm_tgt:+7.2f}° lazy={lazy_tgt:+7.2f}° head={head_tgt:+7.2f}° ({head_tgt_360:6.2f}° mod360)")
-                    print(f"Pos: lazy={lazy_actual:+7.2f}° head={head_actual:+7.2f}° ({head_actual_360:6.2f}° mod360)")
-                    print(f"Err: lazy={lazy_error:+7.2f}° head={head_error:+7.2f}°")
-                    print(f"Cmd: arm={arm_cmd:+.3f} lazy={lazy_cmd:+.3f} head={head_cmd:+.3f}")
+                    print(f"Tgt: arm={arm_tgt:+7.2f}° lazy={lazy_tgt:+7.2f}°")
+                    print(f"Pos: lazy={lazy_actual:+7.2f}°")
+                    print(f"Err: lazy={lazy_error:+7.2f}°")
+                    print(f"Cmd: arm={arm_cmd:+.3f} lazy={lazy_cmd:+.3f}")
                     print("-" * 70)
 
             time.sleep(poll_interval)
@@ -439,9 +412,7 @@ def main():
         if arm_servo is not None:
             arm_servo.value = 0.0
         lazy_susan.value = 0.0
-        head_servo.value = 0.0
         lazy_susan.deactivate_and_save()
-        head_servo.deactivate_and_save()
         time.sleep(0.5)
         mosfet.off()
 
