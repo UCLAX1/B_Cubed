@@ -498,7 +498,7 @@ function drawManualWheelPad(wheel, center, scale, power) {
     wheelCenter,
     arrowEnd,
     arrowColor,
-    6,
+    2,
     12
   );
 }
