@@ -64,8 +64,8 @@ class AbsoluteEncoder:
 
 class ServoEx(Servo):
     INIT_POS_FILE: str = "servo_init_pos.json"
-    # REV-11-1271: 2048 quadrature cycles/rev, decoded on all four edges.
-    COUNTS_PER_REVOLUTION: int = 8192
+    # REV-11-1271: 2048 counts/rev as measured with gpiozero RotaryEncoder.
+    COUNTS_PER_REVOLUTION: int = 2048
 
     # when the absolute encoder wraps from 0.98->0.01, since it's based on voltage, it has to glide down from 0.98.
     # this is bad because that means there is a specific angle range where the absolute encoder is wrong.
