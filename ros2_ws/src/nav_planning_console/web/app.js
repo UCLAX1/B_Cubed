@@ -295,14 +295,14 @@ function drawManualBackground(center, scale, width, height) {
     center.y,
     scale * 1.5
   );
-  background.addColorStop(0, "#1c2935");
-  background.addColorStop(0.68, "#14202a");
-  background.addColorStop(1, "#101720");
+  background.addColorStop(0, "#1b1912");
+  background.addColorStop(0.68, "#12110d");
+  background.addColorStop(1, "#0b0b08");
   manualContext.fillStyle = background;
   manualContext.fillRect(0, 0, width, height);
 
   manualContext.save();
-  manualContext.strokeStyle = "rgba(148, 163, 184, 0.12)";
+  manualContext.strokeStyle = "rgba(209, 196, 163, 0.12)";
   manualContext.lineWidth = 1;
   const spacing = Math.max(18, scale * 0.22);
   for (let x = center.x % spacing; x < width; x += spacing) {
@@ -327,12 +327,12 @@ function drawManualBackground(center, scale, width, height) {
     center.y,
     scale
   );
-  base.addColorStop(0, "#243241");
-  base.addColorStop(1, "#111820");
-  drawManualCircle(center, scale, base, "#f8fafc", 2);
+  base.addColorStop(0, "#292516");
+  base.addColorStop(1, "#11100c");
+  drawManualCircle(center, scale, base, "#e8ddc8", 2);
 
   manualContext.save();
-  manualContext.strokeStyle = "rgba(248, 250, 252, 0.16)";
+  manualContext.strokeStyle = "rgba(240, 232, 214, 0.16)";
   manualContext.lineWidth = 1;
   for (const radius of [scale * 0.33, scale * 0.66]) {
     manualContext.beginPath();
@@ -344,13 +344,13 @@ function drawManualBackground(center, scale, width, height) {
   drawManualLine(
     { x: center.x - scale, y: center.y },
     { x: center.x + scale, y: center.y },
-    "rgba(248, 250, 252, 0.18)",
+    "rgba(240, 232, 214, 0.18)",
     1
   );
   drawManualLine(
     { x: center.x, y: center.y - scale },
     { x: center.x, y: center.y + scale },
-    "rgba(248, 250, 252, 0.18)",
+    "rgba(240, 232, 214, 0.18)",
     1
   );
 }
@@ -365,10 +365,10 @@ function drawManualRotationArc(center, scale) {
   const start = -Math.PI / 2;
   const end = start - angular * Math.PI * 1.35;
   manualContext.save();
-  manualContext.strokeStyle = "#f97316";
+  manualContext.strokeStyle = "#d99a2b";
   manualContext.lineWidth = 5;
   manualContext.lineCap = "round";
-  manualContext.shadowColor = "rgba(249, 115, 22, 0.32)";
+  manualContext.shadowColor = "rgba(217, 154, 43, 0.32)";
   manualContext.shadowBlur = 8;
   manualContext.beginPath();
   manualContext.arc(center.x, center.y, radius, start, end, angular > 0);
@@ -391,10 +391,10 @@ function drawManualDefaultForwardMarker(center, ringRadius) {
   };
 
   manualContext.save();
-  manualContext.shadowColor = "rgba(249, 115, 22, 0.26)";
+  manualContext.shadowColor = "rgba(217, 154, 43, 0.26)";
   manualContext.shadowBlur = 7;
-  manualContext.fillStyle = "#f8fafc";
-  manualContext.strokeStyle = "#f97316";
+  manualContext.fillStyle = "#f0e8d6";
+  manualContext.strokeStyle = "#d99a2b";
   manualContext.lineWidth = 2;
   manualContext.beginPath();
   manualContext.moveTo(tip.x, tip.y);
@@ -420,8 +420,8 @@ function drawManualWheelPad(wheel, center, scale, power) {
     center,
     scale
   );
-  drawManualLine(padStart, padEnd, "#263443", 12);
-  drawManualLine(padStart, padEnd, "rgba(248, 250, 252, 0.38)", 2);
+  drawManualLine(padStart, padEnd, "#2b271b", 12);
+  drawManualLine(padStart, padEnd, "rgba(240, 232, 214, 0.38)", 2);
 
   const displayPower = clamp(power, -1, 1);
   if (Math.abs(displayPower) <= GAMEPAD_ACTIVE_EPSILON) {
@@ -440,7 +440,7 @@ function drawManualWheelPad(wheel, center, scale, power) {
   drawManualArrow(
     wheelCenter,
     arrowEnd,
-    displayPower > 0 ? "#22c55e" : "#60a5fa",
+    displayPower > 0 ? "#a5d66f" : "#e7c15b",
     4,
     8
   );
@@ -475,7 +475,7 @@ function drawManualHeadingIndicator(center, scale, width, height) {
     return;
   }
 
-  manualContext.strokeStyle = orientation.enabled ? "#7c8794" : "#3a4652";
+  manualContext.strokeStyle = orientation.enabled ? "#817866" : "#3d3627";
   manualContext.lineWidth = 1.5;
   manualContext.beginPath();
   manualContext.arc(center.x, center.y, ringRadius, 0, Math.PI * 2);
@@ -498,7 +498,7 @@ function drawManualHeadingIndicator(center, scale, width, height) {
         center,
         scale
       ),
-      major ? "#f8fafc" : "rgba(248, 250, 252, 0.42)",
+      major ? "#f0e8d6" : "rgba(240, 232, 214, 0.42)",
       major ? 2 : 1
     );
   }
@@ -510,7 +510,7 @@ function drawManualHeadingIndicator(center, scale, width, height) {
     return;
   }
 
-  const markerColor = orientation.fresh ? "#f97316" : "#94a3b8";
+  const markerColor = orientation.fresh ? "#d99a2b" : "#aaa292";
   const markerStart = [
     forward[0] * (ringRadius / scale - 0.12),
     forward[1] * (ringRadius / scale - 0.12)
@@ -527,7 +527,7 @@ function drawManualHeadingIndicator(center, scale, width, height) {
   );
   const markerPoint = manualPointToScreen(markerEnd, center, scale);
   manualContext.fillStyle = markerColor;
-  manualContext.strokeStyle = "#121a22";
+  manualContext.strokeStyle = "#11100c";
   manualContext.lineWidth = 2;
   manualContext.beginPath();
   manualContext.arc(markerPoint.x, markerPoint.y, 5, 0, Math.PI * 2);
@@ -581,7 +581,7 @@ function drawManualControl() {
     drawManualArrow(
       center,
       manualPointToScreen(velocity, center, scale),
-      "#f97316",
+      "#d99a2b",
       5,
       11
     );
@@ -595,8 +595,8 @@ function drawManualControl() {
       normalIntersection(wheelVectors[2], wheelVectors[1])
     ];
     manualContext.save();
-    manualContext.fillStyle = "rgba(125, 211, 252, 0.18)";
-    manualContext.strokeStyle = "rgba(125, 211, 252, 0.7)";
+    manualContext.fillStyle = "rgba(165, 214, 111, 0.16)";
+    manualContext.strokeStyle = "rgba(165, 214, 111, 0.68)";
     manualContext.lineWidth = 1.5;
     intersections.forEach((point) => {
       if (!Number.isFinite(point[0]) || !Number.isFinite(point[1])) {
@@ -614,23 +614,23 @@ function drawManualControl() {
 
 function drawManualThumb(center, point) {
   const active = Math.hypot(manualState.x, manualState.y) > 0.01;
-  const fill = manualInputSource === "gamepad" ? "#f97316" : "#2563eb";
+  const fill = manualInputSource === "gamepad" ? "#d99a2b" : "#a5d66f";
 
-  drawManualCircle(center, 5, "#f8fafc", "#121a22", 2);
-  drawManualCircle(center, 2, "#121a22", null);
+  drawManualCircle(center, 5, "#f0e8d6", "#11100c", 2);
+  drawManualCircle(center, 2, "#11100c", null);
 
   manualContext.save();
   if (active) {
     manualContext.shadowColor = manualInputSource === "gamepad"
-      ? "rgba(249, 115, 22, 0.42)"
-      : "rgba(37, 99, 235, 0.36)";
+      ? "rgba(217, 154, 43, 0.42)"
+      : "rgba(165, 214, 111, 0.34)";
     manualContext.shadowBlur = 10;
   }
   drawManualCircle(
     point,
     active ? 11 : 8,
-    active ? fill : "#94a3b8",
-    "#f8fafc",
+    active ? fill : "#aaa292",
+    "#f0e8d6",
     3
   );
   manualContext.restore();
@@ -961,10 +961,10 @@ function yawForGoal() {
 }
 
 function drawMapPlaceholder(width, height) {
-  context.fillStyle = "#e8edf1";
+  context.fillStyle = "#10100c";
   context.fillRect(0, 0, width, height);
-  context.fillStyle = "#657384";
-  context.font = "14px system-ui, sans-serif";
+  context.fillStyle = "#aaa292";
+  context.font = "14px SFMono-Regular, Consolas, Liberation Mono, monospace";
   context.textAlign = "center";
   context.fillText("Waiting for /map", width * 0.5, height * 0.5);
 }
@@ -977,7 +977,7 @@ function drawPath(points) {
   context.lineWidth = 3;
   context.lineJoin = "round";
   context.lineCap = "round";
-  context.strokeStyle = "#2563eb";
+  context.strokeStyle = "#9fd26f";
   context.beginPath();
 
   let started = false;
@@ -1013,8 +1013,8 @@ function drawGoal(goal) {
 
   context.save();
   context.translate(screenPoint.x, screenPoint.y);
-  context.strokeStyle = "#f97316";
-  context.fillStyle = "#fff1e7";
+  context.strokeStyle = "#d99a2b";
+  context.fillStyle = "#21170a";
   context.lineWidth = 2;
   context.beginPath();
   context.arc(0, 0, 8, 0, Math.PI * 2);
@@ -1055,8 +1055,8 @@ function drawRobot(pose) {
   context.save();
   context.translate(screenPoint.x, screenPoint.y);
   context.rotate(angle);
-  context.fillStyle = "#f97316";
-  context.strokeStyle = "#ffffff";
+  context.fillStyle = "#d99a2b";
+  context.strokeStyle = "#080806";
   context.lineWidth = 2;
   context.beginPath();
   context.moveTo(14, 0);
