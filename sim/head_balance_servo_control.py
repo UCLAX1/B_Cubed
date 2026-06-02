@@ -304,13 +304,9 @@ def main(
         log("Exiting because IMU did not initialize.")
         return 1
 
-    reference_pose = capture_reference_pose(
-        imu, imu_poll_interval
-    )
-    if reference_pose is None:
-        log("Exiting because the IMU did not provide a reference sample.")
-        return 1
-    roll_reference_deg, pitch_reference_deg = reference_pose
+    log("Skipping flat-reference capture; using raw IMU roll and pitch.")
+    roll_reference_deg = 0.0
+    pitch_reference_deg = 0.0
 
     roll_filter = AngleFilter(IMU_ALPHA)
     pitch_filter = AngleFilter(IMU_ALPHA)
