@@ -5,7 +5,6 @@ from gpiozero import DigitalInputDevice
 import time
 import math
 import json
-import numpy as np
 import os
 
 class AbsoluteEncoder:
@@ -54,7 +53,7 @@ class AbsoluteEncoder:
 
         # REV-11-1271 absolute position is encoded from 1us (0 degrees) to
         # 1024us (360 degrees) within a fixed 1025us period.
-        new_position = np.clip((pulse_width_us - 1.0) / 1023.0, 0.0, 1.0)
+        new_position = max(min((pulse_width_us - 1.0) / 1023.0, 1.0), 0.0)
 
         if len(self.__position_history) >= self.POSITION_HISTORY_MAX_SIZE:
             self.__position_history = self.__position_history[1:]
