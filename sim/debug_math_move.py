@@ -19,9 +19,10 @@ ARM_VERTICAL_OFFSET = 0.0
 LAZY_CPR = 2048
 CONT_DEADBAND_DEG = 4.0
 CONT_MAX_SPEED = 1.0
-LAZY_DEG_PER_SEC = 90.0       # estimated deg/s at CONT_MAX_SPEED=1.0; tune to match hardware
+LAZY_DEG_PER_SEC = 45.0       # estimated deg/s at CONT_MAX_SPEED=1.0; tune to match hardware
 ENCODER_STALL_TIMEOUT_S = 1.0
 LAZY_COMMAND_SIGN = -1.0
+TILT_MAGNITUDE_DEADBAND_DEG = 1.5  # below this total tilt, lazy direction is noise — don't move
 
 
 def clamp(value, minimum, maximum):
@@ -172,14 +173,18 @@ def main():
 
             lazy_error = wrap_degrees(lazy_tgt - lazy_actual)
 
-            if abs(lazy_error) < CONT_DEADBAND_DEG:
+            # When tilt is too small, lazy direction is noise — hold position
+            tilt_magnitude = math.sqrt(adj_roll**2 + adj_pitch**2)
+            if tilt_magnitude < TILT_MAGNITUDE_DEADBAND_DEG or abs(lazy_error) < CONT_DEADBAND_DEG:
                 lazy_cmd = 0.0
             else:
                 lazy_cmd = LAZY_COMMAND_SIGN * clamp(lazy_error / 45.0, -1.0, 1.0) * CONT_MAX_SPEED
 
-            # Update dead-reckoning estimate from what we just commanded
-            lazy_estimated_deg = fold_lazy(
-                lazy_estimated_deg + lazy_cmd * LAZY_DEG_PER_SEC * dt
+            # Update dead-reckoning: positive lazy_cmd moves the servo in the negative
+            # physical direction (LAZY_COMMAND_SIGN=-1), so subtract.
+            lazy_estimated_deg = clamp(
+                lazy_estimated_deg - lazy_cmd * LAZY_DEG_PER_SEC * dt,
+                LAZY_SUSAN_MIN, LAZY_SUSAN_MAX,
             )
 
             arm_servo.value  = arm_cmd
@@ -187,10 +192,10 @@ def main():
 
             enc_status = "?" if lazy_encoder_working is None else ("ENC" if lazy_encoder_working else "DR")
             print(
-                f"adjR={adj_roll:+5.1f}° adjP={adj_pitch:+5.1f}°  "
+                f"tilt={tilt_magnitude:4.2f}° adjR={adj_roll:+5.1f}° adjP={adj_pitch:+5.1f}°  "
                 f"arm_tgt={arm_tgt:+5.1f}° arm_cmd={arm_cmd:+.3f}  "
                 f"lazy_tgt={lazy_tgt:+6.1f}° pos={lazy_actual:+6.1f}° err={lazy_error:+6.1f}° "
-                f"steps={steps_now} lazy_cmd={lazy_cmd:+.3f} [{enc_status}]",
+                f"lazy_cmd={lazy_cmd:+.3f} [{enc_status}]",
                 flush=True,
             )
             time.sleep(poll_interval)
