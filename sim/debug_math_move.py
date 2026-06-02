@@ -145,14 +145,14 @@ def main():
             adj_pitch = wrap_degrees(raw_pitch - pitch_ref)
 
             arm_tgt, lazy_tgt = find_motor_angles(adj_pitch, adj_roll, DESIRED_ANGLE)
+            arm_tgt  = clamp(arm_tgt,  ARM_MIN, ARM_MAX)
             lazy_tgt = clamp_strict(lazy_tgt, LAZY_SUSAN_MIN, LAZY_SUSAN_MAX)
 
-            # Arm follows pitch only — not flipped by roll sign
+            # Scale arm to full servo range: ARM_MAX deg -> ARM_SERVO_MAX (negated)
             arm_cmd = clamp_strict(
-                (-adj_pitch / ARM_MAX) * ARM_SERVO_MAX + ARM_VERTICAL_OFFSET,
+                (-arm_tgt / ARM_MAX) * ARM_SERVO_MAX + ARM_VERTICAL_OFFSET,
                 ARM_SERVO_MIN, ARM_SERVO_MAX,
             )
-            arm_tgt = adj_pitch
 
             now = time.monotonic()
             dt = now - last_loop_time
@@ -209,16 +209,10 @@ def main():
     except KeyboardInterrupt:
         print("\nStopped.")
     finally:
-        try:
-            lazy_servo.value = 0.0
-            arm_servo.value  = 0.0
-            time.sleep(0.3)
-        except Exception:
-            pass
-        try:
-            mosfet.off()
-        except Exception as e:
-            print(f"Mosfet off error (ignored): {e}")
+        arm_servo.value  = 0.0
+        lazy_servo.value = 0.0
+        time.sleep(0.3)
+        mosfet.off()
 
 
 if __name__ == "__main__":
