@@ -10,7 +10,6 @@ reduce jitter near the target angle.
 import argparse
 import math
 import os
-import signal
 import sys
 import time
 
@@ -151,32 +150,6 @@ class AngleFilter:
         return self.value
 
 
-class ImuInitTimeout(TimeoutError):
-    pass
-
-
-def _raise_imu_init_timeout(signum, frame):
-    raise ImuInitTimeout("IMUInit timed out")
-
-
-def imu_init_with_timeout(imu_device, timeout_s):
-    if timeout_s is None or timeout_s <= 0:
-        return imu_device.IMUInit()
-
-    if not hasattr(signal, "SIGALRM") or not hasattr(signal, "setitimer"):
-        log("IMU init timeout is not supported on this platform.")
-        return imu_device.IMUInit()
-
-    old_handler = signal.getsignal(signal.SIGALRM)
-    signal.signal(signal.SIGALRM, _raise_imu_init_timeout)
-    signal.setitimer(signal.ITIMER_REAL, timeout_s)
-    try:
-        return imu_device.IMUInit()
-    finally:
-        signal.setitimer(signal.ITIMER_REAL, 0)
-        signal.signal(signal.SIGALRM, old_handler)
-
-
 def initialize_imu(init_timeout_s=IMU_INIT_TIMEOUT_S):
     log("Loading RTIMU...")
     import RTIMU  # type: ignore[import-not-found]  # noqa: E402
@@ -186,11 +159,9 @@ def initialize_imu(init_timeout_s=IMU_INIT_TIMEOUT_S):
     imu_device = RTIMU.RTIMU(settings)
 
     log("Initializing IMU...")
-    try:
-        initialized = imu_init_with_timeout(imu_device, init_timeout_s)
-    except ImuInitTimeout:
-        log(f"IMU init timed out after {init_timeout_s:.1f}s")
-        return None, None
+    # Wrapping RTIMU.IMUInit() with SIGALRM leaves IMURead() returning False
+    # indefinitely on the Pi, even when initialization itself succeeds.
+    initialized = imu_device.IMUInit()
 
     if not initialized:
         log("IMU init failed")
