@@ -40,6 +40,10 @@ const personCount = document.getElementById("personCount");
 const personFrameAge = document.getElementById("personFrameAge");
 
 const mapImage = new Image();
+const mapTintCanvas = document.createElement("canvas");
+const mapTintContext = mapTintCanvas.getContext("2d", {
+  willReadFrequently: true
+});
 const SQRT_3 = Math.sqrt(3);
 const GAMEPAD_AXIS_DEADBAND = 0.12;
 const GAMEPAD_ACTIVE_EPSILON = 0.01;
@@ -47,6 +51,13 @@ const GAMEPAD_BOTTOM_BUTTON = 0;
 const GAMEPAD_LEFT_TRIGGER = 6;
 const GAMEPAD_RIGHT_TRIGGER = 7;
 const MANUAL_SPIN_POWER = 0.75;
+const MAP_TINT_OCCUPIED_DARK = [150, 66, 30];
+const MAP_TINT_OCCUPIED_LIGHT = [225, 105, 36];
+const MAP_TINT_UNKNOWN = [16, 15, 14];
+const MAP_TINT_UNKNOWN_ALPHA = 90;
+const MAP_TINT_FREE_DARK = [30, 25, 23];
+const MAP_TINT_FREE_LIGHT = [48, 38, 34];
+const MAP_TINT_FREE_ALPHA = 245;
 const manualWheelDefs = [
   {
     key: "topLeft",
@@ -69,6 +80,7 @@ let state = null;
 let mapRevision = -1;
 let personImageRevision = -1;
 let mapReady = false;
+let mapTintReady = false;
 let needsFit = true;
 let lastPlanRequest = 0;
 let personTrackingRequestPending = false;
@@ -235,6 +247,37 @@ function drawManualLine(start, end, color, width = 2) {
   manualContext.restore();
 }
 
+function drawManualBar(start, end, width, fill, stroke, strokeWidth = 1) {
+  const dx = end.x - start.x;
+  const dy = end.y - start.y;
+  const length = Math.hypot(dx, dy);
+  if (length < 1) {
+    return;
+  }
+
+  const offsetX = -dy / length * width * 0.5;
+  const offsetY = dx / length * width * 0.5;
+
+  manualContext.save();
+  manualContext.fillStyle = fill;
+  if (stroke) {
+    manualContext.strokeStyle = stroke;
+    manualContext.lineWidth = strokeWidth;
+    manualContext.lineJoin = "miter";
+  }
+  manualContext.beginPath();
+  manualContext.moveTo(start.x + offsetX, start.y + offsetY);
+  manualContext.lineTo(end.x + offsetX, end.y + offsetY);
+  manualContext.lineTo(end.x - offsetX, end.y - offsetY);
+  manualContext.lineTo(start.x - offsetX, start.y - offsetY);
+  manualContext.closePath();
+  manualContext.fill();
+  if (stroke) {
+    manualContext.stroke();
+  }
+  manualContext.restore();
+}
+
 function drawManualArrow(start, end, color, width = 3, headSize = 8) {
   const dx = end.x - start.x;
   const dy = end.y - start.y;
@@ -287,23 +330,13 @@ function drawManualCircle(point, radius, fill, stroke, width = 1) {
 }
 
 function drawManualBackground(center, scale, width, height) {
-  const background = manualContext.createRadialGradient(
-    center.x,
-    center.y,
-    scale * 0.08,
-    center.x,
-    center.y,
-    scale * 1.5
-  );
-  background.addColorStop(0, "#1b1912");
-  background.addColorStop(0.68, "#12110d");
-  background.addColorStop(1, "#0b0b08");
-  manualContext.fillStyle = background;
+  manualContext.fillStyle = "#090807";
   manualContext.fillRect(0, 0, width, height);
 
   manualContext.save();
-  manualContext.strokeStyle = "rgba(209, 196, 163, 0.12)";
+  manualContext.strokeStyle = "rgba(239, 228, 216, 0.11)";
   manualContext.lineWidth = 1;
+  manualContext.lineCap = "square";
   const spacing = Math.max(18, scale * 0.22);
   for (let x = center.x % spacing; x < width; x += spacing) {
     manualContext.beginPath();
@@ -319,21 +352,20 @@ function drawManualBackground(center, scale, width, height) {
   }
   manualContext.restore();
 
-  const base = manualContext.createRadialGradient(
-    center.x - scale * 0.18,
-    center.y - scale * 0.22,
-    scale * 0.05,
-    center.x,
-    center.y,
-    scale
-  );
-  base.addColorStop(0, "#292516");
-  base.addColorStop(1, "#11100c");
-  drawManualCircle(center, scale, base, "#e8ddc8", 2);
+  manualContext.save();
+  manualContext.fillStyle = "#12100e";
+  manualContext.strokeStyle = "#efe4d8";
+  manualContext.lineWidth = 2;
+  manualContext.beginPath();
+  manualContext.arc(center.x, center.y, scale, 0, Math.PI * 2);
+  manualContext.fill();
+  manualContext.stroke();
+  manualContext.restore();
 
   manualContext.save();
-  manualContext.strokeStyle = "rgba(240, 232, 214, 0.16)";
+  manualContext.strokeStyle = "rgba(239, 228, 216, 0.3)";
   manualContext.lineWidth = 1;
+  manualContext.lineCap = "square";
   for (const radius of [scale * 0.33, scale * 0.66]) {
     manualContext.beginPath();
     manualContext.arc(center.x, center.y, radius, 0, Math.PI * 2);
@@ -344,13 +376,13 @@ function drawManualBackground(center, scale, width, height) {
   drawManualLine(
     { x: center.x - scale, y: center.y },
     { x: center.x + scale, y: center.y },
-    "rgba(240, 232, 214, 0.18)",
+    "rgba(239, 228, 216, 0.42)",
     1
   );
   drawManualLine(
     { x: center.x, y: center.y - scale },
     { x: center.x, y: center.y + scale },
-    "rgba(240, 232, 214, 0.18)",
+    "rgba(239, 228, 216, 0.42)",
     1
   );
 }
@@ -365,11 +397,9 @@ function drawManualRotationArc(center, scale) {
   const start = -Math.PI / 2;
   const end = start - angular * Math.PI * 1.35;
   manualContext.save();
-  manualContext.strokeStyle = "#d99a2b";
-  manualContext.lineWidth = 5;
-  manualContext.lineCap = "round";
-  manualContext.shadowColor = "rgba(217, 154, 43, 0.32)";
-  manualContext.shadowBlur = 8;
+  manualContext.strokeStyle = "#d9782b";
+  manualContext.lineWidth = 4;
+  manualContext.lineCap = "butt";
   manualContext.beginPath();
   manualContext.arc(center.x, center.y, radius, start, end, angular > 0);
   manualContext.stroke();
@@ -391,11 +421,9 @@ function drawManualDefaultForwardMarker(center, ringRadius) {
   };
 
   manualContext.save();
-  manualContext.shadowColor = "rgba(217, 154, 43, 0.26)";
-  manualContext.shadowBlur = 7;
-  manualContext.fillStyle = "#f0e8d6";
-  manualContext.strokeStyle = "#d99a2b";
-  manualContext.lineWidth = 2;
+  manualContext.fillStyle = "#efe4d8";
+  manualContext.strokeStyle = "#d9782b";
+  manualContext.lineWidth = 2.5;
   manualContext.beginPath();
   manualContext.moveTo(tip.x, tip.y);
   manualContext.lineTo(left.x, left.y);
@@ -420,8 +448,35 @@ function drawManualWheelPad(wheel, center, scale, power) {
     center,
     scale
   );
-  drawManualLine(padStart, padEnd, "#2b271b", 12);
-  drawManualLine(padStart, padEnd, "rgba(240, 232, 214, 0.38)", 2);
+  manualContext.save();
+  manualContext.shadowColor = "rgba(0, 0, 0, 0.45)";
+  manualContext.shadowBlur = 3;
+  manualContext.shadowOffsetY = 2;
+  drawManualBar(padStart, padEnd, 16, "#070605", null);
+  manualContext.restore();
+  drawManualBar(
+    padStart,
+    padEnd,
+    13,
+    "#3f332d",
+    "rgba(239, 228, 216, 0.74)",
+    1.5
+  );
+  drawManualBar(
+    manualPointToScreen(
+      [coord[0] - direction[0] * 0.24, coord[1] - direction[1] * 0.24],
+      center,
+      scale
+    ),
+    manualPointToScreen(
+      [coord[0] + direction[0] * 0.24, coord[1] + direction[1] * 0.24],
+      center,
+      scale
+    ),
+    3,
+    "#d9782b",
+    null
+  );
 
   const displayPower = clamp(power, -1, 1);
   if (Math.abs(displayPower) <= GAMEPAD_ACTIVE_EPSILON) {
@@ -437,12 +492,14 @@ function drawManualWheelPad(wheel, center, scale, power) {
     center,
     scale
   );
+  const arrowColor = "#45f3ff";
+  drawManualArrow(wheelCenter, arrowEnd, "#020506", 10, 13);
   drawManualArrow(
     wheelCenter,
     arrowEnd,
-    displayPower > 0 ? "#a5d66f" : "#e7c15b",
-    4,
-    8
+    arrowColor,
+    6,
+    12
   );
 }
 
@@ -475,8 +532,8 @@ function drawManualHeadingIndicator(center, scale, width, height) {
     return;
   }
 
-  manualContext.strokeStyle = orientation.enabled ? "#817866" : "#3d3627";
-  manualContext.lineWidth = 1.5;
+  manualContext.strokeStyle = orientation.enabled ? "#aa9a90" : "#4a3932";
+  manualContext.lineWidth = 2;
   manualContext.beginPath();
   manualContext.arc(center.x, center.y, ringRadius, 0, Math.PI * 2);
   manualContext.stroke();
@@ -498,8 +555,8 @@ function drawManualHeadingIndicator(center, scale, width, height) {
         center,
         scale
       ),
-      major ? "#f0e8d6" : "rgba(240, 232, 214, 0.42)",
-      major ? 2 : 1
+      major ? "#efe4d8" : "rgba(239, 228, 216, 0.58)",
+      major ? 2.5 : 1.2
     );
   }
 
@@ -510,7 +567,7 @@ function drawManualHeadingIndicator(center, scale, width, height) {
     return;
   }
 
-  const markerColor = orientation.fresh ? "#d99a2b" : "#aaa292";
+  const markerColor = orientation.fresh ? "#d9782b" : "#aa9a90";
   const markerStart = [
     forward[0] * (ringRadius / scale - 0.12),
     forward[1] * (ringRadius / scale - 0.12)
@@ -523,14 +580,14 @@ function drawManualHeadingIndicator(center, scale, width, height) {
     manualPointToScreen(markerStart, center, scale),
     manualPointToScreen(markerEnd, center, scale),
     markerColor,
-    4
+    5
   );
   const markerPoint = manualPointToScreen(markerEnd, center, scale);
   manualContext.fillStyle = markerColor;
-  manualContext.strokeStyle = "#11100c";
+  manualContext.strokeStyle = "#11100f";
   manualContext.lineWidth = 2;
   manualContext.beginPath();
-  manualContext.arc(markerPoint.x, markerPoint.y, 5, 0, Math.PI * 2);
+  manualContext.rect(markerPoint.x - 4, markerPoint.y - 4, 8, 8);
   manualContext.fill();
   manualContext.stroke();
 }
@@ -581,7 +638,14 @@ function drawManualControl() {
     drawManualArrow(
       center,
       manualPointToScreen(velocity, center, scale),
-      "#d99a2b",
+      "#050403",
+      8,
+      14
+    );
+    drawManualArrow(
+      center,
+      manualPointToScreen(velocity, center, scale),
+      "#ffad64",
       5,
       11
     );
@@ -595,8 +659,8 @@ function drawManualControl() {
       normalIntersection(wheelVectors[2], wheelVectors[1])
     ];
     manualContext.save();
-    manualContext.fillStyle = "rgba(165, 214, 111, 0.16)";
-    manualContext.strokeStyle = "rgba(165, 214, 111, 0.68)";
+    manualContext.fillStyle = "rgba(216, 198, 160, 0.16)";
+    manualContext.strokeStyle = "rgba(216, 198, 160, 0.68)";
     manualContext.lineWidth = 1.5;
     intersections.forEach((point) => {
       if (!Number.isFinite(point[0]) || !Number.isFinite(point[1])) {
@@ -614,27 +678,19 @@ function drawManualControl() {
 
 function drawManualThumb(center, point) {
   const active = Math.hypot(manualState.x, manualState.y) > 0.01;
-  const fill = manualInputSource === "gamepad" ? "#d99a2b" : "#a5d66f";
+  const fill = manualInputSource === "gamepad" ? "#d9782b" : "#d8c6a0";
 
-  drawManualCircle(center, 5, "#f0e8d6", "#11100c", 2);
-  drawManualCircle(center, 2, "#11100c", null);
+  drawManualCircle(center, 5, "#efe4d8", "#11100f", 2);
+  drawManualCircle(center, 2, "#11100f", null);
 
-  manualContext.save();
-  if (active) {
-    manualContext.shadowColor = manualInputSource === "gamepad"
-      ? "rgba(217, 154, 43, 0.42)"
-      : "rgba(165, 214, 111, 0.34)";
-    manualContext.shadowBlur = 10;
-  }
   drawManualCircle(
     point,
-    active ? 11 : 8,
-    active ? fill : "#aaa292",
-    "#f0e8d6",
-    3
+    active ? 10 : 8,
+    active ? fill : "#aa9a90",
+    "#efe4d8",
+    2
   );
-  manualContext.restore();
-  drawManualCircle(point, active ? 4 : 3, "rgba(255, 255, 255, 0.72)", null);
+  drawManualCircle(point, active ? 4 : 3, "#11100f", null);
 }
 
 async function sendManualCommand(force = false) {
@@ -961,12 +1017,86 @@ function yawForGoal() {
 }
 
 function drawMapPlaceholder(width, height) {
-  context.fillStyle = "#10100c";
+  context.fillStyle = "#100f0e";
   context.fillRect(0, 0, width, height);
-  context.fillStyle = "#aaa292";
+  context.fillStyle = "#aa9a90";
   context.font = "14px SFMono-Regular, Consolas, Liberation Mono, monospace";
   context.textAlign = "center";
   context.fillText("Waiting for /map", width * 0.5, height * 0.5);
+}
+
+function mixColor(start, end, amount) {
+  return start.map((channel, index) => (
+    Math.round(channel + (end[index] - channel) * amount)
+  ));
+}
+
+function tintMapImage() {
+  if (
+    !mapTintContext ||
+    mapImage.width <= 0 ||
+    mapImage.height <= 0
+  ) {
+    return false;
+  }
+
+  mapTintCanvas.width = mapImage.width;
+  mapTintCanvas.height = mapImage.height;
+  mapTintContext.clearRect(0, 0, mapImage.width, mapImage.height);
+  mapTintContext.drawImage(mapImage, 0, 0);
+
+  try {
+    const imageData = mapTintContext.getImageData(
+      0,
+      0,
+      mapImage.width,
+      mapImage.height
+    );
+    const pixels = imageData.data;
+
+    for (let index = 0; index < pixels.length; index += 4) {
+      const alpha = pixels[index + 3];
+      if (alpha === 0) {
+        continue;
+      }
+
+      const luminance = (
+        pixels[index] * 0.2126 +
+        pixels[index + 1] * 0.7152 +
+        pixels[index + 2] * 0.0722
+      );
+      let color;
+      let outputAlpha = alpha;
+      if (luminance < 120) {
+        color = mixColor(
+          MAP_TINT_OCCUPIED_DARK,
+          MAP_TINT_OCCUPIED_LIGHT,
+          clamp(luminance / 120, 0, 1)
+        );
+      } else if (luminance < 225) {
+        color = MAP_TINT_UNKNOWN;
+        outputAlpha = Math.round(alpha * MAP_TINT_UNKNOWN_ALPHA / 255);
+      } else {
+        color = mixColor(
+          MAP_TINT_FREE_DARK,
+          MAP_TINT_FREE_LIGHT,
+          clamp((luminance - 225) / 30, 0, 1)
+        );
+        outputAlpha = Math.round(alpha * MAP_TINT_FREE_ALPHA / 255);
+      }
+
+      pixels[index] = color[0];
+      pixels[index + 1] = color[1];
+      pixels[index + 2] = color[2];
+      pixels[index + 3] = outputAlpha;
+    }
+
+    mapTintContext.putImageData(imageData, 0, 0);
+    return true;
+  } catch (error) {
+    console.warn("Map tint failed; drawing raw map image.", error);
+    return false;
+  }
 }
 
 function drawPath(points) {
@@ -977,7 +1107,7 @@ function drawPath(points) {
   context.lineWidth = 3;
   context.lineJoin = "round";
   context.lineCap = "round";
-  context.strokeStyle = "#9fd26f";
+  context.strokeStyle = "#d8c6a0";
   context.beginPath();
 
   let started = false;
@@ -1013,7 +1143,7 @@ function drawGoal(goal) {
 
   context.save();
   context.translate(screenPoint.x, screenPoint.y);
-  context.strokeStyle = "#d99a2b";
+  context.strokeStyle = "#d9782b";
   context.fillStyle = "#21170a";
   context.lineWidth = 2;
   context.beginPath();
@@ -1055,7 +1185,7 @@ function drawRobot(pose) {
   context.save();
   context.translate(screenPoint.x, screenPoint.y);
   context.rotate(angle);
-  context.fillStyle = "#d99a2b";
+  context.fillStyle = "#d9782b";
   context.strokeStyle = "#080806";
   context.lineWidth = 2;
   context.beginPath();
@@ -1082,8 +1212,9 @@ function draw() {
   }
 
   context.imageSmoothingEnabled = false;
+  const mapBitmap = mapTintReady ? mapTintCanvas : mapImage;
   context.drawImage(
-    mapImage,
+    mapBitmap,
     viewport.offsetX,
     viewport.offsetY,
     mapImage.width * viewport.scale,
@@ -1179,7 +1310,9 @@ function updateMapImage(nextState) {
 
   mapRevision = nextState.map_revision;
   mapReady = false;
+  mapTintReady = false;
   mapImage.onload = () => {
+    mapTintReady = tintMapImage();
     mapReady = true;
     fitMap();
     draw();
