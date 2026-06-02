@@ -16,9 +16,6 @@ import time
 sys.path.append("/usr/lib/python3/dist-packages")
 import RTIMU  # type: ignore[import-not-found]  # noqa: E402
 
-from head_balance_math import find_motor_angles
-from servo_control_filters import PIDCommandDamper
-
 DEBUG = True
 DESIRED_ANGLE = 0.0
 NO_IMU_DATA_TIMEOUT_S = 5.0
@@ -288,8 +285,8 @@ def main(
 ):
     log("Starting head balance servo control.")
 
-    arm_servo, lazy_susan_servo, head_servo, mosfet = initialize_servos()
     if servo_self_test:
+        arm_servo, lazy_susan_servo, head_servo, mosfet = initialize_servos()
         run_servo_self_test(arm_servo, lazy_susan_servo, head_servo, mosfet)
         return 0
 
@@ -300,6 +297,11 @@ def main(
 
     if not wait_for_first_imu_sample(imu, imu_poll_interval):
         return 1
+
+    from head_balance_math import find_motor_angles
+    from servo_control_filters import PIDCommandDamper
+
+    arm_servo, lazy_susan_servo, head_servo, mosfet = initialize_servos()
 
     log("Skipping flat-reference capture; using raw IMU roll and pitch.")
     roll_reference_deg = 0.0
