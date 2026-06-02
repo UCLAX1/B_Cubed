@@ -116,6 +116,7 @@ def main():
 
     lazy_stalled_since = None
     lazy_last_steps = None
+    lazy_encoder_working = None  # None=unknown, True/False confirmed
 
     print("\nMoving servos. Ctrl-C to stop.\n")
 
@@ -136,12 +137,14 @@ def main():
             arm_tgt  = clamp(arm_tgt,  ARM_MIN, ARM_MAX)
             lazy_tgt = clamp_strict(lazy_tgt, LAZY_SUSAN_MIN, LAZY_SUSAN_MAX)
 
+            # Scale arm to full servo range: ARM_MAX deg -> ARM_SERVO_MAX
             arm_cmd = clamp_strict(
-                (arm_tgt / 90.0) + ARM_VERTICAL_OFFSET,
+                (arm_tgt / ARM_MAX) * ARM_SERVO_MAX + ARM_VERTICAL_OFFSET,
                 ARM_SERVO_MIN, ARM_SERVO_MAX,
             )
 
-            lazy_actual_raw = lazy_encoder.steps * 360.0 / LAZY_CPR
+            steps_now = lazy_encoder.steps
+            lazy_actual_raw = steps_now * 360.0 / LAZY_CPR
             lazy_actual = fold_lazy(lazy_actual_raw)
             lazy_error = wrap_degrees(lazy_tgt - lazy_actual)
 
@@ -150,28 +153,31 @@ def main():
             else:
                 lazy_cmd = LAZY_COMMAND_SIGN * clamp(lazy_error / 45.0, -1.0, 1.0) * CONT_MAX_SPEED
 
-            # Stall detection: zero command if encoder steps don't change
+            # Persistent stall detection: once stalled, stay stopped until encoder moves
             now = time.monotonic()
-            steps_now = lazy_encoder.steps
-            if lazy_last_steps is not None and abs(lazy_cmd) > 0.1:
-                if steps_now == lazy_last_steps:
+            if lazy_last_steps is not None:
+                if steps_now != lazy_last_steps:
+                    # encoder is moving — clear stall
+                    lazy_stalled_since = None
+                    lazy_encoder_working = True
+                elif abs(lazy_cmd) > 0.1:
+                    # commanding motion but encoder not moving
                     if lazy_stalled_since is None:
                         lazy_stalled_since = now
                     elif now - lazy_stalled_since >= ENCODER_STALL_TIMEOUT_S:
                         lazy_cmd = 0.0
-                else:
-                    lazy_stalled_since = None
-            else:
-                lazy_stalled_since = None
+                        lazy_encoder_working = False
             lazy_last_steps = steps_now
 
             arm_servo.value  = arm_cmd
             lazy_servo.value = lazy_cmd
 
+            enc_status = "?" if lazy_encoder_working is None else ("OK" if lazy_encoder_working else "STALLED/DISCONNECTED")
             print(
                 f"adjR={adj_roll:+5.1f}° adjP={adj_pitch:+5.1f}°  "
-                f"arm_tgt={arm_tgt:+6.1f}° arm_cmd={arm_cmd:+.3f}  "
-                f"lazy_tgt={lazy_tgt:+6.1f}° lazy_pos={lazy_actual:+6.1f}° lazy_cmd={lazy_cmd:+.3f}",
+                f"arm_tgt={arm_tgt:+5.1f}° arm_cmd={arm_cmd:+.3f}  "
+                f"lazy_tgt={lazy_tgt:+6.1f}° pos={lazy_actual:+6.1f}° err={lazy_error:+6.1f}° "
+                f"steps={steps_now} lazy_cmd={lazy_cmd:+.3f} enc={enc_status}",
                 flush=True,
             )
             time.sleep(poll_interval)
