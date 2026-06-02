@@ -290,7 +290,11 @@ class ServoEx(Servo):
         self.encoder.steps += position_difference * self.COUNTS_PER_REVOLUTION
 
     def save_encoder_position(self):
-        data = {str(self.pin): self.encoder.steps}
+        data = {}
+        if os.path.exists(self.INIT_POS_FILE):
+            with open(self.INIT_POS_FILE, "r") as f:
+                data = json.load(f)
+        data[str(self.pin)] = self.encoder.steps
         with open(self.INIT_POS_FILE, "w") as f:
             json.dump(data, f, indent=2)
 
