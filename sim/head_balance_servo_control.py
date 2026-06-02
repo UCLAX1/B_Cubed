@@ -10,11 +10,10 @@ reduce jitter near the target angle.
 import argparse
 import math
 import os
+import select
+import subprocess
 import sys
 import time
-
-sys.path.append("/usr/lib/python3/dist-packages")
-import RTIMU  # type: ignore[import-not-found]  # noqa: E402
 
 DEBUG = True
 DESIRED_ANGLE = 0.0
@@ -22,7 +21,6 @@ NO_IMU_DATA_TIMEOUT_S = 5.0
 IMU_INIT_TIMEOUT_S = 5.0
 
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
-SETTINGS_FILE = os.path.join(SCRIPT_DIR, "RTIMULib")
 
 ARM_MIN, ARM_MAX = -30.0, 30.0
 LAZY_SUSAN_MIN, LAZY_SUSAN_MAX = -90.0, 90.0
@@ -149,29 +147,49 @@ class AngleFilter:
         return self.value
 
 
+class StreamedImu:
+    def __init__(self):
+        stream_script = os.path.join(SCRIPT_DIR, "imu_stream.py")
+        self.process = subprocess.Popen(
+            [sys.executable, "-u", stream_script],
+            stdout=subprocess.PIPE,
+            text=True,
+            bufsize=1,
+        )
+        self.data = None
+
+    def IMURead(self):
+        if self.process.poll() is not None:
+            raise RuntimeError("IMU stream process stopped")
+
+        readable, _, _ = select.select([self.process.stdout], [], [], 0)
+        if not readable:
+            return False
+
+        line = self.process.stdout.readline().strip()
+        if not line:
+            return False
+
+        roll, pitch, yaw = (float(value) for value in line.split(","))
+        self.data = {"fusionPose": (roll, pitch, yaw)}
+        return True
+
+    def getIMUData(self):
+        return self.data
+
+    def close(self):
+        if self.process.poll() is None:
+            self.process.terminate()
+            try:
+                self.process.wait(timeout=1.0)
+            except subprocess.TimeoutExpired:
+                self.process.kill()
+                self.process.wait()
+
+
 def initialize_imu(init_timeout_s=IMU_INIT_TIMEOUT_S):
-    log("Loading RTIMU...")
-    log(f"Creating RTIMU settings from {SETTINGS_FILE}...")
-    settings = RTIMU.Settings(SETTINGS_FILE)
-    imu_device = RTIMU.RTIMU(settings)
-
-    log("Initializing IMU...")
-    # Wrapping RTIMU.IMUInit() with SIGALRM leaves IMURead() returning False
-    # indefinitely on the Pi, even when initialization itself succeeds.
-    initialized = imu_device.IMUInit()
-
-    if not initialized:
-        log("IMU init failed")
-        return None, None
-
-    log("IMU initialized.")
-    imu_device.setSlerpPower(0.02)
-    imu_device.setGyroEnable(True)
-    imu_device.setAccelEnable(True)
-    imu_device.setCompassEnable(True)
-    poll_interval = imu_device.IMUGetPollInterval() / 1000.0
-    log(f"IMU poll interval: {poll_interval * 1000:.1f}ms")
-    return imu_device, poll_interval
+    log("Starting isolated RTIMU stream...")
+    return StreamedImu(), 0.003
 
 
 def wait_for_first_imu_sample(imu_device, poll_interval):
@@ -293,6 +311,7 @@ def main(
         return 1
 
     if not wait_for_first_imu_sample(imu, imu_poll_interval):
+        imu.close()
         return 1
 
     from head_balance_math import find_motor_angles
@@ -468,6 +487,7 @@ def main(
         lazy_susan_servo.deactivate_and_save()
         time.sleep(0.5)
         mosfet.off()
+        imu.close()
         log("Done. Servo positions saved.")
     return 0
 
