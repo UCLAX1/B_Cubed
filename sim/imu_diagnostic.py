@@ -101,44 +101,53 @@ except Exception as e:
 
 # Step 8: Attempt to read IMU data
 print("\n[8] ATTEMPTING DATA READS...")
-print("    Reading 10 samples...")
+print("    Collecting 10 valid samples...")
 
 zero_count = 0
-for i in range(10):
+valid_sample_count = 0
+skipped_poll_count = 0
+read_deadline = time.time() + 5.0
+while valid_sample_count < 10 and time.time() < read_deadline:
     read_result = imu.IMURead()
-    print(f"    [{i+1}] IMURead() returned: {read_result}", end="")
-    
-    if read_result:
-        try:
-            data = imu.getIMUData()
-            fusionPose = data["fusionPose"]
-            accel = data["accel"]
-            gyro = data["gyro"]
-            compass = data["compass"]
-            
-            print(f" | Pose: ({fusionPose[0]:.4f}, {fusionPose[1]:.4f}, {fusionPose[2]:.4f})")
-            print(f"         | Accel: {accel} | Gyro: {gyro}")
-            
-            # Check if all zeros
-            if (fusionPose == (0, 0, 0) and 
-                accel == [0.0, 0.0, 0.0] and 
-                gyro == [0.0, 0.0, 0.0]):
-                zero_count += 1
-        except Exception as e:
-            print(f" ✗ getIMUData() FAILED: {e}")
-    else:
-        print(" | No data available")
-    
+    if not read_result:
+        skipped_poll_count += 1
+        time.sleep(poll_interval_s)
+        continue
+
+    valid_sample_count += 1
+    try:
+        data = imu.getIMUData()
+        fusionPose = data["fusionPose"]
+        accel = data["accel"]
+        gyro = data["gyro"]
+        compass = data["compass"]
+
+        print(f"    [{valid_sample_count}] Pose: ({fusionPose[0]:.4f}, {fusionPose[1]:.4f}, {fusionPose[2]:.4f})")
+        print(f"         | Accel: {accel} | Gyro: {gyro}")
+
+        # Check if all zeros
+        if (fusionPose == (0, 0, 0) and
+            accel == [0.0, 0.0, 0.0] and
+            gyro == [0.0, 0.0, 0.0]):
+            zero_count += 1
+    except Exception as e:
+        print(f" ✗ getIMUData() FAILED: {e}")
+
     time.sleep(poll_interval_s)
 
-print(f"\n    ⚠ Zero samples: {zero_count}/10")
+print(f"\n    - Valid samples: {valid_sample_count}/10")
+print(f"    - Skipped polls without a new sample: {skipped_poll_count}")
+print(f"    ⚠ Zero samples: {zero_count}/{valid_sample_count}")
 
 # Summary
 print("\n" + "=" * 60)
 print("DIAGNOSTIC SUMMARY")
 print("=" * 60)
 
-if init_result and zero_count == 10:
+if init_result and valid_sample_count == 0:
+    print("⚠ CRITICAL FINDING:")
+    print("  - IMU initialized successfully, but no samples arrived")
+elif init_result and zero_count == valid_sample_count:
     print("⚠ CRITICAL FINDING:")
     print("  - IMU initialized successfully (hardware IS detected)")
     print("  - BUT all sensor reads return zeros")
