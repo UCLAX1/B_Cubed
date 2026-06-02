@@ -7,7 +7,30 @@ import numpy as np
 import os
 
 from ServoBase import ServoBase
-from PIDController import PIDController
+
+class CRPIDController:
+    def __init__(self, kP: float, kI: float, kD: float):
+        self.kP: float = kP
+        self.kI: float = kI
+        self.kD: float = kD
+
+        self.previous_error = 0
+        self.integral = 0
+        self.derivative = 0
+        self.setpoint = 0
+
+    def set_setpoint(self, setpoint):
+        self.setpoint = setpoint
+
+    def update(self, current_value, dt):
+        error = self.setpoint - current_value
+        # makes it so it goes the other way (wraps around) if the other way is closer
+        error = (error + 0.5) % 1.0 - 0.5
+        self.integral += dt
+        self.derivative += (error - self.previous_error) * dt
+
+        control = self.kP * error + self.kI * self.integral + self.kD * self.derivative
+        return control
 
 class AbsoluteEncoder:
 
@@ -24,7 +47,8 @@ class AbsoluteEncoder:
         self.__time_activated: float = 0.0
         self.__previous_value: int = 0
         self.__current_value: int = 0
-        self.__position_history: list[float] = []
+        # self.__position_history: list[float] = []
+        self.__position_history: list[complex] = []
 
     def is_active(self):
         return self.__input_device.is_active
@@ -36,7 +60,7 @@ class AbsoluteEncoder:
         dt = time.time() - self.__time_activated
 
         # sanity check: if dt is too unreasonable then don't do anything
-        if dt > 0.005:
+        if dt > 0.005 or dt <= 0.0:
             return
 
         new_position = dt * 1000
@@ -45,16 +69,21 @@ class AbsoluteEncoder:
         new_position = np.clip(new_position, 0.0, 1.0)
 
         # save position history
-        if len(self.__position_history) >= self.POSITION_HISTORY_MAX_SIZE:
-            self.__position_history = self.__position_history[1:]
+        if len(self.__position_history) > self.POSITION_HISTORY_MAX_SIZE:
+            self.__position_history.pop(0)
             # [1, 2, 3, 4, 5]
             # VVV
             # [2, 3, 4, 5]
 
-        self.__position_history.append(new_position)
+        # basically encode the angle to the x (cos) and y (sin) components and store in __position_history as complex number
+        self.__position_history.append(np.exp(1j * (new_position * 2 * np.pi)))
 
-        # set position to average of position history
-        self.position = sum(self.__position_history) / len(self.__position_history)
+        average_angle_rad = np.angle(np.mean(self.__position_history))
+        if average_angle_rad < 0.0:
+            average_angle_rad += 2.0 * np.pi
+
+        # set position to average angle of position history
+        self.position = average_angle_rad / (2.0 * np.pi)
 
     def update(self):
         pass
@@ -98,7 +127,7 @@ class CRServoEx(ServoBase):
     # center position every x seconds
     POSITION_CENTERING_DELAY: float = 0.25
 
-    kP: float = 0.00
+    kP: float = 0.01
     kI: float = 0.00
     kD: float = 0.00
 
@@ -111,7 +140,7 @@ class CRServoEx(ServoBase):
         self.absolute_encoder = AbsoluteEncoder(pin=absolute_encoder_pin)
         self.wait_for_encoders_active()
 
-        self.pid_controller: PIDController = PIDController(self.kP, self.kI, self.kD)
+        self.pid_controller: CRPIDController = CRPIDController(self.kP, self.kI, self.kD)
 
         self.time_position_last_centered: float = 0
 
