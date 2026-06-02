@@ -24,10 +24,12 @@ except ImportError as e:
 
 # Step 2: Check RTIMULib settings file
 print("\n[2] CHECKING SETTINGS FILE...")
-SETTINGS_FILE = "RTIMULib"
-if os.path.exists(SETTINGS_FILE):
-    print(f"    ✓ Settings file '{SETTINGS_FILE}' exists")
-    with open(SETTINGS_FILE, 'r') as f:
+SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+SETTINGS_FILE = os.path.join(SCRIPT_DIR, "RTIMULib")
+SETTINGS_PATH = f"{SETTINGS_FILE}.ini"
+if os.path.exists(SETTINGS_PATH):
+    print(f"    ✓ Settings file '{SETTINGS_PATH}' exists")
+    with open(SETTINGS_PATH, 'r') as f:
         content = f.read()
         lines = len(content.split('\n'))
         print(f"    - File size: {len(content)} bytes ({lines} lines)")
@@ -37,8 +39,8 @@ if os.path.exists(SETTINGS_FILE):
         else:
             print("    - Settings file appears to have content")
 else:
-    print(f"    ✗ Settings file '{SETTINGS_FILE}' NOT FOUND")
-    print("    - CRITICAL: RTIMU needs this file in working directory")
+    print(f"    ✗ Settings file '{SETTINGS_PATH}' NOT FOUND")
+    print("    - CRITICAL: RTIMU needs this file next to the diagnostic script")
     print("    - Current directory:", os.getcwd())
     print("    - Files in current directory:")
     for f in os.listdir('.'):
@@ -49,7 +51,7 @@ print("\n[3] INITIALIZING RTIMU SETTINGS...")
 try:
     settings = RTIMU.Settings(SETTINGS_FILE)
     print("    ✓ RTIMU.Settings object created")
-    print(f"    - Settings file used: {SETTINGS_FILE}")
+    print(f"    - Settings file used: {SETTINGS_PATH}")
 except Exception as e:
     print(f"    ✗ Settings initialization FAILED: {e}")
     sys.exit(1)

@@ -9,6 +9,7 @@ reduce jitter near the target angle.
 
 import argparse
 import math
+import os
 import signal
 import sys
 import time
@@ -21,7 +22,8 @@ DESIRED_ANGLE = 0.0
 NO_IMU_DATA_TIMEOUT_S = 5.0
 IMU_INIT_TIMEOUT_S = 5.0
 
-SETTINGS_FILE = "RTIMULib"
+SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+SETTINGS_FILE = os.path.join(SCRIPT_DIR, "RTIMULib")
 sys.path.append("/usr/lib/python3/dist-packages")
 
 ARM_MIN, ARM_MAX = -30.0, 30.0
