@@ -44,8 +44,8 @@ const SQRT_3 = Math.sqrt(3);
 const GAMEPAD_AXIS_DEADBAND = 0.12;
 const GAMEPAD_ACTIVE_EPSILON = 0.01;
 const GAMEPAD_BOTTOM_BUTTON = 0;
-const GAMEPAD_LEFT_BUMPER = 4;
-const GAMEPAD_RIGHT_BUMPER = 5;
+const GAMEPAD_LEFT_TRIGGER = 6;
+const GAMEPAD_RIGHT_TRIGGER = 7;
 const MANUAL_SPIN_POWER = 0.75;
 const manualWheelDefs = [
   {
@@ -223,13 +223,227 @@ function manualPointToScreen(point, center, scale) {
 }
 
 function drawManualLine(start, end, color, width = 2) {
+  manualContext.save();
   manualContext.strokeStyle = color;
   manualContext.lineWidth = width;
   manualContext.lineCap = "round";
+  manualContext.lineJoin = "round";
   manualContext.beginPath();
   manualContext.moveTo(start.x, start.y);
   manualContext.lineTo(end.x, end.y);
   manualContext.stroke();
+  manualContext.restore();
+}
+
+function drawManualArrow(start, end, color, width = 3, headSize = 8) {
+  const dx = end.x - start.x;
+  const dy = end.y - start.y;
+  const length = Math.hypot(dx, dy);
+  if (length < 1) {
+    return;
+  }
+
+  drawManualLine(start, end, color, width);
+  if (length < headSize * 1.8) {
+    return;
+  }
+
+  const angle = Math.atan2(dy, dx);
+  manualContext.save();
+  manualContext.fillStyle = color;
+  manualContext.beginPath();
+  manualContext.moveTo(end.x, end.y);
+  manualContext.lineTo(
+    end.x - Math.cos(angle - 0.55) * headSize,
+    end.y - Math.sin(angle - 0.55) * headSize
+  );
+  manualContext.lineTo(
+    end.x - Math.cos(angle + 0.55) * headSize,
+    end.y - Math.sin(angle + 0.55) * headSize
+  );
+  manualContext.closePath();
+  manualContext.fill();
+  manualContext.restore();
+}
+
+function drawManualCircle(point, radius, fill, stroke, width = 1) {
+  manualContext.save();
+  if (fill) {
+    manualContext.fillStyle = fill;
+  }
+  if (stroke) {
+    manualContext.strokeStyle = stroke;
+    manualContext.lineWidth = width;
+  }
+  manualContext.beginPath();
+  manualContext.arc(point.x, point.y, radius, 0, Math.PI * 2);
+  if (fill) {
+    manualContext.fill();
+  }
+  if (stroke) {
+    manualContext.stroke();
+  }
+  manualContext.restore();
+}
+
+function drawManualBackground(center, scale, width, height) {
+  const background = manualContext.createRadialGradient(
+    center.x,
+    center.y,
+    scale * 0.08,
+    center.x,
+    center.y,
+    scale * 1.5
+  );
+  background.addColorStop(0, "#1c2935");
+  background.addColorStop(0.68, "#14202a");
+  background.addColorStop(1, "#101720");
+  manualContext.fillStyle = background;
+  manualContext.fillRect(0, 0, width, height);
+
+  manualContext.save();
+  manualContext.strokeStyle = "rgba(148, 163, 184, 0.12)";
+  manualContext.lineWidth = 1;
+  const spacing = Math.max(18, scale * 0.22);
+  for (let x = center.x % spacing; x < width; x += spacing) {
+    manualContext.beginPath();
+    manualContext.moveTo(x, 0);
+    manualContext.lineTo(x, height);
+    manualContext.stroke();
+  }
+  for (let y = center.y % spacing; y < height; y += spacing) {
+    manualContext.beginPath();
+    manualContext.moveTo(0, y);
+    manualContext.lineTo(width, y);
+    manualContext.stroke();
+  }
+  manualContext.restore();
+
+  const base = manualContext.createRadialGradient(
+    center.x - scale * 0.18,
+    center.y - scale * 0.22,
+    scale * 0.05,
+    center.x,
+    center.y,
+    scale
+  );
+  base.addColorStop(0, "#243241");
+  base.addColorStop(1, "#111820");
+  drawManualCircle(center, scale, base, "#f8fafc", 2);
+
+  manualContext.save();
+  manualContext.strokeStyle = "rgba(248, 250, 252, 0.16)";
+  manualContext.lineWidth = 1;
+  for (const radius of [scale * 0.33, scale * 0.66]) {
+    manualContext.beginPath();
+    manualContext.arc(center.x, center.y, radius, 0, Math.PI * 2);
+    manualContext.stroke();
+  }
+  manualContext.restore();
+
+  drawManualLine(
+    { x: center.x - scale, y: center.y },
+    { x: center.x + scale, y: center.y },
+    "rgba(248, 250, 252, 0.18)",
+    1
+  );
+  drawManualLine(
+    { x: center.x, y: center.y - scale },
+    { x: center.x, y: center.y + scale },
+    "rgba(248, 250, 252, 0.18)",
+    1
+  );
+}
+
+function drawManualRotationArc(center, scale) {
+  const angular = clamp(manualState.angular, -1, 1);
+  if (Math.abs(angular) <= GAMEPAD_ACTIVE_EPSILON) {
+    return;
+  }
+
+  const radius = scale * 0.78;
+  const start = -Math.PI / 2;
+  const end = start - angular * Math.PI * 1.35;
+  manualContext.save();
+  manualContext.strokeStyle = "#f97316";
+  manualContext.lineWidth = 5;
+  manualContext.lineCap = "round";
+  manualContext.shadowColor = "rgba(249, 115, 22, 0.32)";
+  manualContext.shadowBlur = 8;
+  manualContext.beginPath();
+  manualContext.arc(center.x, center.y, radius, start, end, angular > 0);
+  manualContext.stroke();
+  manualContext.restore();
+}
+
+function drawManualDefaultForwardMarker(center, ringRadius) {
+  const tip = {
+    x: center.x,
+    y: center.y - ringRadius - 6
+  };
+  const left = {
+    x: center.x - 7,
+    y: center.y - ringRadius + 7
+  };
+  const right = {
+    x: center.x + 7,
+    y: center.y - ringRadius + 7
+  };
+
+  manualContext.save();
+  manualContext.shadowColor = "rgba(249, 115, 22, 0.26)";
+  manualContext.shadowBlur = 7;
+  manualContext.fillStyle = "#f8fafc";
+  manualContext.strokeStyle = "#f97316";
+  manualContext.lineWidth = 2;
+  manualContext.beginPath();
+  manualContext.moveTo(tip.x, tip.y);
+  manualContext.lineTo(left.x, left.y);
+  manualContext.lineTo(center.x, center.y - ringRadius + 3);
+  manualContext.lineTo(right.x, right.y);
+  manualContext.closePath();
+  manualContext.fill();
+  manualContext.stroke();
+  manualContext.restore();
+}
+
+function drawManualWheelPad(wheel, center, scale, power) {
+  const coord = wheel.coord;
+  const direction = wheel.direction;
+  const padStart = manualPointToScreen(
+    [coord[0] - direction[0] * 0.32, coord[1] - direction[1] * 0.32],
+    center,
+    scale
+  );
+  const padEnd = manualPointToScreen(
+    [coord[0] + direction[0] * 0.32, coord[1] + direction[1] * 0.32],
+    center,
+    scale
+  );
+  drawManualLine(padStart, padEnd, "#263443", 12);
+  drawManualLine(padStart, padEnd, "rgba(248, 250, 252, 0.38)", 2);
+
+  const displayPower = clamp(power, -1, 1);
+  if (Math.abs(displayPower) <= GAMEPAD_ACTIVE_EPSILON) {
+    return;
+  }
+
+  const wheelCenter = manualPointToScreen(coord, center, scale);
+  const arrowEnd = manualPointToScreen(
+    [
+      coord[0] + direction[0] * displayPower * 0.54,
+      coord[1] + direction[1] * displayPower * 0.54
+    ],
+    center,
+    scale
+  );
+  drawManualArrow(
+    wheelCenter,
+    arrowEnd,
+    displayPower > 0 ? "#22c55e" : "#60a5fa",
+    4,
+    8
+  );
 }
 
 function manualOrientationState() {
@@ -261,25 +475,42 @@ function drawManualHeadingIndicator(center, scale, width, height) {
     return;
   }
 
-  manualContext.strokeStyle = orientation.enabled ? "#64748b" : "#334155";
+  manualContext.strokeStyle = orientation.enabled ? "#7c8794" : "#3a4652";
   manualContext.lineWidth = 1.5;
   manualContext.beginPath();
   manualContext.arc(center.x, center.y, ringRadius, 0, Math.PI * 2);
   manualContext.stroke();
 
-  drawManualLine(
-    manualPointToScreen([0, ringRadius / scale - 0.06], center, scale),
-    manualPointToScreen([0, ringRadius / scale + 0.06], center, scale),
-    "#f8fafc",
-    2
-  );
+  for (let index = 0; index < 24; index += 1) {
+    const angle = index * Math.PI / 12;
+    const major = index % 6 === 0;
+    const tickVector = [Math.sin(angle), Math.cos(angle)];
+    const innerRadius = ringRadius / scale - (major ? 0.08 : 0.045);
+    const outerRadius = ringRadius / scale + 0.02;
+    drawManualLine(
+      manualPointToScreen(
+        [tickVector[0] * innerRadius, tickVector[1] * innerRadius],
+        center,
+        scale
+      ),
+      manualPointToScreen(
+        [tickVector[0] * outerRadius, tickVector[1] * outerRadius],
+        center,
+        scale
+      ),
+      major ? "#f8fafc" : "rgba(248, 250, 252, 0.42)",
+      major ? 2 : 1
+    );
+  }
+
+  drawManualDefaultForwardMarker(center, ringRadius);
 
   const forward = robotForwardVector(orientation);
   if (!forward) {
     return;
   }
 
-  const markerColor = orientation.fresh ? "#f59e0b" : "#94a3b8";
+  const markerColor = orientation.fresh ? "#f97316" : "#94a3b8";
   const markerStart = [
     forward[0] * (ringRadius / scale - 0.12),
     forward[1] * (ringRadius / scale - 0.12)
@@ -296,7 +527,7 @@ function drawManualHeadingIndicator(center, scale, width, height) {
   );
   const markerPoint = manualPointToScreen(markerEnd, center, scale);
   manualContext.fillStyle = markerColor;
-  manualContext.strokeStyle = "#111820";
+  manualContext.strokeStyle = "#121a22";
   manualContext.lineWidth = 2;
   manualContext.beginPath();
   manualContext.arc(markerPoint.x, markerPoint.y, 5, 0, Math.PI * 2);
@@ -331,105 +562,79 @@ function drawManualControl() {
   const scale = Math.min(width, height) * 0.36;
   const velocity = [manualState.x, manualState.y];
   const wheelVectors = manualWheelDefs.map((wheel, index) => [
-    manualState.wheels[index] * wheel.direction[0],
-    manualState.wheels[index] * wheel.direction[1]
+    clamp(manualState.wheels[index], -1, 1) * wheel.direction[0] * 0.58,
+    clamp(manualState.wheels[index], -1, 1) * wheel.direction[1] * 0.58
   ]);
+  const linearActive = Math.hypot(velocity[0], velocity[1]) > 0.01;
+  const angularActive = Math.abs(manualState.angular) > 0.01;
 
   manualContext.clearRect(0, 0, width, height);
-  manualContext.fillStyle = "#111820";
-  manualContext.fillRect(0, 0, width, height);
-
-  manualContext.strokeStyle = "#f8fafc";
-  manualContext.lineWidth = 2;
-  manualContext.beginPath();
-  manualContext.arc(center.x, center.y, scale, 0, Math.PI * 2);
-  manualContext.stroke();
-
+  drawManualBackground(center, scale, width, height);
   drawManualHeadingIndicator(center, scale, width, height);
+  drawManualRotationArc(center, scale);
 
-  manualWheelDefs.forEach((wheel) => {
-    const coord = wheel.coord;
-    const direction = wheel.direction;
-    drawManualLine(
-      manualPointToScreen(
-        [coord[0] - direction[0], coord[1] - direction[1]],
-        center,
-        scale
-      ),
-      manualPointToScreen(
-        [coord[0] + direction[0], coord[1] + direction[1]],
-        center,
-        scale
-      ),
-      "#3b82f6",
-      1
-    );
+  manualWheelDefs.forEach((wheel, index) => {
+    drawManualWheelPad(wheel, center, scale, manualState.wheels[index]);
   });
 
-  drawManualLine(
-    center,
-    manualPointToScreen(velocity, center, scale),
-    "#ef4444",
-    5
-  );
+  if (linearActive) {
+    drawManualArrow(
+      center,
+      manualPointToScreen(velocity, center, scale),
+      "#f97316",
+      5,
+      11
+    );
+  }
   drawManualThumb(center, manualPointToScreen(velocity, center, scale));
 
-  wheelVectors.forEach((wheelVector, index) => {
-    const coord = manualWheelDefs[index].coord;
-    drawManualLine(
-      manualPointToScreen(coord, center, scale),
-      manualPointToScreen(
-        [coord[0] + wheelVector[0], coord[1] + wheelVector[1]],
-        center,
-        scale
-      ),
-      "#22c55e",
-      4
-    );
-    drawManualLine(
-      center,
-      manualPointToScreen(wheelVector, center, scale),
-      "#22c55e",
-      3
-    );
-  });
-
-  const intersections = [
-    normalIntersection(wheelVectors[2], wheelVectors[0]),
-    normalIntersection(wheelVectors[0], wheelVectors[1]),
-    normalIntersection(wheelVectors[2], wheelVectors[1])
-  ];
-  manualContext.strokeStyle = "#22d3ee";
-  intersections.forEach((point) => {
-    if (!Number.isFinite(point[0]) || !Number.isFinite(point[1])) {
-      return;
-    }
-    const screenPoint = manualPointToScreen(point, center, scale);
-    manualContext.beginPath();
-    manualContext.arc(screenPoint.x, screenPoint.y, 3, 0, Math.PI * 2);
-    manualContext.stroke();
-  });
+  if (linearActive || angularActive) {
+    const intersections = [
+      normalIntersection(wheelVectors[2], wheelVectors[0]),
+      normalIntersection(wheelVectors[0], wheelVectors[1]),
+      normalIntersection(wheelVectors[2], wheelVectors[1])
+    ];
+    manualContext.save();
+    manualContext.fillStyle = "rgba(125, 211, 252, 0.18)";
+    manualContext.strokeStyle = "rgba(125, 211, 252, 0.7)";
+    manualContext.lineWidth = 1.5;
+    intersections.forEach((point) => {
+      if (!Number.isFinite(point[0]) || !Number.isFinite(point[1])) {
+        return;
+      }
+      const screenPoint = manualPointToScreen(point, center, scale);
+      manualContext.beginPath();
+      manualContext.arc(screenPoint.x, screenPoint.y, 3.5, 0, Math.PI * 2);
+      manualContext.fill();
+      manualContext.stroke();
+    });
+    manualContext.restore();
+  }
 }
 
 function drawManualThumb(center, point) {
   const active = Math.hypot(manualState.x, manualState.y) > 0.01;
-  const fill = manualInputSource === "gamepad" ? "#f59e0b" : "#ef4444";
+  const fill = manualInputSource === "gamepad" ? "#f97316" : "#2563eb";
 
-  manualContext.fillStyle = "#f8fafc";
-  manualContext.strokeStyle = "#111820";
-  manualContext.lineWidth = 2;
-  manualContext.beginPath();
-  manualContext.arc(center.x, center.y, 4, 0, Math.PI * 2);
-  manualContext.fill();
-  manualContext.stroke();
+  drawManualCircle(center, 5, "#f8fafc", "#121a22", 2);
+  drawManualCircle(center, 2, "#121a22", null);
 
-  manualContext.fillStyle = active ? fill : "#94a3b8";
-  manualContext.strokeStyle = "#f8fafc";
-  manualContext.lineWidth = 3;
-  manualContext.beginPath();
-  manualContext.arc(point.x, point.y, active ? 9 : 7, 0, Math.PI * 2);
-  manualContext.fill();
-  manualContext.stroke();
+  manualContext.save();
+  if (active) {
+    manualContext.shadowColor = manualInputSource === "gamepad"
+      ? "rgba(249, 115, 22, 0.42)"
+      : "rgba(37, 99, 235, 0.36)";
+    manualContext.shadowBlur = 10;
+  }
+  drawManualCircle(
+    point,
+    active ? 11 : 8,
+    active ? fill : "#94a3b8",
+    "#f8fafc",
+    3
+  );
+  manualContext.restore();
+  drawManualCircle(point, active ? 4 : 3, "rgba(255, 255, 255, 0.72)", null);
 }
 
 async function sendManualCommand(force = false) {
@@ -521,6 +726,24 @@ function gamepadButtonPressed(gamepad, index) {
   return Boolean(button && button.pressed);
 }
 
+function gamepadTriggerValue(gamepad, index) {
+  const button = gamepad.buttons[index];
+  if (!button) {
+    return 0;
+  }
+  const value = Number.isFinite(button.value)
+    ? button.value
+    : (button.pressed ? 1 : 0);
+  if (value <= GAMEPAD_AXIS_DEADBAND) {
+    return 0;
+  }
+  return clamp(
+    (value - GAMEPAD_AXIS_DEADBAND) / (1 - GAMEPAD_AXIS_DEADBAND),
+    0,
+    1
+  );
+}
+
 function setManualControllerButtonState(ccwPressed, cwPressed, stopPressed) {
   manualCcwButton.classList.toggle("controller-pressed", ccwPressed);
   manualCwButton.classList.toggle("controller-pressed", cwPressed);
@@ -569,13 +792,14 @@ function pollGamepadManualControl() {
 
   const x = gamepadAxis(gamepad.axes[0]);
   const y = -gamepadAxis(gamepad.axes[1]);
-  const ccwPressed = gamepadButtonPressed(gamepad, GAMEPAD_LEFT_BUMPER);
-  const cwPressed = gamepadButtonPressed(gamepad, GAMEPAD_RIGHT_BUMPER);
+  const ccwTrigger = gamepadTriggerValue(gamepad, GAMEPAD_LEFT_TRIGGER);
+  const cwTrigger = gamepadTriggerValue(gamepad, GAMEPAD_RIGHT_TRIGGER);
+  const ccwPressed = ccwTrigger > GAMEPAD_ACTIVE_EPSILON;
+  const cwPressed = cwTrigger > GAMEPAD_ACTIVE_EPSILON;
   const stopPressed = gamepadButtonPressed(gamepad, GAMEPAD_BOTTOM_BUTTON);
   setManualControllerButtonState(ccwPressed, cwPressed, stopPressed);
   const rotation = (
-    (ccwPressed ? MANUAL_SPIN_POWER : 0) -
-    (cwPressed ? MANUAL_SPIN_POWER : 0)
+    (ccwTrigger - cwTrigger) * MANUAL_SPIN_POWER
   );
   const stickActive = Math.hypot(x, y) > GAMEPAD_ACTIVE_EPSILON;
   const rotationActive = Math.abs(rotation) > GAMEPAD_ACTIVE_EPSILON;
@@ -739,7 +963,7 @@ function yawForGoal() {
 function drawMapPlaceholder(width, height) {
   context.fillStyle = "#e8edf1";
   context.fillRect(0, 0, width, height);
-  context.fillStyle = "#637183";
+  context.fillStyle = "#657384";
   context.font = "14px system-ui, sans-serif";
   context.textAlign = "center";
   context.fillText("Waiting for /map", width * 0.5, height * 0.5);
@@ -789,8 +1013,8 @@ function drawGoal(goal) {
 
   context.save();
   context.translate(screenPoint.x, screenPoint.y);
-  context.strokeStyle = "#d97706";
-  context.fillStyle = "#fff7e8";
+  context.strokeStyle = "#f97316";
+  context.fillStyle = "#fff1e7";
   context.lineWidth = 2;
   context.beginPath();
   context.arc(0, 0, 8, 0, Math.PI * 2);
@@ -831,7 +1055,7 @@ function drawRobot(pose) {
   context.save();
   context.translate(screenPoint.x, screenPoint.y);
   context.rotate(angle);
-  context.fillStyle = "#0f766e";
+  context.fillStyle = "#f97316";
   context.strokeStyle = "#ffffff";
   context.lineWidth = 2;
   context.beginPath();
