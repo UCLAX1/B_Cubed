@@ -1,27 +1,26 @@
 """
 IMU reader with smoothed servo control.
 
-Reads IMU data, calculates target motor angles, and moves the servos to
-balance. The arm servo uses open-loop PD command damping to reduce jitter near
-the target angle.
+Reads IMU data, calculates target motor angles, and moves the 150kg arm and
+lazy-susan servos to balance. The 505 head servo and its encoder are
+intentionally ignored. The arm servo uses open-loop PID command damping to
+reduce jitter near the target angle.
 """
 
 import argparse
 import math
-import signal
+import os
+import select
+import subprocess
 import sys
 import time
-
-from head_balance_math import find_motor_angles
-from servo_control_filters import PIDCommandDamper
 
 DEBUG = True
 DESIRED_ANGLE = 0.0
 NO_IMU_DATA_TIMEOUT_S = 5.0
 IMU_INIT_TIMEOUT_S = 5.0
 
-SETTINGS_FILE = "RTIMULib"
-sys.path.append("/usr/lib/python3/dist-packages")
+SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 
 ARM_MIN, ARM_MAX = -30.0, 30.0
 LAZY_SUSAN_MIN, LAZY_SUSAN_MAX = -90.0, 90.0
@@ -31,8 +30,10 @@ ARM_VERTICAL_OFFSET = 0.0  # servo value at physical vertical
 ARM_SERVO_MIN = -0.5
 ARM_SERVO_MAX = 0.5
 
-LAZY_CPR = 1493   # measured counts per revolution for 70kg lazy susan
-HEAD_CPR  = 2048  # default; update after head encoder is calibrated
+LAZY_ENCODER_A = 4
+LAZY_ENCODER_B = 22
+LAZY_ENCODER_ABSOLUTE = 17
+LAZY_CPR = 8192  # REV-11-1271 quadrature counts per revolution
 
 # Lower alpha = smoother but more lag. Range is about 0.05 to 0.4.
 IMU_ALPHA = 0.15
@@ -83,11 +84,22 @@ def normalize_degrees(angle_deg):
     return (angle_deg + 180.0) % 360.0 - 180.0
 
 
-def capture_reference_pose(imu_device, poll_interval):
+def capture_reference_pose(
+    imu_device,
+    poll_interval,
+    timeout_s=NO_IMU_DATA_TIMEOUT_S,
+):
     log("Capturing flat reference from the first valid IMU sample...")
+    deadline = time.time() + timeout_s
 
-    while True:
-        if imu_device.IMURead():
+    while time.time() < deadline:
+        try:
+            got_data = imu_device.IMURead()
+        except Exception as exc:
+            log(f"IMU read error while capturing flat reference: {exc}")
+            got_data = False
+
+        if got_data:
             data = imu_device.getIMUData()
             fusion_pose = data["fusionPose"]
             roll_reference_deg = math.degrees(fusion_pose[0])
@@ -98,6 +110,12 @@ def capture_reference_pose(imu_device, poll_interval):
             )
             return roll_reference_deg, pitch_reference_deg
         time.sleep(poll_interval)
+
+    log(
+        f"No IMU sample received within {timeout_s:.1f}s. "
+        "Run `python3 sim/imu_diagnostic.py` to inspect the Sense HAT and I2C connection."
+    )
+    return None
 
 
 def apply_counterbalance(roll_deg, pitch_deg, roll_reference_deg, pitch_reference_deg):
@@ -129,59 +147,75 @@ class AngleFilter:
         return self.value
 
 
-class ImuInitTimeout(TimeoutError):
-    pass
+class StreamedImu:
+    def __init__(self):
+        stream_script = os.path.join(SCRIPT_DIR, "imu_stream.py")
+        self.process = subprocess.Popen(
+            [sys.executable, "-u", stream_script],
+            stdout=subprocess.PIPE,
+            text=True,
+            bufsize=1,
+        )
+        self.data = None
 
+    def IMURead(self):
+        if self.process.poll() is not None:
+            raise RuntimeError("IMU stream process stopped")
 
-def _raise_imu_init_timeout(signum, frame):
-    raise ImuInitTimeout("IMUInit timed out")
+        readable, _, _ = select.select([self.process.stdout], [], [], 0)
+        if not readable:
+            return False
 
+        line = self.process.stdout.readline().strip()
+        if not line:
+            return False
 
-def imu_init_with_timeout(imu_device, timeout_s):
-    if timeout_s is None or timeout_s <= 0:
-        return imu_device.IMUInit()
+        roll, pitch, yaw = (float(value) for value in line.split(","))
+        self.data = {"fusionPose": (roll, pitch, yaw)}
+        return True
 
-    if not hasattr(signal, "SIGALRM") or not hasattr(signal, "setitimer"):
-        log("IMU init timeout is not supported on this platform.")
-        return imu_device.IMUInit()
+    def getIMUData(self):
+        return self.data
 
-    old_handler = signal.getsignal(signal.SIGALRM)
-    signal.signal(signal.SIGALRM, _raise_imu_init_timeout)
-    signal.setitimer(signal.ITIMER_REAL, timeout_s)
-    try:
-        return imu_device.IMUInit()
-    finally:
-        signal.setitimer(signal.ITIMER_REAL, 0)
-        signal.signal(signal.SIGALRM, old_handler)
+    def close(self):
+        if self.process.poll() is None:
+            self.process.terminate()
+            try:
+                self.process.wait(timeout=1.0)
+            except subprocess.TimeoutExpired:
+                self.process.kill()
+                self.process.wait()
 
 
 def initialize_imu(init_timeout_s=IMU_INIT_TIMEOUT_S):
-    log("Loading RTIMU...")
-    import RTIMU  # type: ignore[import-not-found]  # noqa: E402
+    log("Starting isolated RTIMU stream...")
+    return StreamedImu(), 0.003
 
-    log(f"Creating RTIMU settings from {SETTINGS_FILE}...")
-    settings = RTIMU.Settings(SETTINGS_FILE)
-    imu_device = RTIMU.RTIMU(settings)
 
-    log("Initializing IMU...")
-    try:
-        initialized = imu_init_with_timeout(imu_device, init_timeout_s)
-    except ImuInitTimeout:
-        log(f"IMU init timed out after {init_timeout_s:.1f}s")
-        return None, None
+def wait_for_first_imu_sample(imu_device, poll_interval):
+    log("Waiting for the first valid IMU sample...")
+    deadline = time.time() + NO_IMU_DATA_TIMEOUT_S
+    while time.time() < deadline:
+        try:
+            got_data = imu_device.IMURead()
+        except RuntimeError as exc:
+            log(str(exc))
+            return False
 
-    if not initialized:
-        log("IMU init failed")
-        return None, None
+        if got_data:
+            log("First IMU sample received.")
+            return True
+        time.sleep(poll_interval)
 
-    log("IMU initialized.")
-    imu_device.setSlerpPower(0.02)
-    imu_device.setGyroEnable(True)
-    imu_device.setAccelEnable(True)
-    imu_device.setCompassEnable(True)
-    poll_interval = imu_device.IMUGetPollInterval() / 1000.0
-    log(f"IMU poll interval: {poll_interval * 1000:.1f}ms")
-    return imu_device, poll_interval
+    log(f"No IMU data for {NO_IMU_DATA_TIMEOUT_S:.1f}s; stopping.")
+    return False
+
+
+def sleep_while_polling_imu(imu_device, poll_interval, duration_s):
+    deadline = time.time() + duration_s
+    while time.time() < deadline:
+        imu_device.IMURead()
+        time.sleep(poll_interval)
 
 
 def initialize_servos():
@@ -203,27 +237,32 @@ def initialize_servos():
 
     servos = (
         Servo(15, initial_value=None, pin_factory=pin_factory),
-        ServoEx(12, 26, 6, 5,  initial_value=None, pin_factory=pin_factory),
-        ServoEx(20,  4, 22, 17, initial_value=None),
+        ServoEx(
+            12,
+            LAZY_ENCODER_A,
+            LAZY_ENCODER_B,
+            LAZY_ENCODER_ABSOLUTE,
+            initial_value=None,
+            pin_factory=pin_factory,
+        ),
+        None,
         DigitalOutputDevice(16),
     )
-    log("Servos initialized.")
+    log("Arm and lazy-susan servos initialized. 505 head servo is disabled.")
     return servos
 
 
 def run_servo_self_test(arm_servo, lazy_susan_servo, head_servo, mosfet):
-    log("Running servo self-test...")
+    log("Running arm and lazy-susan servo self-test...")
     mosfet.on()
     time.sleep(0.5)
     for value in (0.0, 0.15, -0.15, 0.0):
         log(f"Self-test servo command: {value:+.2f}")
         arm_servo.value = value
         lazy_susan_servo.value = value
-        head_servo.value = value
         time.sleep(0.7)
     arm_servo.value = 0
     lazy_susan_servo.value = 0
-    head_servo.value = 0
     time.sleep(0.3)
     mosfet.off()
     log("Servo self-test complete.")
@@ -267,8 +306,8 @@ def main(
 ):
     log("Starting head balance servo control.")
 
-    arm_servo, lazy_susan_servo, head_servo, mosfet = initialize_servos()
     if servo_self_test:
+        arm_servo, lazy_susan_servo, head_servo, mosfet = initialize_servos()
         run_servo_self_test(arm_servo, lazy_susan_servo, head_servo, mosfet)
         return 0
 
@@ -277,9 +316,18 @@ def main(
         log("Exiting because IMU did not initialize.")
         return 1
 
-    roll_reference_deg, pitch_reference_deg = capture_reference_pose(
-        imu, imu_poll_interval
-    )
+    if not wait_for_first_imu_sample(imu, imu_poll_interval):
+        imu.close()
+        return 1
+
+    from head_balance_math import find_motor_angles
+    from servo_control_filters import PIDCommandDamper
+
+    arm_servo, lazy_susan_servo, head_servo, mosfet = initialize_servos()
+
+    log("Skipping flat-reference capture; using raw IMU roll and pitch.")
+    roll_reference_deg = 0.0
+    pitch_reference_deg = 0.0
 
     roll_filter = AngleFilter(IMU_ALPHA)
     pitch_filter = AngleFilter(IMU_ALPHA)
@@ -308,14 +356,13 @@ def main(
     try:
         log("MOSFET on...")
         mosfet.on()
-        time.sleep(0.5)
+        sleep_while_polling_imu(imu, imu_poll_interval, 0.5)
 
         log("Centering servos...")
         arm_servo.value = clamp(ARM_VERTICAL_OFFSET, ARM_SERVO_MIN, ARM_SERVO_MAX)
         lazy_susan_servo.value = 0
-        head_servo.value = 0
         arm_damper.reset(0.0)
-        time.sleep(1)
+        sleep_while_polling_imu(imu, imu_poll_interval, 1.0)
         log("Entering balance loop. Press Ctrl+C to stop.")
 
         last_print = time.time()
@@ -386,11 +433,13 @@ def main(
                         ARM_SERVO_MIN, ARM_SERVO_MAX
                     )
 
+                    lazy_susan_servo.update()
                     lazy_actual = lazy_susan_servo.encoder.steps * 360.0 / LAZY_CPR
                     lazy_cmd = angle_to_servo_value(lazy_tgt - lazy_actual, "continuous")
 
-                    head_actual = head_servo.encoder.steps * 360.0 / HEAD_CPR
-                    head_cmd = angle_to_servo_value(head_tgt - head_actual, "continuous")
+                    # The 505 head servo and encoder are deliberately ignored.
+                    # Keep its calculated target in the debug output only.
+                    head_cmd = 0.0
 
                     arm_cmd = slew_limit(
                         arm_cmd_last, arm_cmd, ARM_SLEW_PER_SEC * dt
@@ -404,7 +453,6 @@ def main(
 
                     arm_servo.value = arm_cmd
                     lazy_susan_servo.value = lazy_cmd
-                    head_servo.value = head_cmd
 
                     arm_cmd_last = arm_cmd
                     lazy_cmd_last = lazy_cmd
@@ -427,7 +475,7 @@ def main(
                     )
                     print(
                         f"Cmd: arm={arm_cmd_last:+.3f}  "
-                        f"lazy={lazy_cmd_last:+.3f}  head={head_cmd_last:+.3f}"
+                        f"lazy={lazy_cmd_last:+.3f}  head(disabled)={head_tgt_last:+.2f}°"
                     )
                     print("-" * 70)
                     last_print = now
@@ -443,9 +491,9 @@ def main(
         log("Centering servos and shutting down.")
         arm_servo.value = 0
         lazy_susan_servo.deactivate_and_save()
-        head_servo.deactivate_and_save()
         time.sleep(0.5)
         mosfet.off()
+        imu.close()
         log("Done. Servo positions saved.")
     return 0
 
