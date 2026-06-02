@@ -43,6 +43,10 @@ const mapImage = new Image();
 const SQRT_3 = Math.sqrt(3);
 const GAMEPAD_AXIS_DEADBAND = 0.12;
 const GAMEPAD_ACTIVE_EPSILON = 0.01;
+const GAMEPAD_BOTTOM_BUTTON = 0;
+const GAMEPAD_LEFT_BUMPER = 4;
+const GAMEPAD_RIGHT_BUMPER = 5;
+const MANUAL_SPIN_POWER = 0.75;
 const manualWheelDefs = [
   {
     key: "topLeft",
@@ -76,6 +80,7 @@ let manualSendPending = false;
 let gamepadIndex = null;
 let gamepadManualActive = false;
 let gamepadStopLatched = false;
+let gamepadStopButtonDown = false;
 let manualInputSource = "idle";
 let manualState = {
   x: 0,
@@ -119,6 +124,23 @@ function compactNumber(value) {
     return "0.00";
   }
   return value.toFixed(2);
+}
+
+function statusErrorText(error, fallback) {
+  const message = error && error.message ? String(error.message) : "";
+  if (!message) {
+    return fallback;
+  }
+  if (
+    /expected pattern|failed to fetch|load failed|networkerror|network error/i
+      .test(message)
+  ) {
+    return fallback;
+  }
+  if (message.length > 34) {
+    return fallback;
+  }
+  return message;
 }
 
 function setChip(element, text, className) {
@@ -433,7 +455,7 @@ async function sendManualCommand(force = false) {
     }
     setChip(manualStatus, "manual active", "good");
   } catch (error) {
-    setChip(manualStatus, error.message, "bad");
+    setChip(manualStatus, statusErrorText(error, "manual offline"), "bad");
   } finally {
     manualSendPending = false;
   }
@@ -473,7 +495,7 @@ function updateManualFromPointer(event) {
 }
 
 function setManualRotation(direction) {
-  manualRotation = direction;
+  manualRotation = clamp(direction, -1, 1);
   setManualState(manualState.x, manualState.y, manualRotation);
   sendManualCommand(true);
 }
@@ -492,6 +514,17 @@ function gamepadAxis(value) {
 
 function gamepadHasLeftStick(gamepad) {
   return Boolean(gamepad && gamepad.connected && gamepad.axes.length >= 2);
+}
+
+function gamepadButtonPressed(gamepad, index) {
+  const button = gamepad.buttons[index];
+  return Boolean(button && button.pressed);
+}
+
+function setManualControllerButtonState(ccwPressed, cwPressed, stopPressed) {
+  manualCcwButton.classList.toggle("controller-pressed", ccwPressed);
+  manualCwButton.classList.toggle("controller-pressed", cwPressed);
+  manualStopButton.classList.toggle("controller-pressed", stopPressed);
 }
 
 function connectedGamepads() {
@@ -522,10 +555,13 @@ function pollGamepadManualControl() {
 
   const gamepad = activeGamepad();
   if (!gamepad) {
+    setManualControllerButtonState(false, false, false);
+    gamepadStopButtonDown = false;
     if (gamepadManualActive) {
       gamepadManualActive = false;
+      manualRotation = 0;
       setManualInputSource("idle");
-      setManualState(0, 0, manualRotation);
+      setManualState(0, 0, 0);
       sendManualCommand(true);
     }
     return false;
@@ -533,24 +569,46 @@ function pollGamepadManualControl() {
 
   const x = gamepadAxis(gamepad.axes[0]);
   const y = -gamepadAxis(gamepad.axes[1]);
+  const ccwPressed = gamepadButtonPressed(gamepad, GAMEPAD_LEFT_BUMPER);
+  const cwPressed = gamepadButtonPressed(gamepad, GAMEPAD_RIGHT_BUMPER);
+  const stopPressed = gamepadButtonPressed(gamepad, GAMEPAD_BOTTOM_BUTTON);
+  setManualControllerButtonState(ccwPressed, cwPressed, stopPressed);
+  const rotation = (
+    (ccwPressed ? MANUAL_SPIN_POWER : 0) -
+    (cwPressed ? MANUAL_SPIN_POWER : 0)
+  );
   const stickActive = Math.hypot(x, y) > GAMEPAD_ACTIVE_EPSILON;
-  if (!stickActive) {
+  const rotationActive = Math.abs(rotation) > GAMEPAD_ACTIVE_EPSILON;
+  const controllerActive = stickActive || rotationActive;
+
+  if (stopPressed) {
+    if (!gamepadStopButtonDown) {
+      stopManualCommand();
+    }
+    gamepadStopButtonDown = true;
+    return false;
+  }
+  gamepadStopButtonDown = false;
+
+  if (!controllerActive) {
     gamepadStopLatched = false;
   }
   if (gamepadStopLatched) {
     return false;
   }
-  if (stickActive) {
+  if (controllerActive) {
     gamepadManualActive = true;
     setManualInputSource("gamepad");
+    manualRotation = rotation;
     setManualState(x, y, manualRotation);
     return true;
   }
 
   if (gamepadManualActive) {
     gamepadManualActive = false;
+    manualRotation = 0;
     setManualInputSource("idle");
-    setManualState(0, 0, manualRotation);
+    setManualState(0, 0, 0);
     sendManualCommand(true);
   }
   return false;
@@ -836,7 +894,7 @@ async function requestPlan(goal) {
       await refreshState();
     }
   } catch (error) {
-    setChip(planStatus, error.message, "bad");
+    setChip(planStatus, statusErrorText(error, "planner offline"), "bad");
   }
 }
 
@@ -870,7 +928,7 @@ async function requestNavigation() {
     }
     await refreshState();
   } catch (error) {
-    setChip(navStatus, error.message, "bad");
+    setChip(navStatus, statusErrorText(error, "nav offline"), "bad");
   }
 }
 
@@ -886,7 +944,7 @@ async function cancelNavigation() {
     }
     await refreshState();
   } catch (error) {
-    setChip(navStatus, error.message, "bad");
+    setChip(navStatus, statusErrorText(error, "nav offline"), "bad");
   }
 }
 
@@ -970,7 +1028,7 @@ async function setPersonTrackingEnabled(enabled) {
     await refreshState();
   } catch (error) {
     personTrackingToggle.checked = !enabled;
-    setChip(personStatus, error.message, "bad");
+    setChip(personStatus, statusErrorText(error, "person offline"), "bad");
   } finally {
     personTrackingRequestPending = false;
     updatePersonTracking(state || {});
@@ -1090,7 +1148,7 @@ async function refreshState() {
     updateMetrics();
     draw();
   } catch (error) {
-    setChip(mapStatus, "bridge offline", "bad");
+    setChip(mapStatus, statusErrorText(error, "backend offline"), "bad");
   }
 }
 
@@ -1221,11 +1279,11 @@ manualCanvas.addEventListener("pointercancel", () => {
 });
 
 manualCcwButton.addEventListener("pointerdown", () => {
-  setManualRotation(1);
+  setManualRotation(MANUAL_SPIN_POWER);
 });
 
 manualCwButton.addEventListener("pointerdown", () => {
-  setManualRotation(-1);
+  setManualRotation(-MANUAL_SPIN_POWER);
 });
 
 for (const button of [manualCcwButton, manualCwButton]) {
@@ -1270,10 +1328,13 @@ window.addEventListener("gamepaddisconnected", (event) => {
     return;
   }
   gamepadIndex = null;
+  setManualControllerButtonState(false, false, false);
   if (gamepadManualActive) {
     gamepadManualActive = false;
+    gamepadStopButtonDown = false;
+    manualRotation = 0;
     setManualInputSource("idle");
-    setManualState(0, 0, manualRotation);
+    setManualState(0, 0, 0);
     sendManualCommand(true);
   }
 });

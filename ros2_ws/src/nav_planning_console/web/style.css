@@ -156,12 +156,28 @@ button:active {
   transform: translateY(1px);
 }
 
+button.controller-pressed {
+  border-color: var(--accent);
+  color: var(--accent-strong);
+  background: #dff7f3;
+  box-shadow: inset 0 2px 4px rgb(15 118 110 / 0.24);
+  transform: translateY(1px);
+}
+
+button.danger.controller-pressed {
+  border-color: var(--danger);
+  color: #ffffff;
+  background: var(--danger);
+  box-shadow: inset 0 2px 4px rgb(85 20 20 / 0.28);
+}
+
 button:disabled {
   opacity: 0.45;
   cursor: not-allowed;
 }
 
-button:disabled:active {
+button:disabled:active,
+button:disabled.controller-pressed {
   transform: none;
 }
 
