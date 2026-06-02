@@ -86,11 +86,22 @@ def normalize_degrees(angle_deg):
     return (angle_deg + 180.0) % 360.0 - 180.0
 
 
-def capture_reference_pose(imu_device, poll_interval):
+def capture_reference_pose(
+    imu_device,
+    poll_interval,
+    timeout_s=NO_IMU_DATA_TIMEOUT_S,
+):
     log("Capturing flat reference from the first valid IMU sample...")
+    deadline = time.time() + timeout_s
 
-    while True:
-        if imu_device.IMURead():
+    while time.time() < deadline:
+        try:
+            got_data = imu_device.IMURead()
+        except Exception as exc:
+            log(f"IMU read error while capturing flat reference: {exc}")
+            got_data = False
+
+        if got_data:
             data = imu_device.getIMUData()
             fusion_pose = data["fusionPose"]
             roll_reference_deg = math.degrees(fusion_pose[0])
@@ -101,6 +112,12 @@ def capture_reference_pose(imu_device, poll_interval):
             )
             return roll_reference_deg, pitch_reference_deg
         time.sleep(poll_interval)
+
+    log(
+        f"No IMU sample received within {timeout_s:.1f}s. "
+        "Run `python3 sim/imu_diagnostic.py` to inspect the Sense HAT and I2C connection."
+    )
+    return None
 
 
 def apply_counterbalance(roll_deg, pitch_deg, roll_reference_deg, pitch_reference_deg):
@@ -285,9 +302,13 @@ def main(
         log("Exiting because IMU did not initialize.")
         return 1
 
-    roll_reference_deg, pitch_reference_deg = capture_reference_pose(
+    reference_pose = capture_reference_pose(
         imu, imu_poll_interval
     )
+    if reference_pose is None:
+        log("Exiting because the IMU did not provide a reference sample.")
+        return 1
+    roll_reference_deg, pitch_reference_deg = reference_pose
 
     roll_filter = AngleFilter(IMU_ALPHA)
     pitch_filter = AngleFilter(IMU_ALPHA)
