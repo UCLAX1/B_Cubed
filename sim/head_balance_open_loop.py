@@ -38,12 +38,14 @@ HEAD_MIN, HEAD_MAX = -180.0, 180.0
 ARM_VERTICAL_OFFSET = 0.0
 ARM_SERVO_MIN = -0.5
 ARM_SERVO_MAX = 0.5
+STRICT_BOUND_EPSILON = 1e-6
 
 # Continuous servo response tuning.
 LAZY_MAX_SPEED_DEG_S = 60.0
 HEAD_MAX_SPEED_DEG_S = 60.0
 LAZY_COMMAND_SCALE = 45.0
 HEAD_COMMAND_SCALE = 45.0
+CONT_DEADBAND_DEG = 4.0
 
 ARM_SLEW_PER_SEC = 0.8
 
@@ -55,6 +57,12 @@ def log(message):
 
 def clamp(value, minimum, maximum):
     return max(min(value, maximum), minimum)
+
+
+def clamp_strict(value, minimum, maximum):
+    if minimum >= maximum:
+        return minimum
+    return clamp(value, minimum + STRICT_BOUND_EPSILON, maximum - STRICT_BOUND_EPSILON)
 
 
 def normalize_degrees(angle_deg):
@@ -308,10 +316,10 @@ def main(
             lazy_error = lazy_tgt - lazy_estimated_deg
             head_error = head_tgt - head_estimated_deg
 
-            lazy_cmd = clamp(lazy_error / LAZY_COMMAND_SCALE, -1.0, 1.0)
-            head_cmd = clamp(head_error / HEAD_COMMAND_SCALE, -1.0, 1.0)
+            lazy_cmd = 0.0 if abs(lazy_error) < CONT_DEADBAND_DEG else clamp(lazy_error / LAZY_COMMAND_SCALE, -1.0, 1.0)
+            head_cmd = 0.0 if abs(head_error) < CONT_DEADBAND_DEG else clamp(head_error / HEAD_COMMAND_SCALE, -1.0, 1.0)
 
-            arm_cmd = clamp((arm_tgt / 90.0) + ARM_VERTICAL_OFFSET, ARM_SERVO_MIN, ARM_SERVO_MAX)
+            arm_cmd = clamp_strict((arm_tgt / 90.0) + ARM_VERTICAL_OFFSET, ARM_SERVO_MIN, ARM_SERVO_MAX)
 
             arm_servo.value = arm_cmd
             lazy_susan_servo.value = lazy_cmd

@@ -11,7 +11,7 @@ from ServoEx import ServoEx
 
 DEBUG = True
 DESIRED_ANGLE = 0.0
-ARM_SERVO_ENABLED = False
+ARM_SERVO_ENABLED = True
 
 ARM_MIN, ARM_MAX = -30.0, 30.0
 LAZY_SUSAN_MIN, LAZY_SUSAN_MAX = -90.0, 90.0
@@ -20,8 +20,9 @@ HEAD_MIN, HEAD_MAX = -float('inf'), float('inf')
 ARM_VERTICAL_OFFSET = 0.0
 ARM_SERVO_MIN = -0.5
 ARM_SERVO_MAX = 0.5
-LAZY_CPR = 1493
-HEAD_CPR = 2048
+STRICT_BOUND_EPSILON = 1e-6
+LAZY_CPR = 8192
+HEAD_CPR = 8192
 CONT_MAX_ANGLE_SPEED = 0.5
 STARTUP_HOME_FILE = "servo_home_absolute.json"
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -51,7 +52,7 @@ imu.setCompassEnable(True)
 poll_interval = imu.IMUGetPollInterval() / 1000.0
 
 factory = PiGPIOFactory()
-mosfet = DigitalOutputDevice(16)
+mosfet = DigitalOutputDevice(16, pin_factory=factory)
 mosfet.on()
 time.sleep(0.5)
 
@@ -61,6 +62,12 @@ head_servo = ServoEx(20, 4, 22, 17, initial_value=None, pin_factory=factory)
 
 def clamp(value, minimum, maximum):
     return max(min(value, maximum), minimum)
+
+
+def clamp_strict(value, minimum, maximum):
+    if minimum >= maximum:
+        return minimum
+    return clamp(value, minimum + STRICT_BOUND_EPSILON, maximum - STRICT_BOUND_EPSILON)
 
 
 def wrap_degrees(angle_deg):
@@ -173,19 +180,24 @@ try:
             )
 
     if arm_servo is not None:
-        arm_servo.value = clamp(ARM_VERTICAL_OFFSET, ARM_SERVO_MIN, ARM_SERVO_MAX)
+        arm_servo.value = clamp_strict(ARM_VERTICAL_OFFSET, ARM_SERVO_MIN, ARM_SERVO_MAX)
     lazy_susan.value = 0.0
     head_servo.value = 0.0
     time.sleep(0.5)
 
+    roll_reference_deg, pitch_reference_deg = 0.0, 0.0
     while True:
         if imu.IMURead():
             data = imu.getIMUData()
             fusion_pose = data["fusionPose"]
+            if roll_reference_deg == 0.0 and pitch_reference_deg == 0.0:
+                roll_reference_deg = math.degrees(fusion_pose[0])
+                pitch_reference_deg = math.degrees(fusion_pose[1])
+                print(f"Flat reference: R={roll_reference_deg:+.1f}°  P={pitch_reference_deg:+.1f}°")
 
             r2d = math.degrees
-            roll = r2d(fusion_pose[0])
-            pitch = r2d(fusion_pose[1])
+            roll = wrap_degrees(r2d(fusion_pose[0]) - roll_reference_deg)
+            pitch = wrap_degrees(r2d(fusion_pose[1]) - pitch_reference_deg)
             yaw = r2d(fusion_pose[2])
 
             arm_tgt, lazy_tgt, head_tgt = find_motor_angles(pitch, roll, DESIRED_ANGLE)
@@ -207,7 +219,7 @@ try:
             head_error = shortest_angle_error(head_tgt, head_actual)
             head_cmd = clamp(head_error / CONT_MAX_ANGLE_SPEED, -1.0, 1.0)
 
-            arm_cmd = clamp(
+            arm_cmd = clamp_strict(
                 (arm_tgt / 90.0) + ARM_VERTICAL_OFFSET, ARM_SERVO_MIN, ARM_SERVO_MAX
             )
 

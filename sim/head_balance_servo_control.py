@@ -246,7 +246,7 @@ def initialize_servos():
             pin_factory=pin_factory,
         ),
         None,
-        DigitalOutputDevice(16),
+        DigitalOutputDevice(16, pin_factory=pin_factory),
     )
     log("Arm and lazy-susan servos initialized. 505 head servo is disabled.")
     return servos
@@ -325,9 +325,11 @@ def main(
 
     arm_servo, lazy_susan_servo, head_servo, mosfet = initialize_servos()
 
-    log("Skipping flat-reference capture; using raw IMU roll and pitch.")
-    roll_reference_deg = 0.0
-    pitch_reference_deg = 0.0
+    result = capture_reference_pose(imu, imu_poll_interval)
+    if result is None:
+        imu.close()
+        return 1
+    roll_reference_deg, pitch_reference_deg = result
 
     roll_filter = AngleFilter(IMU_ALPHA)
     pitch_filter = AngleFilter(IMU_ALPHA)
