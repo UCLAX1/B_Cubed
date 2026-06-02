@@ -249,8 +249,11 @@ class CRServoEx(ServoBase):
         # data = self.get_data_from_servo_init_pos_file()
         if os.path.exists(self.INIT_POS_FILE):
             with open(self.INIT_POS_FILE, "r") as f:
-                data = json.load(f)
-                self.encoder_position_offset = data.get(str(self.pin), 0)
+                try:
+                    data = json.load(f)
+                    self.encoder_position_offset = data.get(str(self.pin), 0)
+                except Exception:
+                    print("couldn't load data from json")
 
     def reset_encoder_position(self):
 
