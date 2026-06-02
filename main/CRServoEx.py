@@ -150,10 +150,10 @@ class CRServoEx(ServoBase):
         self.wait_for_encoders_active()
 
         # create file if it doesn't exist
-        if not os.path.exists(self.INIT_POS_FILE):
-            self.save_encoder_position()
+        # if not os.path.exists(self.INIT_POS_FILE):
+        #     self.save_encoder_position()
 
-        self.load_encoder_position()
+        # self.load_encoder_position()
 
 
     def wait_for_encoders_active(self):
@@ -236,45 +236,45 @@ class CRServoEx(ServoBase):
         position_difference = self.get_absolute_position() - mod_position
         self.encoder_position_offset += position_difference * self.COUNTS_PER_REVOLUTION
 
-    def save_encoder_position(self):
-        data = self.get_data_from_servo_init_pos_file()
-
-        data[str(self.pin)] = self.encoder.steps + self.encoder_position_offset
-
-        with open(self.INIT_POS_FILE, "w") as f:
-            json.dump(data, f, indent=2)
-
-
-    def load_encoder_position(self):
-        # data = self.get_data_from_servo_init_pos_file()
-        if os.path.exists(self.INIT_POS_FILE):
-            with open(self.INIT_POS_FILE, "r") as f:
-                try:
-                    data = json.load(f)
-                    self.encoder_position_offset = data.get(str(self.pin), 0)
-                except Exception:
-                    print("couldn't load data from json")
-
-    def reset_encoder_position(self):
-
-        # update json file
-        data = {}
-        if os.path.exists(self.INIT_POS_FILE):
-            with open(self.INIT_POS_FILE, "r") as f:
-                data = json.load(f)
-
-        data[str(self.pin)] = 0
-
-        with open(self.INIT_POS_FILE, "w") as f:
-            json.dump(data, f, indent=2)
-
-    def get_data_from_servo_init_pos_file(self) -> dict:
-        data = {}
-        if os.path.exists(self.INIT_POS_FILE):
-            with open(self.INIT_POS_FILE, "r") as f:
-                data = json.load(f)
-        return data
-
-    def write_data_to_servo_init_pos_file(self, data: dict):
-        with open(self.INIT_POS_FILE, "w") as f:
-            json.dump(data, f, indent=2)
+    # def save_encoder_position(self):
+    #     data = self.get_data_from_servo_init_pos_file()
+    #
+    #     data[str(self.pin)] = self.encoder.steps + self.encoder_position_offset
+    #
+    #     with open(self.INIT_POS_FILE, "w") as f:
+    #         json.dump(data, f, indent=2)
+    #
+    #
+    # def load_encoder_position(self):
+    #     # data = self.get_data_from_servo_init_pos_file()
+    #     if os.path.exists(self.INIT_POS_FILE):
+    #         with open(self.INIT_POS_FILE, "r") as f:
+    #             try:
+    #                 data = json.load(f)
+    #                 self.encoder_position_offset = data.get(str(self.pin), 0)
+    #             except Exception:
+    #                 print("couldn't load data from json")
+    #
+    # def reset_encoder_position(self):
+    #
+    #     # update json file
+    #     data = {}
+    #     if os.path.exists(self.INIT_POS_FILE):
+    #         with open(self.INIT_POS_FILE, "r") as f:
+    #             data = json.load(f)
+    #
+    #     data[str(self.pin)] = 0
+    #
+    #     with open(self.INIT_POS_FILE, "w") as f:
+    #         json.dump(data, f, indent=2)
+    #
+    # def get_data_from_servo_init_pos_file(self) -> dict:
+    #     data = {}
+    #     if os.path.exists(self.INIT_POS_FILE):
+    #         with open(self.INIT_POS_FILE, "r") as f:
+    #             data = json.load(f)
+    #     return data
+    #
+    # def write_data_to_servo_init_pos_file(self, data: dict):
+    #     with open(self.INIT_POS_FILE, "w") as f:
+    #         json.dump(data, f, indent=2)
