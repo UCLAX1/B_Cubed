@@ -180,6 +180,26 @@ def initialize_imu(init_timeout_s=IMU_INIT_TIMEOUT_S):
     return imu_device, poll_interval
 
 
+def wait_for_first_imu_sample(imu_device, poll_interval):
+    log("Waiting for the first valid IMU sample...")
+    deadline = time.time() + NO_IMU_DATA_TIMEOUT_S
+    while time.time() < deadline:
+        if imu_device.IMURead():
+            log("First IMU sample received.")
+            return True
+        time.sleep(poll_interval)
+
+    log(f"No IMU data for {NO_IMU_DATA_TIMEOUT_S:.1f}s; stopping.")
+    return False
+
+
+def sleep_while_polling_imu(imu_device, poll_interval, duration_s):
+    deadline = time.time() + duration_s
+    while time.time() < deadline:
+        imu_device.IMURead()
+        time.sleep(poll_interval)
+
+
 def initialize_servos():
     from gpiozero import DigitalOutputDevice, Servo  # type: ignore[import-not-found]
     from gpiozero.pins.pigpio import PiGPIOFactory  # type: ignore[import-not-found]
@@ -268,8 +288,8 @@ def main(
 ):
     log("Starting head balance servo control.")
 
+    arm_servo, lazy_susan_servo, head_servo, mosfet = initialize_servos()
     if servo_self_test:
-        arm_servo, lazy_susan_servo, head_servo, mosfet = initialize_servos()
         run_servo_self_test(arm_servo, lazy_susan_servo, head_servo, mosfet)
         return 0
 
@@ -278,9 +298,8 @@ def main(
         log("Exiting because IMU did not initialize.")
         return 1
 
-    # RTIMU must start before gpiozero/pigpio setup on the Pi. Initializing the
-    # servo layer first leaves IMURead() returning False indefinitely.
-    arm_servo, lazy_susan_servo, head_servo, mosfet = initialize_servos()
+    if not wait_for_first_imu_sample(imu, imu_poll_interval):
+        return 1
 
     log("Skipping flat-reference capture; using raw IMU roll and pitch.")
     roll_reference_deg = 0.0
@@ -313,13 +332,13 @@ def main(
     try:
         log("MOSFET on...")
         mosfet.on()
-        time.sleep(0.5)
+        sleep_while_polling_imu(imu, imu_poll_interval, 0.5)
 
         log("Centering servos...")
         arm_servo.value = clamp(ARM_VERTICAL_OFFSET, ARM_SERVO_MIN, ARM_SERVO_MAX)
         lazy_susan_servo.value = 0
         arm_damper.reset(0.0)
-        time.sleep(1)
+        sleep_while_polling_imu(imu, imu_poll_interval, 1.0)
         log("Entering balance loop. Press Ctrl+C to stop.")
 
         last_print = time.time()
