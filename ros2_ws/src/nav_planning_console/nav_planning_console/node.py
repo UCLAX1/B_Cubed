@@ -27,7 +27,7 @@ from rclpy.duration import Duration
 from rclpy.node import Node
 from rclpy.qos import DurabilityPolicy, HistoryPolicy, QoSProfile, ReliabilityPolicy
 from rclpy.time import Time
-from sensor_msgs.msg import CompressedImage
+from sensor_msgs.msg import CompressedImage, Imu
 from std_msgs.msg import String
 from tf2_ros import Buffer, TransformException, TransformListener
 
@@ -55,6 +55,25 @@ def _quaternion_from_yaw(yaw: float) -> tuple[float, float, float, float]:
 def _clamp(value: float, minimum: float, maximum: float) -> float:
     """Clamp a float between minimum and maximum."""
     return max(minimum, min(float(value), maximum))
+
+
+def _wrap_pi(angle: float) -> float:
+    """Wrap an angle to [-pi, pi]."""
+    return (float(angle) + math.pi) % (2.0 * math.pi) - math.pi
+
+
+def _rotate_start_frame_to_body_frame(
+    x_value: float,
+    y_value: float,
+    relative_yaw: float,
+) -> tuple[float, float]:
+    """Rotate a startup-frame XY vector into the robot body frame."""
+    cos_yaw = math.cos(relative_yaw)
+    sin_yaw = math.sin(relative_yaw)
+    return (
+        cos_yaw * float(x_value) + sin_yaw * float(y_value),
+        -sin_yaw * float(x_value) + cos_yaw * float(y_value),
+    )
 
 
 def _coerce_bool(value: Any) -> bool:
@@ -422,6 +441,16 @@ class NavPlanningConsoleNode(Node):
             0.0,
             float(self.get_parameter("manual_max_angular_velocity").value),
         )
+        self.manual_field_relative_enabled = bool(
+            self.get_parameter("manual_field_relative_enabled").value
+        )
+        self.manual_orientation_topic = str(
+            self.get_parameter("manual_orientation_topic").value
+        )
+        self.manual_orientation_timeout_sec = max(
+            0.0,
+            float(self.get_parameter("manual_orientation_timeout_sec").value),
+        )
         self.person_tracking_control_enabled = bool(
             self.get_parameter("person_tracking_control_enabled").value
         )
@@ -510,9 +539,19 @@ class NavPlanningConsoleNode(Node):
             "linear_x": 0.0,
             "linear_y": 0.0,
             "angular_z": 0.0,
+            "requested_linear_x": 0.0,
+            "requested_linear_y": 0.0,
+            "field_relative": False,
+            "heading_relative_yaw": None,
             "active": False,
             "stamp": 0.0,
         }
+        self._manual_heading_yaw: float | None = None
+        self._manual_heading_reference_yaw: float | None = None
+        self._manual_heading_relative_yaw: float | None = None
+        self._manual_heading_frame_id = ""
+        self._manual_heading_stamp: float | None = None
+        self._manual_heading_received_time = 0.0
         self._person_tracking_process: subprocess.Popen[bytes] | None = None
         self._person_tracking_control_status = "stopped"
         self._person_tracking_error = ""
@@ -558,6 +597,13 @@ class NavPlanningConsoleNode(Node):
             self.manual_cmd_topic,
             10,
         )
+        if self.manual_field_relative_enabled and self.manual_orientation_topic:
+            self.manual_orientation_sub = self.create_subscription(
+                Imu,
+                self.manual_orientation_topic,
+                self._manual_orientation_callback,
+                10,
+            )
         self.person_tracking_detection_sub = self.create_subscription(
             String,
             self.person_tracking_detection_topic,
@@ -617,6 +663,9 @@ class NavPlanningConsoleNode(Node):
         self.declare_parameter("manual_control_enabled", True)
         self.declare_parameter("manual_max_linear_velocity", 0.25)
         self.declare_parameter("manual_max_angular_velocity", 0.50)
+        self.declare_parameter("manual_field_relative_enabled", True)
+        self.declare_parameter("manual_orientation_topic", "imu/data")
+        self.declare_parameter("manual_orientation_timeout_sec", 1.0)
         self.declare_parameter("person_tracking_control_enabled", True)
         self.declare_parameter("person_tracking_node_name", "person_tracking")
         self.declare_parameter(
@@ -718,6 +767,30 @@ class NavPlanningConsoleNode(Node):
             self._person_tracking_image_revision += 1
             self._person_tracking_image_received_time = time.monotonic()
             self._person_tracking_image_stamp = _time_to_float(msg.header.stamp)
+
+    def _manual_orientation_callback(self, msg: Imu) -> None:
+        if msg.orientation_covariance[0] == -1.0:
+            self.get_logger().warn(
+                "Manual field-relative control is waiting for IMU orientation.",
+                throttle_duration_sec=2.0,
+            )
+            return
+
+        yaw = _yaw_from_quaternion(msg.orientation)
+        now = time.monotonic()
+        with self._lock:
+            if self._manual_heading_reference_yaw is None:
+                self._manual_heading_reference_yaw = yaw
+                self.get_logger().info(
+                    "Manual field-relative control latched startup heading "
+                    f"{math.degrees(yaw):.1f} deg as forward."
+                )
+            reference_yaw = self._manual_heading_reference_yaw
+            self._manual_heading_yaw = yaw
+            self._manual_heading_relative_yaw = _wrap_pi(yaw - reference_yaw)
+            self._manual_heading_frame_id = msg.header.frame_id
+            self._manual_heading_stamp = _time_to_float(msg.header.stamp)
+            self._manual_heading_received_time = now
 
     def _update_pose_from_tf(self) -> None:
         try:
@@ -838,9 +911,44 @@ class NavPlanningConsoleNode(Node):
                 "cmd_topic": self.manual_cmd_topic,
                 "max_linear_velocity": self.manual_max_linear_velocity,
                 "max_angular_velocity": self.manual_max_angular_velocity,
+                "orientation": self._manual_orientation_state_payload(),
                 "command": manual_command,
             },
             "person_tracking": self._person_tracking_state_payload(),
+        }
+
+    def _manual_orientation_state_payload(self) -> dict[str, Any]:
+        now = time.monotonic()
+        with self._lock:
+            yaw = self._manual_heading_yaw
+            reference_yaw = self._manual_heading_reference_yaw
+            relative_yaw = self._manual_heading_relative_yaw
+            frame_id = self._manual_heading_frame_id
+            stamp = self._manual_heading_stamp
+            received_time = self._manual_heading_received_time
+
+        age = now - received_time if received_time > 0.0 else None
+        available = yaw is not None and reference_yaw is not None
+        fresh = (
+            available
+            and age is not None
+            and (
+                self.manual_orientation_timeout_sec <= 0.0
+                or age <= self.manual_orientation_timeout_sec
+            )
+        )
+        return {
+            "enabled": self.manual_field_relative_enabled,
+            "topic": self.manual_orientation_topic,
+            "available": available,
+            "fresh": fresh,
+            "age_sec": age,
+            "timeout_sec": self.manual_orientation_timeout_sec,
+            "frame_id": frame_id,
+            "stamp": stamp,
+            "yaw": yaw,
+            "reference_yaw": reference_yaw,
+            "relative_yaw": relative_yaw,
         }
 
     def _person_tracking_node_is_running(self) -> bool:
@@ -1071,6 +1179,24 @@ class NavPlanningConsoleNode(Node):
         y_value = _clamp(y_value, -1.0, 1.0)
         angular_value = _clamp(angular_value, -1.0, 1.0)
 
+        requested_x = x_value
+        requested_y = y_value
+        heading = None
+        field_relative = False
+        if self.manual_field_relative_enabled and magnitude > 1e-6:
+            heading = self._fresh_manual_heading()
+            if heading is None:
+                raise PlanningConsoleError(
+                    "Manual orientation is not available yet; waiting for "
+                    f"{self.manual_orientation_topic}."
+                )
+            x_value, y_value = _rotate_start_frame_to_body_frame(
+                x_value,
+                y_value,
+                float(heading["relative_yaw"]),
+            )
+            field_relative = True
+
         twist = Twist()
         twist.linear.x = x_value * self.manual_max_linear_velocity
         twist.linear.y = y_value * self.manual_max_linear_velocity
@@ -1085,6 +1211,12 @@ class NavPlanningConsoleNode(Node):
             "linear_x": twist.linear.x,
             "linear_y": twist.linear.y,
             "angular_z": twist.angular.z,
+            "requested_linear_x": requested_x * self.manual_max_linear_velocity,
+            "requested_linear_y": requested_y * self.manual_max_linear_velocity,
+            "field_relative": field_relative,
+            "heading_relative_yaw": (
+                float(heading["relative_yaw"]) if heading is not None else None
+            ),
             "active": active,
             "stamp": time.time(),
         }
@@ -1094,6 +1226,12 @@ class NavPlanningConsoleNode(Node):
             self._manual_command = command
 
         return {"manual": {"command": command}}
+
+    def _fresh_manual_heading(self) -> dict[str, Any] | None:
+        state = self._manual_orientation_state_payload()
+        if not state["fresh"]:
+            return None
+        return state
 
     def plan_to_goal(self, payload: dict[str, Any]) -> dict[str, Any]:
         """Send a ComputePathToPose request to Nav2."""

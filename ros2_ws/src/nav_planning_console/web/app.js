@@ -130,6 +130,10 @@ function isNavigationActive(status) {
   return status === "sending" || status === "active" || status === "canceling";
 }
 
+function manualLinearActive() {
+  return Math.hypot(manualState.x, manualState.y) > 0.01;
+}
+
 function dot2(a, b) {
   return a[0] * b[0] + a[1] * b[1];
 }
@@ -974,11 +978,22 @@ function updateMetrics() {
 
   const manual = state.manual || {};
   const localManualActive = (
-    Math.hypot(manualState.x, manualState.y) > 0.01 ||
+    manualLinearActive() ||
     Math.abs(manualState.angular) > 0.01
   );
+  const manualOrientation = manual.orientation || {};
   if (!manual.enabled) {
     setChip(manualStatus, "manual disabled", "bad");
+  } else if (
+    manualOrientation.enabled &&
+    manualLinearActive() &&
+    !manualOrientation.fresh
+  ) {
+    setChip(
+      manualStatus,
+      manualOrientation.available ? "imu stale" : "imu waiting",
+      "warn"
+    );
   } else if (localManualActive) {
     setChip(manualStatus, "manual active", "good");
   } else {

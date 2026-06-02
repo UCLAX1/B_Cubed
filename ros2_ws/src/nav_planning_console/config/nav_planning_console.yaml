@@ -11,6 +11,9 @@ nav_planning_console:
     manual_control_enabled: true
     manual_max_linear_velocity: 0.25
     manual_max_angular_velocity: 0.50
+    manual_field_relative_enabled: true
+    manual_orientation_topic: imu/data
+    manual_orientation_timeout_sec: 1.0
     person_tracking_control_enabled: true
     person_tracking_node_name: person_tracking
     person_tracking_image_topic: /zed/zed_node/rgb/color/rect/image/compressed

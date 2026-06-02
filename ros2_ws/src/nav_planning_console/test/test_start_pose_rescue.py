@@ -1,4 +1,5 @@
 from importlib import import_module
+import math
 from pathlib import Path
 import sys
 
@@ -9,6 +10,10 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 _find_nearest_free_start_pose = import_module(
     "nav_planning_console.node"
 )._find_nearest_free_start_pose
+_rotate_start_frame_to_body_frame = import_module(
+    "nav_planning_console.node"
+)._rotate_start_frame_to_body_frame
+_wrap_pi = import_module("nav_planning_console.node")._wrap_pi
 
 
 def _make_map(width, height, resolution, occupied_cells=()):
@@ -79,3 +84,25 @@ def test_start_pose_rescue_returns_none_when_no_free_cell_is_nearby():
 
     assert adjusted_pose is None
     assert distance == 0.0
+
+
+def test_manual_start_frame_vector_is_unchanged_at_startup_heading():
+    x_value, y_value = _rotate_start_frame_to_body_frame(0.2, 0.8, 0.0)
+
+    assert math.isclose(x_value, 0.2)
+    assert math.isclose(y_value, 0.8)
+
+
+def test_manual_start_frame_vector_rotates_into_body_frame():
+    x_value, y_value = _rotate_start_frame_to_body_frame(
+        0.0,
+        1.0,
+        math.pi / 2.0,
+    )
+
+    assert math.isclose(x_value, 1.0, abs_tol=1e-9)
+    assert math.isclose(y_value, 0.0, abs_tol=1e-9)
+
+
+def test_manual_heading_wraps_relative_yaw():
+    assert math.isclose(_wrap_pi(3.0 * math.pi), -math.pi)
