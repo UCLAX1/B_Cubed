@@ -142,9 +142,9 @@ def main():
             arm_tgt  = clamp(arm_tgt,  ARM_MIN, ARM_MAX)
             lazy_tgt = clamp_strict(lazy_tgt, LAZY_SUSAN_MIN, LAZY_SUSAN_MAX)
 
-            # Scale arm to full servo range: ARM_MAX deg -> ARM_SERVO_MAX
+            # Scale arm to full servo range: ARM_MAX deg -> ARM_SERVO_MAX (negated)
             arm_cmd = clamp_strict(
-                (arm_tgt / ARM_MAX) * ARM_SERVO_MAX + ARM_VERTICAL_OFFSET,
+                (-arm_tgt / ARM_MAX) * ARM_SERVO_MAX + ARM_VERTICAL_OFFSET,
                 ARM_SERVO_MIN, ARM_SERVO_MAX,
             )
 
