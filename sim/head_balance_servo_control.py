@@ -196,7 +196,13 @@ def wait_for_first_imu_sample(imu_device, poll_interval):
     log("Waiting for the first valid IMU sample...")
     deadline = time.time() + NO_IMU_DATA_TIMEOUT_S
     while time.time() < deadline:
-        if imu_device.IMURead():
+        try:
+            got_data = imu_device.IMURead()
+        except RuntimeError as exc:
+            log(str(exc))
+            return False
+
+        if got_data:
             log("First IMU sample received.")
             return True
         time.sleep(poll_interval)

@@ -11,13 +11,19 @@ import RTIMU  # type: ignore[import-not-found]  # noqa: E402
 
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 SETTINGS_FILE = os.path.join(SCRIPT_DIR, "RTIMULib")
+IMU_INIT_TIMEOUT_S = 4.0
 
 
 def main():
-    imu = RTIMU.RTIMU(RTIMU.Settings(SETTINGS_FILE))
-    if not imu.IMUInit():
-        print("IMU init failed", file=sys.stderr, flush=True)
-        return 1
+    deadline = time.time() + IMU_INIT_TIMEOUT_S
+    while True:
+        imu = RTIMU.RTIMU(RTIMU.Settings(SETTINGS_FILE))
+        if imu.IMUInit():
+            break
+        if time.time() >= deadline:
+            print("IMU init failed", file=sys.stderr, flush=True)
+            return 1
+        time.sleep(0.5)
 
     imu.setSlerpPower(0.02)
     imu.setGyroEnable(True)
