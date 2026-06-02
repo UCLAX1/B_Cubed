@@ -294,8 +294,8 @@ def main(
 ):
     log("Starting head balance servo control.")
 
-    arm_servo, lazy_susan_servo, head_servo, mosfet = initialize_servos()
     if servo_self_test:
+        arm_servo, lazy_susan_servo, head_servo, mosfet = initialize_servos()
         run_servo_self_test(arm_servo, lazy_susan_servo, head_servo, mosfet)
         return 0
 
@@ -303,6 +303,10 @@ def main(
     if imu is None:
         log("Exiting because IMU did not initialize.")
         return 1
+
+    # RTIMU must start before gpiozero/pigpio setup on the Pi. Initializing the
+    # servo layer first leaves IMURead() returning False indefinitely.
+    arm_servo, lazy_susan_servo, head_servo, mosfet = initialize_servos()
 
     log("Skipping flat-reference capture; using raw IMU roll and pitch.")
     roll_reference_deg = 0.0
