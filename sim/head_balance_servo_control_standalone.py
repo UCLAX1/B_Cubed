@@ -29,7 +29,7 @@ LAZY_SUSAN_MIN, LAZY_SUSAN_MAX = -90.0, 90.0
 ARM_VERTICAL_OFFSET = 0.0
 ARM_SERVO_MIN = -0.5
 ARM_SERVO_MAX = 0.5
-LAZY_CPR = 1493
+LAZY_CPR = 8192
 CONT_MAX_ANGLE_SPEED = 0.5
 CONT_DEADBAND_DEG = 4.0
 ENCODER_STALL_TIMEOUT_S = 1.0
@@ -230,7 +230,7 @@ class ServoEx(Servo):
     ):
         try:
             super().__init__(servo_pin, initial_value=initial_value, pin_factory=pin_factory)
-            self.encoder = RotaryEncoder(a=encoder_pin_a, b=encoder_pin_b, max_steps=10000000000000)
+            self.encoder = RotaryEncoder(a=encoder_pin_a, b=encoder_pin_b, max_steps=10000000000000, pin_factory=pin_factory)
         except Exception:
             print("ERROR: gpiozero servo could not initialize. Make sure the servos are plugged in to the right pins.")
             raise
