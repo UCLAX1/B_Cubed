@@ -108,7 +108,7 @@ def main():
     mosfet = DigitalOutputDevice(16, pin_factory=factory)
     arm_servo = Servo(15, initial_value=None, pin_factory=factory)
     lazy_servo = Servo(12, initial_value=None, pin_factory=factory)
-    lazy_encoder = RotaryEncoder(a=26, b=6, max_steps=10_000_000, pin_factory=factory)
+    lazy_encoder = RotaryEncoder(a=4, b=22, max_steps=10_000_000, pin_factory=factory)
 
     mosfet.on()
     time.sleep(0.3)

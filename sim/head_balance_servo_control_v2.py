@@ -57,8 +57,8 @@ mosfet.on()
 time.sleep(0.5)
 
 arm_servo = Servo(15, initial_value=None, pin_factory=factory) if ARM_SERVO_ENABLED else None
-lazy_susan = ServoEx(12, 26, 6, 5, initial_value=None, pin_factory=factory)
-head_servo = ServoEx(20, 4, 22, 17, initial_value=None, pin_factory=factory)
+lazy_susan = ServoEx(12, 4, 22, 17, initial_value=None, pin_factory=factory)
+head_servo = ServoEx(20, 26, 6, 5, initial_value=None, pin_factory=factory)
 
 def clamp(value, minimum, maximum):
     return max(min(value, maximum), minimum)

@@ -7,9 +7,9 @@ from gpiozero.pins.pigpio import PiGPIOFactory
 LAZY_CPR = 2048
 
 factory = PiGPIOFactory()
-encoder = RotaryEncoder(a=26, b=6, max_steps=10_000_000, pin_factory=factory)
+encoder = RotaryEncoder(a=4, b=22, max_steps=10_000_000, pin_factory=factory)
 
-print("Monitoring lazy susan encoder (BCM26/6). Ctrl-C to stop.\n")
+print("Monitoring lazy susan encoder (BCM4/22). Ctrl-C to stop.\n")
 print(f"{'steps':>10}  {'angle_deg':>10}")
 
 try:

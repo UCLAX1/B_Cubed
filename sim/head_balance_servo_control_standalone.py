@@ -338,7 +338,7 @@ def main():
     time.sleep(0.5)
 
     arm_servo = Servo(15, initial_value=None, pin_factory=factory) if ARM_SERVO_ENABLED else None
-    lazy_susan = ServoEx(12, 26, 6, 5, initial_value=None, pin_factory=factory)
+    lazy_susan = ServoEx(12, 4, 22, 17, initial_value=None, pin_factory=factory)
 
     lazy_last_actual = None
     lazy_stalled_since = None
