@@ -194,7 +194,8 @@ class App:
         self.screen = pygame.display.set_mode(self.WINDOW_SIZE)
         pygame.display.set_caption('Pygame Servo Test')
         pygame.mouse.set_visible(1)
-        servo_15 = ServoEx(servo_pin=15, range_degrees=270, max_value=0.5)
+        # servo_15 = ServoEx(servo_pin=15, range_degrees=270, max_value=0.5)
+        lazy_susan_servo = CRServoEx(servo_pin=12, encoder_pin_a=26, encoder_pin_b=6, absolute_encoder_pin=5)
 
         #try:
         #    servo_15 = ServoEx(servo_pin=15, range_degrees=270, max_value=0.5)
@@ -210,7 +211,7 @@ class App:
         # neck yaw: 5 kg
         self.servo_controller_windows.append(ServoControllerWindow(
             screen=self.screen,
-            servo=servo_15,
+            servo=lazy_susan_servo,
             input_handler=self.input_handler,
             display_middle_coord=np.array([1.0 * self.WINDOW_SIZE[0] / 3.0, self.WINDOW_SIZE[1] / 2.0]),
             display_radius=self.WINDOW_SIZE[0] / 6.0,

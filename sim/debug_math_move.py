@@ -137,6 +137,11 @@ def main():
             raw_pitch = math.degrees(fp[1])
 
             adj_roll  = wrap_degrees(raw_roll  - roll_ref)
+
+            THRESHOLD = 5
+            if abs(adj_roll) < THRESHOLD:
+                adj_roll = 0.0
+
             adj_pitch = wrap_degrees(raw_pitch - pitch_ref)
 
             arm_tgt, lazy_tgt = find_motor_angles(adj_pitch, adj_roll, DESIRED_ANGLE)
