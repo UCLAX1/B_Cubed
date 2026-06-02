@@ -18,7 +18,8 @@ ARM_VERTICAL_OFFSET = 0.0
 
 LAZY_CPR = 2048
 CONT_DEADBAND_DEG = 4.0
-CONT_MAX_SPEED = 0.5
+CONT_MAX_SPEED = 1.0
+LAZY_DEG_PER_SEC = 90.0       # estimated deg/s at CONT_MAX_SPEED=1.0; tune to match hardware
 ENCODER_STALL_TIMEOUT_S = 1.0
 LAZY_COMMAND_SIGN = -1.0
 
@@ -117,6 +118,9 @@ def main():
     lazy_stalled_since = None
     lazy_last_steps = None
     lazy_encoder_working = None  # None=unknown, True/False confirmed
+    lazy_estimated_deg = 0.0    # dead-reckoning fallback when encoder is out
+    lazy_cmd = 0.0
+    last_loop_time = time.monotonic()
 
     print("\nMoving servos. Ctrl-C to stop.\n")
 
@@ -143,9 +147,29 @@ def main():
                 ARM_SERVO_MIN, ARM_SERVO_MAX,
             )
 
+            now = time.monotonic()
+            dt = now - last_loop_time
+            last_loop_time = now
+
             steps_now = lazy_encoder.steps
-            lazy_actual_raw = steps_now * 360.0 / LAZY_CPR
-            lazy_actual = fold_lazy(lazy_actual_raw)
+
+            # Detect whether encoder is working
+            if lazy_last_steps is not None and steps_now != lazy_last_steps:
+                lazy_encoder_working = True
+                lazy_stalled_since = None
+            elif lazy_last_steps is not None and abs(lazy_cmd) > 0.1:
+                if lazy_stalled_since is None:
+                    lazy_stalled_since = now
+                elif now - lazy_stalled_since >= ENCODER_STALL_TIMEOUT_S:
+                    lazy_encoder_working = False
+            lazy_last_steps = steps_now
+
+            # Use encoder position if working, dead-reckoning otherwise
+            if lazy_encoder_working:
+                lazy_actual = fold_lazy(steps_now * 360.0 / LAZY_CPR)
+            else:
+                lazy_actual = lazy_estimated_deg
+
             lazy_error = wrap_degrees(lazy_tgt - lazy_actual)
 
             if abs(lazy_error) < CONT_DEADBAND_DEG:
@@ -153,31 +177,20 @@ def main():
             else:
                 lazy_cmd = LAZY_COMMAND_SIGN * clamp(lazy_error / 45.0, -1.0, 1.0) * CONT_MAX_SPEED
 
-            # Persistent stall detection: once stalled, stay stopped until encoder moves
-            now = time.monotonic()
-            if lazy_last_steps is not None:
-                if steps_now != lazy_last_steps:
-                    # encoder is moving — clear stall
-                    lazy_stalled_since = None
-                    lazy_encoder_working = True
-                elif abs(lazy_cmd) > 0.1:
-                    # commanding motion but encoder not moving
-                    if lazy_stalled_since is None:
-                        lazy_stalled_since = now
-                    elif now - lazy_stalled_since >= ENCODER_STALL_TIMEOUT_S:
-                        lazy_cmd = 0.0
-                        lazy_encoder_working = False
-            lazy_last_steps = steps_now
+            # Update dead-reckoning estimate from what we just commanded
+            lazy_estimated_deg = fold_lazy(
+                lazy_estimated_deg + lazy_cmd * LAZY_DEG_PER_SEC * dt
+            )
 
             arm_servo.value  = arm_cmd
             lazy_servo.value = lazy_cmd
 
-            enc_status = "?" if lazy_encoder_working is None else ("OK" if lazy_encoder_working else "STALLED/DISCONNECTED")
+            enc_status = "?" if lazy_encoder_working is None else ("ENC" if lazy_encoder_working else "DR")
             print(
                 f"adjR={adj_roll:+5.1f}° adjP={adj_pitch:+5.1f}°  "
                 f"arm_tgt={arm_tgt:+5.1f}° arm_cmd={arm_cmd:+.3f}  "
                 f"lazy_tgt={lazy_tgt:+6.1f}° pos={lazy_actual:+6.1f}° err={lazy_error:+6.1f}° "
-                f"steps={steps_now} lazy_cmd={lazy_cmd:+.3f} enc={enc_status}",
+                f"steps={steps_now} lazy_cmd={lazy_cmd:+.3f} [{enc_status}]",
                 flush=True,
             )
             time.sleep(poll_interval)
