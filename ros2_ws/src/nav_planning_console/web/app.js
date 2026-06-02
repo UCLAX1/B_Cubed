@@ -210,6 +210,78 @@ function drawManualLine(start, end, color, width = 2) {
   manualContext.stroke();
 }
 
+function manualOrientationState() {
+  return state && state.manual && state.manual.orientation
+    ? state.manual.orientation
+    : {};
+}
+
+function robotForwardVector(orientation) {
+  if (!Number.isFinite(orientation.relative_yaw)) {
+    return null;
+  }
+  return [
+    -Math.sin(orientation.relative_yaw),
+    Math.cos(orientation.relative_yaw)
+  ];
+}
+
+function drawManualHeadingIndicator(center, scale, width, height) {
+  const orientation = manualOrientationState();
+  const ringRadius = Math.min(
+    scale * 1.24,
+    center.x - 8,
+    width - center.x - 8,
+    center.y - 8,
+    height - center.y - 8
+  );
+  if (ringRadius <= scale + 4) {
+    return;
+  }
+
+  manualContext.strokeStyle = orientation.enabled ? "#64748b" : "#334155";
+  manualContext.lineWidth = 1.5;
+  manualContext.beginPath();
+  manualContext.arc(center.x, center.y, ringRadius, 0, Math.PI * 2);
+  manualContext.stroke();
+
+  drawManualLine(
+    manualPointToScreen([0, ringRadius / scale - 0.06], center, scale),
+    manualPointToScreen([0, ringRadius / scale + 0.06], center, scale),
+    "#f8fafc",
+    2
+  );
+
+  const forward = robotForwardVector(orientation);
+  if (!forward) {
+    return;
+  }
+
+  const markerColor = orientation.fresh ? "#f59e0b" : "#94a3b8";
+  const markerStart = [
+    forward[0] * (ringRadius / scale - 0.12),
+    forward[1] * (ringRadius / scale - 0.12)
+  ];
+  const markerEnd = [
+    forward[0] * (ringRadius / scale + 0.02),
+    forward[1] * (ringRadius / scale + 0.02)
+  ];
+  drawManualLine(
+    manualPointToScreen(markerStart, center, scale),
+    manualPointToScreen(markerEnd, center, scale),
+    markerColor,
+    4
+  );
+  const markerPoint = manualPointToScreen(markerEnd, center, scale);
+  manualContext.fillStyle = markerColor;
+  manualContext.strokeStyle = "#111820";
+  manualContext.lineWidth = 2;
+  manualContext.beginPath();
+  manualContext.arc(markerPoint.x, markerPoint.y, 5, 0, Math.PI * 2);
+  manualContext.fill();
+  manualContext.stroke();
+}
+
 function syncManualCanvasSize() {
   const rect = manualCanvas.getBoundingClientRect();
   const cssSize = Math.max(1, rect.width || manualCanvas.width);
@@ -250,6 +322,8 @@ function drawManualControl() {
   manualContext.beginPath();
   manualContext.arc(center.x, center.y, scale, 0, Math.PI * 2);
   manualContext.stroke();
+
+  drawManualHeadingIndicator(center, scale, width, height);
 
   manualWheelDefs.forEach((wheel) => {
     const coord = wheel.coord;
