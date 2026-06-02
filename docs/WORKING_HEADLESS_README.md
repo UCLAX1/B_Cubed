@@ -94,3 +94,6 @@ PLANNING_CONSOLE_HOST=0.0.0.0 \
 NETWORK_MODE=hotspot \
 ./launch_headless.sh --mapping
 ```
+
+
+github why wont you work
