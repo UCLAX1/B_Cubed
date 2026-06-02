@@ -1,9 +1,10 @@
 """
 IMU reader with smoothed servo control.
 
-Reads IMU data, calculates target motor angles, and moves the servos to
-balance. The arm servo uses open-loop PD command damping to reduce jitter near
-the target angle.
+Reads IMU data, calculates target motor angles, and moves the 150kg arm and
+lazy-susan servos to balance. The 505 head servo and its encoder are
+intentionally ignored. The arm servo uses open-loop PID command damping to
+reduce jitter near the target angle.
 """
 
 import argparse
@@ -31,8 +32,10 @@ ARM_VERTICAL_OFFSET = 0.0  # servo value at physical vertical
 ARM_SERVO_MIN = -0.5
 ARM_SERVO_MAX = 0.5
 
-LAZY_CPR = 1493   # measured counts per revolution for 70kg lazy susan
-HEAD_CPR  = 2048  # default; update after head encoder is calibrated
+LAZY_ENCODER_A = 4
+LAZY_ENCODER_B = 22
+LAZY_ENCODER_ABSOLUTE = 17
+LAZY_CPR = 8192  # REV-11-1271 quadrature counts per revolution
 
 # Lower alpha = smoother but more lag. Range is about 0.05 to 0.4.
 IMU_ALPHA = 0.15
@@ -203,27 +206,32 @@ def initialize_servos():
 
     servos = (
         Servo(15, initial_value=None, pin_factory=pin_factory),
-        ServoEx(12, 26, 6, 5,  initial_value=None, pin_factory=pin_factory),
-        ServoEx(20,  4, 22, 17, initial_value=None),
+        ServoEx(
+            12,
+            LAZY_ENCODER_A,
+            LAZY_ENCODER_B,
+            LAZY_ENCODER_ABSOLUTE,
+            initial_value=None,
+            pin_factory=pin_factory,
+        ),
+        None,
         DigitalOutputDevice(16),
     )
-    log("Servos initialized.")
+    log("Arm and lazy-susan servos initialized. 505 head servo is disabled.")
     return servos
 
 
 def run_servo_self_test(arm_servo, lazy_susan_servo, head_servo, mosfet):
-    log("Running servo self-test...")
+    log("Running arm and lazy-susan servo self-test...")
     mosfet.on()
     time.sleep(0.5)
     for value in (0.0, 0.15, -0.15, 0.0):
         log(f"Self-test servo command: {value:+.2f}")
         arm_servo.value = value
         lazy_susan_servo.value = value
-        head_servo.value = value
         time.sleep(0.7)
     arm_servo.value = 0
     lazy_susan_servo.value = 0
-    head_servo.value = 0
     time.sleep(0.3)
     mosfet.off()
     log("Servo self-test complete.")
@@ -313,7 +321,6 @@ def main(
         log("Centering servos...")
         arm_servo.value = clamp(ARM_VERTICAL_OFFSET, ARM_SERVO_MIN, ARM_SERVO_MAX)
         lazy_susan_servo.value = 0
-        head_servo.value = 0
         arm_damper.reset(0.0)
         time.sleep(1)
         log("Entering balance loop. Press Ctrl+C to stop.")
@@ -386,11 +393,13 @@ def main(
                         ARM_SERVO_MIN, ARM_SERVO_MAX
                     )
 
+                    lazy_susan_servo.update()
                     lazy_actual = lazy_susan_servo.encoder.steps * 360.0 / LAZY_CPR
                     lazy_cmd = angle_to_servo_value(lazy_tgt - lazy_actual, "continuous")
 
-                    head_actual = head_servo.encoder.steps * 360.0 / HEAD_CPR
-                    head_cmd = angle_to_servo_value(head_tgt - head_actual, "continuous")
+                    # The 505 head servo and encoder are deliberately ignored.
+                    # Keep its calculated target in the debug output only.
+                    head_cmd = 0.0
 
                     arm_cmd = slew_limit(
                         arm_cmd_last, arm_cmd, ARM_SLEW_PER_SEC * dt
@@ -404,7 +413,6 @@ def main(
 
                     arm_servo.value = arm_cmd
                     lazy_susan_servo.value = lazy_cmd
-                    head_servo.value = head_cmd
 
                     arm_cmd_last = arm_cmd
                     lazy_cmd_last = lazy_cmd
@@ -427,7 +435,7 @@ def main(
                     )
                     print(
                         f"Cmd: arm={arm_cmd_last:+.3f}  "
-                        f"lazy={lazy_cmd_last:+.3f}  head={head_cmd_last:+.3f}"
+                        f"lazy={lazy_cmd_last:+.3f}  head(disabled)={head_tgt_last:+.2f}°"
                     )
                     print("-" * 70)
                     last_print = now
@@ -443,7 +451,6 @@ def main(
         log("Centering servos and shutting down.")
         arm_servo.value = 0
         lazy_susan_servo.deactivate_and_save()
-        head_servo.deactivate_and_save()
         time.sleep(0.5)
         mosfet.off()
         log("Done. Servo positions saved.")
