@@ -16,19 +16,31 @@ RADIUS_DIFFERENCE = 0.25
 
 STEP = 0.001
 
-theta = 0.0
-phi = -np.pi
+input_force = np.array([0.0, 0.0])
+
+# theta = 0.0
+# phi = -np.pi
 
 def key_callback(keycode):
-    global theta, phi
-    if keycode == 262: # right arrow
-        theta -= STEP
-    if keycode == 263: # left arrow
-        theta += STEP
-    if keycode == 265: # up arrow
-        phi -= STEP
-    if keycode == 264: # down arrow
-        phi += STEP
+    # global theta, phi
+    global input_force
+    # if keycode == 262: # right arrow
+    #     theta -= STEP
+    # if keycode == 263: # left arrow
+    #     theta += STEP
+    # if keycode == 265: # up arrow
+    #     phi -= STEP
+    # if keycode == 264: # down arrow
+    #     phi += STEP
+
+    # if keycode == 262: # right arrow
+    #     theta -= STEP
+    # if keycode == 263: # left arrow
+    #     theta += STEP
+    # if keycode == 265: # up arrow
+    #     phi -= STEP
+    # if keycode == 264: # down arrow
+    #     phi += STEP
     # if chr(keycode) == 'D':
     #     input_force[0] = INPUT_FORCE_VAL
     # if chr(keycode) == 'A':
@@ -49,8 +61,8 @@ with mujoco.viewer.launch_passive(model, data, key_callback=key_callback) as vie
         new_pos = RADIUS_DIFFERENCE * np.array([np.sin(phi) * np.cos(theta), np.sin(phi) * np.sin(theta), np.cos(phi)])
         # model.geom_pos[CAR_ID] = new_pos
 
-        # data.ctrl[0] = input_force[0]
-        # data.ctrl[1] = input_force[1]
+        data.ctrl[0] = input_force[0]
+        data.ctrl[1] = input_force[1]
 
         mujoco.mj_step(model, data)
 

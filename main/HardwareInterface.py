@@ -110,12 +110,18 @@ class Motor:
                 data = json.load(f)
                 self.init_pos = data.get(str(self.motor_id), 0)
 
+        # self.send_heartbeat()
+        # self.wait_for_active()
+
+
+    def wait_for_active(self):
         # wait to get a motor position to ensure motor is connected via CAN
         self.log(f"waiting for motor {self.motor_id}")
         # max_wait = 3
         max_wait = 10000
         start = time.time()
         while self.can_bus.motor_pos[self.motor_id] is None:
+            self.send_heartbeat()
             if time.time() - start > max_wait:
                 self.log(f"WARNING: Timeout waiting for motor {self.motor_id} position.")
                 raise Exception("Motor not connected")
@@ -123,6 +129,9 @@ class Motor:
 
         self.log(f"motor connected {self.motor_id}")
         self.log(f"current motor position {self.get_pos()}")
+
+    def is_active(self):
+        return self.can_bus.motor_pos[self.motor_id] is not None
 
     def log(self, msg):
         if self.logger:
@@ -172,7 +181,7 @@ class Motor:
         pos = self.can_bus.motor_pos[self.motor_id]
         self.init_pos = pos
 
-        self.log(f"reseting encoders to {pos}")
+        self.log(f"resetting encoders to {pos}")
 
         # update json file
         data = {}

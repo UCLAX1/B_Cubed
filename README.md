@@ -4,6 +4,8 @@
 - STEP 1: look at motors_test.py and run it for an example
 - STEP 2: make a can bus like this:
 `bus = CanBus(channel='COM5', interface='slcan', bitrate=1000000)`\
+ON THE RASPBERRY PI: USE
+`bus = CanBus(channel='can0', interface='socketcan', bitrate=1000000)`   
 (you'll have to figure out the channel, interface, and bitrate depending on your device)\
 (for example, if you're on windows, the channel can be found in Device Manager)\
 and call `bus.start()`
