@@ -13,6 +13,9 @@ import os
 import sys
 import time
 
+sys.path.append("/usr/lib/python3/dist-packages")
+import RTIMU  # type: ignore[import-not-found]  # noqa: E402
+
 from head_balance_math import find_motor_angles
 from servo_control_filters import PIDCommandDamper
 
@@ -23,7 +26,6 @@ IMU_INIT_TIMEOUT_S = 5.0
 
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 SETTINGS_FILE = os.path.join(SCRIPT_DIR, "RTIMULib")
-sys.path.append("/usr/lib/python3/dist-packages")
 
 ARM_MIN, ARM_MAX = -30.0, 30.0
 LAZY_SUSAN_MIN, LAZY_SUSAN_MAX = -90.0, 90.0
@@ -152,8 +154,6 @@ class AngleFilter:
 
 def initialize_imu(init_timeout_s=IMU_INIT_TIMEOUT_S):
     log("Loading RTIMU...")
-    import RTIMU  # type: ignore[import-not-found]  # noqa: E402
-
     log(f"Creating RTIMU settings from {SETTINGS_FILE}...")
     settings = RTIMU.Settings(SETTINGS_FILE)
     imu_device = RTIMU.RTIMU(settings)
