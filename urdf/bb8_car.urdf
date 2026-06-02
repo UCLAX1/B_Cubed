@@ -1,0 +1,453 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- This URDF was automatically created by SolidWorks to URDF Exporter! Originally created by Stephen Brawner (brawner@gmail.com) 
+     Commit Version: 1.6.0-4-g7f85cfe  Build Version: 1.6.7995.38578
+     For more information, please see http://wiki.ros.org/sw_urdf_exporter -->
+<robot
+  name="bb8_car">
+  <link
+    name="base_link">
+    <inertial>
+      <origin
+        xyz="-4.4409E-16 0.027063 -3.3307E-16"
+        rpy="0 0 0" />
+      <mass
+        value="2.4283" />
+      <inertia
+        ixx="0.0059267"
+        ixy="-8.5459E-19"
+        ixz="-1.6952E-18"
+        iyy="0.0098916"
+        iyz="2.3227E-19"
+        izz="0.0059267" />
+    </inertial>
+    <visual>
+      <origin
+        xyz="0 0 0"
+        rpy="0 0 0" />
+      <geometry>
+        <mesh
+          filename="package://bb8_car/meshes/base_link.STL" />
+      </geometry>
+      <material
+        name="">
+        <color
+          rgba="0.79216 0.81961 0.93333 1" />
+      </material>
+    </visual>
+    <collision>
+      <origin
+        xyz="0 0 0"
+        rpy="0 0 0" />
+      <geometry>
+        <mesh
+          filename="package://bb8_car/meshes/base_link.STL" />
+      </geometry>
+    </collision>
+  </link>
+  <link
+    name="a1">
+    <inertial>
+      <origin
+        xyz="4.4409E-16 -3.3307E-16 0.033964"
+        rpy="0 0 0" />
+      <mass
+        value="0.027142" />
+      <inertia
+        ixx="5.8158E-06"
+        ixy="6.3527E-22"
+        ixz="5.6985E-22"
+        iyy="5.8419E-06"
+        iyz="-3.564E-22"
+        izz="1.7833E-06" />
+    </inertial>
+    <visual>
+      <origin
+        xyz="0 0 0"
+        rpy="0 0 0" />
+      <geometry>
+        <mesh
+          filename="package://bb8_car/meshes/a1.STL" />
+      </geometry>
+      <material
+        name="">
+        <color
+          rgba="0.79216 0.81961 0.93333 1" />
+      </material>
+    </visual>
+    <collision>
+      <origin
+        xyz="0 0 0"
+        rpy="0 0 0" />
+      <geometry>
+        <mesh
+          filename="package://bb8_car/meshes/a1.STL" />
+      </geometry>
+    </collision>
+  </link>
+  <joint
+    name="a1"
+    type="revolute">
+    <origin
+      xyz="0 -0.02 0"
+      rpy="-1.5708 1.0563 -3.1416" />
+    <parent
+      link="base_link" />
+    <child
+      link="a1" />
+    <axis
+      xyz="0 0 -1" />
+    <limit
+      lower="0"
+      upper="0"
+      effort="0"
+      velocity="0" />
+  </joint>
+  <link
+    name="a2">
+    <inertial>
+      <origin
+        xyz="4.0307E-08 1.6883E-08 0.12424"
+        rpy="0 0 0" />
+      <mass
+        value="0.072732" />
+      <inertia
+        ixx="0.00032679"
+        ixy="1.3526E-10"
+        ixz="3.1292E-11"
+        iyy="0.00032678"
+        iyz="1.8354E-12"
+        izz="3.6454E-06" />
+    </inertial>
+    <visual>
+      <origin
+        xyz="0 0 0"
+        rpy="0 0 0" />
+      <geometry>
+        <mesh
+          filename="package://bb8_car/meshes/a2.STL" />
+      </geometry>
+      <material
+        name="">
+        <color
+          rgba="0.79216 0.81961 0.93333 1" />
+      </material>
+    </visual>
+    <collision>
+      <origin
+        xyz="0 0 0"
+        rpy="0 0 0" />
+      <geometry>
+        <mesh
+          filename="package://bb8_car/meshes/a2.STL" />
+      </geometry>
+    </collision>
+  </link>
+  <joint
+    name="a2"
+    type="revolute">
+    <origin
+      xyz="0 0 0.06"
+      rpy="-1.0849 0 -3.1416" />
+    <parent
+      link="a1" />
+    <child
+      link="a2" />
+    <axis
+      xyz="1 0 0" />
+    <limit
+      lower="0"
+      upper="0"
+      effort="0"
+      velocity="0" />
+  </joint>
+  <link
+    name="h">
+    <inertial>
+      <origin
+        xyz="0.0625 1.1102E-15 8.8818E-16"
+        rpy="0 0 0" />
+      <mass
+        value="2.0944" />
+      <inertia
+        ixx="0.0083776"
+        ixy="2.1684E-19"
+        ixz="-4.3368E-19"
+        iyy="0.0054323"
+        iyz="-3.2526E-19"
+        izz="0.0054323" />
+    </inertial>
+    <visual>
+      <origin
+        xyz="0 0 0"
+        rpy="0 0 0" />
+      <geometry>
+        <mesh
+          filename="package://bb8_car/meshes/h.STL" />
+      </geometry>
+      <material
+        name="">
+        <color
+          rgba="0.79216 0.81961 0.93333 1" />
+      </material>
+    </visual>
+    <collision>
+      <origin
+        xyz="0 0 0"
+        rpy="0 0 0" />
+      <geometry>
+        <mesh
+          filename="package://bb8_car/meshes/h.STL" />
+      </geometry>
+    </collision>
+  </link>
+  <joint
+    name="h"
+    type="revolute">
+    <origin
+      xyz="0 0 0.34"
+      rpy="1.5176 1.5708 0" />
+    <parent
+      link="a2" />
+    <child
+      link="h" />
+    <axis
+      xyz="-1 0 0" />
+    <limit
+      lower="0"
+      upper="0"
+      effort="0"
+      velocity="0" />
+  </joint>
+  <link
+    name="w1">
+    <inertial>
+      <origin
+        xyz="0 -0.01 -1.1102E-16"
+        rpy="0 0 0" />
+      <mass
+        value="0.15708" />
+      <inertia
+        ixx="0.00010341"
+        ixy="4.4441E-20"
+        ixz="1.743E-34"
+        iyy="0.00019635"
+        iyz="-7.5956E-21"
+        izz="0.00010341" />
+    </inertial>
+    <visual>
+      <origin
+        xyz="0 0 0"
+        rpy="0 0 0" />
+      <geometry>
+        <mesh
+          filename="package://bb8_car/meshes/w1.STL" />
+      </geometry>
+      <material
+        name="">
+        <color
+          rgba="0.79216 0.81961 0.93333 1" />
+      </material>
+    </visual>
+    <collision>
+      <origin
+        xyz="0 0 0"
+        rpy="0 0 0" />
+      <geometry>
+        <mesh
+          filename="package://bb8_car/meshes/w1.STL" />
+      </geometry>
+    </collision>
+  </link>
+  <joint
+    name="w1"
+    type="revolute">
+    <origin
+      xyz="-0.095 0.117 0"
+      rpy="1.5708 -1.5708 0" />
+    <parent
+      link="base_link" />
+    <child
+      link="w1" />
+    <axis
+      xyz="0 1 0" />
+    <limit
+      lower="0"
+      upper="0"
+      effort="0"
+      velocity="0" />
+  </joint>
+  <link
+    name="w2">
+    <inertial>
+      <origin
+        xyz="0.01 2.2204E-16 -1.1102E-16"
+        rpy="0 0 0" />
+      <mass
+        value="0.15708" />
+      <inertia
+        ixx="0.00019635"
+        ixy="2.9102E-19"
+        ixz="8.8873E-21"
+        iyy="0.00010341"
+        iyz="-7.2222E-35"
+        izz="0.00010341" />
+    </inertial>
+    <visual>
+      <origin
+        xyz="0 0 0"
+        rpy="0 0 0" />
+      <geometry>
+        <mesh
+          filename="package://bb8_car/meshes/w2.STL" />
+      </geometry>
+      <material
+        name="">
+        <color
+          rgba="0.79216 0.81961 0.93333 1" />
+      </material>
+    </visual>
+    <collision>
+      <origin
+        xyz="0 0 0"
+        rpy="0 0 0" />
+      <geometry>
+        <mesh
+          filename="package://bb8_car/meshes/w2.STL" />
+      </geometry>
+    </collision>
+  </link>
+  <joint
+    name="w2"
+    type="revolute">
+    <origin
+      xyz="0 0.117 -0.095"
+      rpy="1.5708 -1.5708 0" />
+    <parent
+      link="base_link" />
+    <child
+      link="w2" />
+    <axis
+      xyz="-1 0 0" />
+    <limit
+      lower="0"
+      upper="0"
+      effort="0"
+      velocity="0" />
+  </joint>
+  <link
+    name="w3">
+    <inertial>
+      <origin
+        xyz="-1.1102E-16 0.01 0"
+        rpy="0 0 0" />
+      <mass
+        value="0.15708" />
+      <inertia
+        ixx="0.00010341"
+        ixy="-6.0905E-19"
+        ixz="3.4926E-34"
+        iyy="0.00019635"
+        iyz="-3.9664E-21"
+        izz="0.00010341" />
+    </inertial>
+    <visual>
+      <origin
+        xyz="0 0 0"
+        rpy="0 0 0" />
+      <geometry>
+        <mesh
+          filename="package://bb8_car/meshes/w3.STL" />
+      </geometry>
+      <material
+        name="">
+        <color
+          rgba="0.79216 0.81961 0.93333 1" />
+      </material>
+    </visual>
+    <collision>
+      <origin
+        xyz="0 0 0"
+        rpy="0 0 0" />
+      <geometry>
+        <mesh
+          filename="package://bb8_car/meshes/w3.STL" />
+      </geometry>
+    </collision>
+  </link>
+  <joint
+    name="w3"
+    type="revolute">
+    <origin
+      xyz="0.095 0.117 0"
+      rpy="1.5708 -1.5708 0" />
+    <parent
+      link="base_link" />
+    <child
+      link="w3" />
+    <axis
+      xyz="0 -1 0" />
+    <limit
+      lower="0"
+      upper="0"
+      effort="0"
+      velocity="0" />
+  </joint>
+  <link
+    name="w4">
+    <inertial>
+      <origin
+        xyz="-0.01 0 -1.1102E-16"
+        rpy="0 0 0" />
+      <mass
+        value="0.15708" />
+      <inertia
+        ixx="0.00019635"
+        ixy="9.2707E-19"
+        ixz="1.87E-21"
+        iyy="0.00010341"
+        iyz="1.4444E-34"
+        izz="0.00010341" />
+    </inertial>
+    <visual>
+      <origin
+        xyz="0 0 0"
+        rpy="0 0 0" />
+      <geometry>
+        <mesh
+          filename="package://bb8_car/meshes/w4.STL" />
+      </geometry>
+      <material
+        name="">
+        <color
+          rgba="0.79216 0.81961 0.93333 1" />
+      </material>
+    </visual>
+    <collision>
+      <origin
+        xyz="0 0 0"
+        rpy="0 0 0" />
+      <geometry>
+        <mesh
+          filename="package://bb8_car/meshes/w4.STL" />
+      </geometry>
+    </collision>
+  </link>
+  <joint
+    name="w4"
+    type="revolute">
+    <origin
+      xyz="0 0.117 0.095"
+      rpy="1.5708 -1.5708 0" />
+    <parent
+      link="base_link" />
+    <child
+      link="w4" />
+    <axis
+      xyz="1 0 0" />
+    <limit
+      lower="0"
+      upper="0"
+      effort="0"
+      velocity="0" />
+  </joint>
+</robot>

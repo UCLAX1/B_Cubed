@@ -19,7 +19,6 @@ class ServoBase(Servo):
             # print("ERROR: gpiozero servo could not initialize. Make sure the servos are plugged in to the right pins.")
             raise Exception("ERROR: gpiozero servo could not initialize. Make sure the servos are plugged in to the right pins.")
 
-        # position from -1.0 to 1.0
         self.position: float = 0.0
         self.pin = servo_pin
 

@@ -48,7 +48,7 @@ app = App()
 
 
 
-bus = CanBus(channel='COM5', interface='slcan', bitrate=1000000)
+bus = CanBus(channel='can0', interface='slcan', bitrate=500000)
 bus.start()
 motor = Motor(bus, 3)
 
