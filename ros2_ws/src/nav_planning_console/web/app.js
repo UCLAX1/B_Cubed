@@ -492,7 +492,7 @@ function drawManualWheelPad(wheel, center, scale, power) {
     center,
     scale
   );
-  const arrowColor = "#45f3ff";
+  const arrowColor = "#1fcf13";
   drawManualArrow(wheelCenter, arrowEnd, "#020506", 10, 13);
   drawManualArrow(
     wheelCenter,
