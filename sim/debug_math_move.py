@@ -21,7 +21,7 @@ CONT_DEADBAND_DEG = 4.0
 CONT_MAX_SPEED = 1.0
 LAZY_DEG_PER_SEC = 45.0       # estimated deg/s at CONT_MAX_SPEED=1.0; tune to match hardware
 ENCODER_STALL_TIMEOUT_S = 1.0
-LAZY_COMMAND_SIGN = +1.0
+LAZY_COMMAND_SIGN = -1.0
 TILT_MAGNITUDE_DEADBAND_DEG = 1.5  # below this total tilt, lazy direction is noise — don't move
 
 
@@ -67,6 +67,7 @@ def find_motor_angles(pitch, roll, desired_angle):
 
     if roll < 0:
         lazy = -lazy
+        arm = -arm
 
     if abs(lazy) > 90:
         arm = -arm
@@ -185,8 +186,10 @@ def main():
             else:
                 lazy_cmd = LAZY_COMMAND_SIGN * clamp(lazy_error / 45.0, -1.0, 1.0) * CONT_MAX_SPEED
 
+            # Update dead-reckoning: positive lazy_cmd moves the servo in the negative
+            # physical direction (LAZY_COMMAND_SIGN=-1), so subtract.
             lazy_estimated_deg = clamp(
-                lazy_estimated_deg + lazy_cmd * LAZY_DEG_PER_SEC * dt,
+                lazy_estimated_deg - lazy_cmd * LAZY_DEG_PER_SEC * dt,
                 LAZY_SUSAN_MIN, LAZY_SUSAN_MAX,
             )
 
