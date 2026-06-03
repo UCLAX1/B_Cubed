@@ -123,6 +123,7 @@ def main():
     lazy_estimated_deg = 0.0    # dead-reckoning fallback when encoder is out
     lazy_cmd = 0.0
     last_loop_time = time.monotonic()
+    last_print_time = time.monotonic()
 
     print("\nMoving servos. Ctrl-C to stop.\n")
 
@@ -196,14 +197,21 @@ def main():
             arm_servo.value  = arm_cmd
             lazy_servo.value = lazy_cmd
 
-            enc_status = "?" if lazy_encoder_working is None else ("ENC" if lazy_encoder_working else "DR")
-            print(
-                f"tilt={tilt_magnitude:4.2f}° adjR={adj_roll:+5.1f}° adjP={adj_pitch:+5.1f}°  "
-                f"arm_tgt={arm_tgt:+5.1f}° arm_cmd={arm_cmd:+.3f}  "
-                f"lazy_tgt={lazy_tgt:+6.1f}° pos={lazy_actual:+6.1f}° err={lazy_error:+6.1f}° "
-                f"lazy_cmd={lazy_cmd:+.3f} [{enc_status}]",
-                flush=True,
-            )
+            if now - last_print_time >= 1.0:
+                last_print_time = now
+                enc_status = "?" if lazy_encoder_working is None else ("ENC" if lazy_encoder_working else "DR")
+                print(
+                    f"Goal: arm={arm_tgt:+5.1f}° lazy={lazy_tgt:+6.1f}°  "
+                    f"Cmd: arm={arm_cmd:+.3f} lazy={lazy_cmd:+.3f}  "
+                    f"Pos: lazy={lazy_actual:+6.1f}° [{enc_status}]",
+                    flush=True,
+                )
+            # per-loop debug (hidden):
+            # enc_status = "?" if lazy_encoder_working is None else ("ENC" if lazy_encoder_working else "DR")
+            # print(f"tilt={tilt_magnitude:4.2f}° adjR={adj_roll:+5.1f}° adjP={adj_pitch:+5.1f}°  "
+            #       f"arm_tgt={arm_tgt:+5.1f}° arm_cmd={arm_cmd:+.3f}  "
+            #       f"lazy_tgt={lazy_tgt:+6.1f}° pos={lazy_actual:+6.1f}° err={lazy_error:+6.1f}° "
+            #       f"lazy_cmd={lazy_cmd:+.3f} [{enc_status}]", flush=True)
             time.sleep(poll_interval)
 
     except KeyboardInterrupt:
