@@ -95,14 +95,14 @@ try:
 
             # print(f"Orientation: R={np.rad2deg(fusionPose[0]):6.1f} P={np.rad2deg(fusionPose[1]):6.1f} Y={np.rad2deg(fusionPose[2]):6.1f}")
         
-        lazy_susan.set_position(0.5)
+        lazy_susan.set_position(-0.25)
         # lazy_susan.set_velocity(0.2)
         # lazy_susan.set_velocity(0.15)
         # print(f"{lazy_susan.absolute_encoder.current_raw_position*1000:.8f}")
-        current_pos = lazy_susan.absolute_encoder.position
+        current_pos = lazy_susan.get_position()
         if current_pos != previous_pos:
             pass
-            # print(f"{lazy_susan.absolute_encoder.position*4096:10.8f}")
+            # print(f"{current_pos:10.8f}")
         previous_pos = current_pos
 
         # lazy_susan.set_position(0.0)

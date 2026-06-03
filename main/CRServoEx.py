@@ -26,14 +26,15 @@ class CRPIDController:
 
     def update(self, current_value, dt):
         error = self.setpoint - current_value
-        print(f"c: {current_value:10.4f}, s: {self.setpoint:10.4f}")
         # makes it so it goes the other way (wraps around) if the other way is closer
-        error = (error + 0.5) % 1.0 - 0.5
+        # error = (error + 0.5) % 1.0 - 0.5
         self.integral += dt
         self.derivative += (error - self.previous_error) * dt
 
         control = self.kP * error + self.kI * self.integral + self.kD * self.derivative
-        return control
+        # print(f"e: {error:10.4f}, c: {control:10.4f}, s: {self.setpoint:10.4f}")
+        # print(f"e: {error:10.4f}, d: {self.derivative:10.4f}, c: {control:10.4f}")
+        return -control
 
 class AbsoluteEncoder:
 
@@ -150,7 +151,7 @@ class CRServoEx(ServoBase):
     # center position every x seconds
     POSITION_CENTERING_DELAY: float = 0.25
 
-    kP: float = 0.5
+    kP: float = 5.0
     kI: float = 0.00
     kD: float = 0.00
 
@@ -222,11 +223,11 @@ class CRServoEx(ServoBase):
         control = np.clip(control, -1.0, 1.0)
         self.set_velocity(control)
 
-        self.update_absolute_encoder()
+        # self.update_absolute_encoder()
 
-        if time.perf_counter() - self.time_position_last_centered > self.POSITION_CENTERING_DELAY:
-            self.center_position_with_absolute_encoder()
-            self.time_position_last_centered = time.perf_counter()
+        # if time.perf_counter() - self.time_position_last_centered > self.POSITION_CENTERING_DELAY:
+        #     self.center_position_with_absolute_encoder()
+        #     self.time_position_last_centered = time.perf_counter()
 
     def update_absolute_encoder(self):
         self.absolute_encoder.update()

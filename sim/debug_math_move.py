@@ -51,8 +51,8 @@ def find_motor_angles(pitch, roll, desired_angle):
     pitch_r = math.radians(pitch)
     roll_r = math.radians(roll)
 
-    # n1 = math.sin(pitch_r) * math.cos(roll_r)
-    n1 = math.sin(pitch_r)
+    n1 = math.sin(pitch_r) * math.cos(roll_r)
+    # n1 = math.sin(pitch_r)
     n2 = -math.sin(roll_r)
     n3 = math.cos(pitch_r) * math.cos(roll_r)
 
