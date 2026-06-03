@@ -151,20 +151,17 @@ class CRServoEx(ServoBase):
     # center position every x seconds
     POSITION_CENTERING_DELAY: float = 0.25
 
-    kP: float = 5.0
-    kI: float = 0.00
-    kD: float = 0.00
 
 
     # check the one google sheet for what "servo_pin", "encoder_pin_a", etc. are
-    def __init__(self, servo_pin: int, encoder_pin_a: int, encoder_pin_b: int, absolute_encoder_pin: int):
+    def __init__(self, servo_pin: int, encoder_pin_a: int, encoder_pin_b: int, absolute_encoder_pin: int, kP, kI, kD):
         super().__init__(servo_pin)
         self.encoder = RotaryEncoder(a=encoder_pin_a, b=encoder_pin_b, max_steps=10000000000000)
 
         self.absolute_encoder = AbsoluteEncoder(pin=absolute_encoder_pin)
         self.wait_for_encoders_active()
 
-        self.pid_controller: CRPIDController = CRPIDController(self.kP, self.kI, self.kD)
+        self.pid_controller: CRPIDController = CRPIDController(kP, kI, kD)
 
         self.time_position_last_centered: float = 0
 
